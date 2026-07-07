@@ -57,7 +57,8 @@ export async function verify(opts) {
     const source = readFileSync(opts.source, 'utf-8');
     const lang = contract.lang || (String(opts.source).endsWith('.ts') ? 'typescript' : 'javascript');
     const prompt = buildPrompt(contract, source, { filePath: opts.source, lang });
-    const gens = await generateSpecs({ prompt, model: opts.model, n: Number(opts.n || 5), apiKey });
+    const maxTokens = opts['max-tokens'] ? Number(opts['max-tokens']) : undefined;
+    const gens = await generateSpecs({ prompt, model: opts.model, n: Number(opts.n || 5), apiKey, maxTokens });
     const specDir = join(outDir, 'specs');
     mkdirSync(specDir, { recursive: true });
     gens.forEach((g) => {

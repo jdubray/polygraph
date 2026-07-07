@@ -1,6 +1,6 @@
 ---
 description: Run the Polygraph verification loop — generate N transition-function specs from a source file and replay real traces against them, reporting spec-errors vs code-findings.
-argument-hint: --contract <c.json> --source <file> --traces <dir> --model <id> [--n 5]
+argument-hint: --contract <c.json> --source <file> --traces <dir> --model <id> [--n 5] [--max-tokens 32000]
 allowed-tools: Bash, Read, Write
 ---
 

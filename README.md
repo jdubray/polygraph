@@ -179,6 +179,17 @@ Any value not in the alias table (`scripts/models.mjs`) is passed to the API
 **verbatim**, so you can always give the exact Anthropic model id. Verify ids
 against the current Anthropic model list before relying on an alias.
 
+**Reasoning models** (e.g. `claude-sonnet-5`) emit a thinking block that draws
+from the same token budget *before* the answer. The default output ceiling
+(32000) leaves room for both; if you lower it and see empty specs
+(`stop_reason: max_tokens`, everything `unscoreable-all`), the budget was spent
+on thinking — raise it with `--max-tokens`:
+
+```bash
+node scripts/verify.mjs --contract c.json --source src.ts --traces traces/ \
+  --model claude-sonnet-5 --n 5 --max-tokens 32000 --out out/
+```
+
 ## Quickstart: the turnstile example
 
 Runs the full controls path with **no API key**:

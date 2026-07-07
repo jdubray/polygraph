@@ -96,6 +96,20 @@ const mockFetch = async () => ({
 const gens = await generateSpecs({ prompt: 'X', model: 'fable-5', n: 2, apiKey: 'test', fetchImpl: mockFetch });
 ok('mocked generate returns 2 specs', gens.length === 2 && gens.every((g) => g.ok && g.spec.includes('next')));
 
+// Default budget is generous enough for reasoning models' thinking + answer.
+ok('default max_tokens is high enough for reasoning models', buildRequest({ prompt: 'X', model: 'sonnet-5' }).max_tokens >= 32000);
+ok('--max-tokens override honored', buildRequest({ prompt: 'X', model: 'fable-5', maxTokens: 4096 }).max_tokens === 4096);
+
+// Reasoning-model budget-exhaustion: empty answer + stop_reason max_tokens must
+// FAIL LOUDLY with an actionable hint, not silently return an empty spec.
+const truncatedFetch = async () => ({
+  ok: true,
+  json: async () => ({ content: [{ type: 'thinking', thinking: '...' }], stop_reason: 'max_tokens', usage: {} }),
+});
+const truncated = await generateSpecs({ prompt: 'X', model: 'sonnet-5', n: 1, apiKey: 'test', fetchImpl: truncatedFetch });
+ok('empty reasoning-model response fails (not ok:true with empty spec)', truncated[0].ok === false);
+ok('error names the max-tokens cause', /max-tokens/.test(truncated[0].error) && /max_tokens/.test(truncated[0].error));
+
 console.log('6) SAM instrumentation (withSamTracing) — real @cognitive-fab/sam-pattern instance');
 const { makeTurnstile } = await import('../examples/turnstile-sam/turnstile-sam.mjs');
 const samDir = join(TMP, 'sam-traces');

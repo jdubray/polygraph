@@ -98,6 +98,11 @@ This builds a derivation-mode prompt (it never describes per-state semantics),
 generates N independent specs, replays each, and writes `out/findings.md` and
 `out/findings.json`. Use `--n 3` or more; a single generation may omit a rule.
 
+If every window comes back `unscoreable-all`, the generations were empty — with
+a reasoning model (e.g. `claude-sonnet-5`) the thinking block spent the token
+budget before any answer. Add `--max-tokens 32000` (the default is already 32000;
+only lower it deliberately).
+
 ## Step 5 — Triage each disagreement (do this WITH the user)
 
 `findings.md` classifies every non-consistent window:

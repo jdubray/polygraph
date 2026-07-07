@@ -1,6 +1,6 @@
 {
   "name": "polygraph",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A polygraph for your state machine: trace-driven consistency checking via an LLM-derived bare next(state, action, data) spec.",
   "type": "module",
   "license": "Apache-2.0",

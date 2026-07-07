@@ -15,8 +15,16 @@ import { resolveModel } from './models.mjs';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
+// Default output budget. Kept generous because reasoning models (e.g.
+// claude-sonnet-5) emit a thinking block that draws from max_tokens BEFORE the
+// answer — a low ceiling gets spent entirely on thinking, returning zero answer
+// tokens (stop_reason: "max_tokens") and an empty spec. Output is billed only
+// for tokens actually produced, so a high ceiling costs nothing extra on
+// non-reasoning models. Override with --max-tokens.
+export const DEFAULT_MAX_TOKENS = 32000;
+
 /** Build the request body for one generation. Exposed for testing. */
-export function buildRequest({ prompt, model, maxTokens = 8192 }) {
+export function buildRequest({ prompt, model, maxTokens = DEFAULT_MAX_TOKENS }) {
   const { id } = resolveModel(model);
   return {
     model: id,
@@ -62,7 +70,18 @@ export async function generateSpecs({ prompt, model, n = 5, apiKey, fetchImpl = 
         continue;
       }
       const data = await resp.json();
+      // Only text blocks carry the spec; thinking blocks (reasoning models) have
+      // no .text and are skipped here — but if the budget was spent on thinking
+      // there is no text at all. Fail loudly rather than returning an empty spec
+      // that silently scores unscoreable-all downstream.
       const text = (data.content || []).map((b) => b.text || '').join('');
+      if (!text.trim()) {
+        const hint = data.stop_reason === 'max_tokens'
+          ? ` (stop_reason=max_tokens with no answer text — a reasoning model likely spent the whole budget on thinking; raise --max-tokens, e.g. 32000)`
+          : ` (stop_reason=${data.stop_reason})`;
+        results.push({ index: i, ok: false, error: `empty response${hint}` });
+        continue;
+      }
       results.push({ index: i, ok: true, spec: extractSpec(text), usage: data.usage });
     } catch (e) {
       results.push({ index: i, ok: false, error: String(e && e.message || e) });
@@ -80,7 +99,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     }, [])
   );
   if (!args.prompt || !args.model) {
-    console.error('usage: node generate.mjs --prompt <file> --model <id> [--n 5] [--out <dir>]');
+    console.error('usage: node generate.mjs --prompt <file> --model <id> [--n 5] [--max-tokens 32000] [--out <dir>]');
     process.exit(2);
   }
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -94,7 +113,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   console.error(`[generate] model=${args.model}${resolved ? ` -> ${id}` : ' (verbatim)'} n=${n}`);
   const out = args.out || 'specs';
   mkdirSync(out, { recursive: true });
-  const results = await generateSpecs({ prompt, model: args.model, n, apiKey });
+  const maxTokens = args['max-tokens'] ? Number(args['max-tokens']) : undefined;
+  const results = await generateSpecs({ prompt, model: args.model, n, apiKey, maxTokens });
   let ok = 0;
   for (const r of results) {
     if (r.ok) {
