@@ -89,6 +89,26 @@ Then drive scenarios (normal path, each failure class, races, and deliberate
 no-ops — an action sent into a terminal state), one `.ndjson` file per scenario,
 and validate the corpus before generating.
 
+### The point: in Claude Code, the agent does Step 2 for you
+
+Trace capture is the heavy step — and inside Claude Code, the agent does it, not
+you. Point it at the isolated code and it will instrument a copy, **build
+whatever test doubles or emulators are needed to run it in isolation**, drive the
+scenarios, and produce (and validate) the corpus.
+
+Existence proof: in the study that introduced the method, a Claude agent built a
+payment-terminal emulator and a fault-injection proxy, instrumented a production
+SAM payment workflow, drove 17 scenarios, and produced a 75-window corpus — all
+of Step 2 — autonomously. That is the differentiator: the step that historically
+made this kind of verification expensive is the step the agent now carries.
+
+What stays with you is judgment, not labor: confirming the contract captures the
+right observable state, and validating that any doubles the agent built match
+reality (the correlated-oracle check — e.g. probe one assumption against a real
+sandbox). The manual snippets above are for using the scripts standalone; in a
+Claude Code session you can just say *"verify this state machine"* and let the
+agent run Step 2.
+
 ## Install (Claude Code plugin)
 
 Install from the marketplace (this repo is its own marketplace):

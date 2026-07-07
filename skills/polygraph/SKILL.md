@@ -41,7 +41,16 @@ Produce a `contract.json` (schema and example under
 State the **no-op rule** explicitly: an action arriving where the code ignores
 it yields `post == pre`. This makes the replay total.
 
-## Step 2 — Capture traces from the code
+## Step 2 — Capture traces from the code (YOU run this, autonomously)
+
+This is the heavy step, and it is yours to carry — not the user's. If the code
+does not run in isolation, **build the test doubles or emulators needed to run
+it** (the finixpos study's agent built a payment-terminal emulator and a
+fault-injection proxy to do exactly this), instrument a copy, drive the
+scenarios, and produce the corpus. Only escalate to the user for judgment calls:
+whether the contract's observable state is right, and whether a double you built
+faithfully matches the real dependency (the correlated-oracle risk — validate at
+least one assumption against a real service/sandbox when one exists).
 
 Instrument a **copy** of the code (keep the change as a diff/patch) to emit one
 NDJSON record per step: `{"pre":{...},"action":"NAME","data":{...},"post":{...}}`.
