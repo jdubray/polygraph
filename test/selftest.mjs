@@ -96,5 +96,28 @@ const mockFetch = async () => ({
 const gens = await generateSpecs({ prompt: 'X', model: 'fable-5', n: 2, apiKey: 'test', fetchImpl: mockFetch });
 ok('mocked generate returns 2 specs', gens.length === 2 && gens.every((g) => g.ok && g.spec.includes('next')));
 
+console.log('6) SAM instrumentation (withSamTracing) — real @cognitive-fab/sam-pattern instance');
+const { makeTurnstile } = await import('../examples/turnstile-sam/turnstile-sam.mjs');
+const samDir = join(TMP, 'sam-traces');
+mkdirSync(samDir, { recursive: true });
+const ts = makeTurnstile(join(samDir, 's1.ndjson'));
+await ts.coin();  // LOCKED   -> UNLOCKED (coins 1)
+await ts.push();  // UNLOCKED -> LOCKED
+await ts.push();  // LOCKED   -> LOCKED  (no-op)
+await ts.coin();  // LOCKED   -> UNLOCKED (coins 2)
+const samWindows = loadWindows(samDir);
+ok('SAM: 4 windows captured', samWindows.length === 4);
+ok('SAM: windows well-formed {pre,action,data,post}',
+  samWindows.every((w) => w.pre && w.post && typeof w.action === 'string' && w.data));
+ok('SAM: windows chain (post[k] == pre[k+1])',
+  samWindows.slice(1).every((w, i) => JSON.stringify(w.pre) === JSON.stringify(samWindows[i].post)));
+const samNoop = samWindows.find((w) => w.action === 'PUSH' && w.pre.state === 'LOCKED');
+ok('SAM: PUSH-while-LOCKED no-op has post == pre',
+  samNoop && JSON.stringify(samNoop.pre) === JSON.stringify(samNoop.post));
+// The SAM-captured corpus is validated by the same controls path: the existing
+// hand-written reference next() must score 100% on it.
+ok('SAM: reference spec scores 100% on the SAM-captured corpus',
+  replaySpec(join(EX, 'specs', 'reference.js'), samWindows).every((s) => s === 'pass'));
+
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

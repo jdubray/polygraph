@@ -70,6 +70,21 @@ const dispatch = withTracing(rawDispatch, project, 'traces/s1_normal.ndjson');
 //   { actionName: a => a.type, actionData: a => a.payload })
 ```
 
+Code built on the **SAM pattern** (`@cognitive-fab/sam-pattern`, optionally with
+`sam-fsm`)? Wrap the `component` config — every dispatch emits a window,
+no-ops included:
+
+```js
+import { withSamTracing } from '<plugin>/scripts/instrument/sam-emitter.mjs';
+
+const project = (m) => ({ txState: m.txState /* ...your observable keys */ });
+const traced  = withSamTracing(component, project, 'traces/s1_normal.ndjson');
+const { intents } = instance({ initialState, component: traced, render });
+// then drive `intents` through your scenarios (sam-pattern intents are async — await them)
+```
+
+See `examples/turnstile-sam/` for a runnable SAM instance.
+
 Then drive scenarios (normal path, each failure class, races, and deliberate
 no-ops — an action sent into a terminal state), one `.ndjson` file per scenario,
 and validate the corpus before generating.

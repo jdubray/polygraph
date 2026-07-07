@@ -4,7 +4,14 @@
   "description": "A polygraph for your state machine: trace-driven consistency checking via an LLM-derived bare next(state, action, data) spec.",
   "type": "module",
   "license": "Apache-2.0",
-  "keywords": ["verification", "state-machine", "trace-validation", "llm", "consistency-check", "polygraph"],
+  "keywords": [
+    "verification",
+    "state-machine",
+    "trace-validation",
+    "llm",
+    "consistency-check",
+    "polygraph"
+  ],
   "scripts": {
     "test": "node test/selftest.mjs",
     "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --out examples/turnstile/out"
@@ -14,5 +21,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@cognitive-fab/sam-fsm": "^1.0.0",
+    "@cognitive-fab/sam-pattern": "^1.6.1"
   }
 }

@@ -48,9 +48,13 @@ NDJSON record per step: `{"pre":{...},"action":"NAME","data":{...},"post":{...}}
 Capture `pre` before any internal rewriting of the action, `post` after it
 settles.
 
-- For JS/TS, offer the helpers in `${CLAUDE_PLUGIN_ROOT}/scripts/instrument/`
-  (`traceStep`, `withTracing`, `tapReducer`). For other languages, write a small
-  emitter by hand following the same shape.
+- For JS/TS, offer the helpers in `${CLAUDE_PLUGIN_ROOT}/scripts/instrument/`:
+  `withTracing` (wrap a `dispatch(action, data)`), `tapReducer` (a Redux-style
+  reducer), `traceStep` (you already have pre/post), and `withSamTracing`
+  (`scripts/instrument/sam-emitter.mjs`) for code built on the SAM pattern
+  (`@cognitive-fab/sam-pattern`, optionally with `sam-fsm`) — it wraps the
+  `component` config so every dispatch emits a window, no-ops included. For other
+  languages, write a small emitter by hand following the same shape.
 - Drive scenarios, one trace file per scenario: the normal path, each failure
   class, races, and deliberate glitches (an action into a terminal state → a
   no-op window). Use existing test doubles or emulators.
