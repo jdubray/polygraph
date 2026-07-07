@@ -1,0 +1,4 @@
+{"pre":{"state":"LOCKED","coins":0},"action":"COIN","data":{},"post":{"state":"UNLOCKED","coins":1}}
+{"pre":{"state":"UNLOCKED","coins":1},"action":"PUSH","data":{},"post":{"state":"LOCKED","coins":1}}
+{"pre":{"state":"LOCKED","coins":1},"action":"COIN","data":{},"post":{"state":"UNLOCKED","coins":2}}
+{"pre":{"state":"UNLOCKED","coins":2},"action":"PUSH","data":{},"post":{"state":"LOCKED","coins":2}}

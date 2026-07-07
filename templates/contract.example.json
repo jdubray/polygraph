@@ -1,0 +1,21 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "state", "type": "'LOCKED' | 'UNLOCKED'" },
+    { "name": "coins", "type": "number (total coins accepted)" }
+  ],
+  "initState": { "state": "LOCKED", "coins": 0 },
+  "actions": {
+    "COIN": { "dataFields": {} },
+    "PUSH": { "dataFields": {} }
+  },
+  "terminalStates": [],
+  "specialRules": [
+    {
+      "name": "push-while-locked-is-noop",
+      "note": "PUSH in LOCKED leaves the turnstile locked and the coin count unchanged.",
+      "whenState": "LOCKED",
+      "whenAction": "PUSH"
+    }
+  ]
+}

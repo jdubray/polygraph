@@ -1,0 +1,18 @@
+{
+  "name": "bare-next-verify",
+  "version": "0.1.0",
+  "description": "Trace-driven consistency checking for stateful code via an LLM-derived bare next(state, action, data) spec.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "keywords": ["verification", "state-machine", "trace-validation", "llm", "consistency-check"],
+  "scripts": {
+    "test": "node test/selftest.mjs",
+    "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --out examples/turnstile/out"
+  },
+  "bin": {
+    "bare-next-verify": "scripts/verify.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

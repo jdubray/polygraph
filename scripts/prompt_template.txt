@@ -1,0 +1,49 @@
+Convert the following production source into a plain {lang} transition function
+— NO libraries, NO frameworks. Just a pure function over the observable state.
+The function is replayed against real execution traces captured from this exact
+code, so it must be constrained to the same observable state and reproduce the
+code's single-step behavior.
+
+## Source (the real implementation)
+
+Source from {file_path}:
+```{lang}
+{source_code}
+```
+
+## Observable state (EXACTLY these keys)
+
+The state is a plain object with EXACTLY these keys — declare no others:
+
+{state_keys}
+
+Do NOT add any other keys.
+
+## Module contract (hard requirements)
+
+Your specification is a CommonJS module evaluated by an automated harness. It
+MUST export exactly:
+
+    module.exports = { init, next };
+
+  - `init()` returns the initial state:
+    {init_state}
+  - `next(state, action, data)` is a PURE function returning the NEW state
+    (same keys) after applying ONE action:
+      * `state`  — the current state object.
+      * `action` — one of the strings, with its data shape:
+{action_alphabet}
+    Do NOT mutate `state`; return a new object. No I/O, timers, randomness, or
+    external state. A single function; no classes required.
+
+The harness replays real execution traces: it pins a captured pre-state, calls
+`next(pre, action, data)` exactly once, and compares the returned state to the
+captured post-state. Model the observable single-step behavior of the real code
+as implemented in the source above — INCLUDING what happens when an action
+arrives in a state where the code does not act on it (an ignored action must
+return the state unchanged: post == pre, not an error and not "no step").
+
+## Output
+
+Output EXACTLY ONE fenced ```{fence} code block containing the module, and
+nothing else (no prose).

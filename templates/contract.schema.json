@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "bare-next() contract",
+  "description": "Defines the observable state, action alphabet, and terminal states of the machine under test. This one document is the trace schema, the prompt contract, and the replay format.",
+  "type": "object",
+  "required": ["stateKeys", "actions"],
+  "properties": {
+    "lang": {
+      "type": "string",
+      "enum": ["javascript", "typescript"],
+      "description": "Source language of the code under test (controls the prompt fence). Defaults from the source file extension."
+    },
+    "stateKeys": {
+      "type": "array",
+      "description": "The observable-state keys, in order. The FIRST key is treated as the primary control state (used for terminal-state and coverage checks). Each entry is a bare name or { name, type }.",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string", "description": "Human-readable type note shown in the prompt, e.g. \"string or null\"." }
+            }
+          }
+        ]
+      }
+    },
+    "initState": {
+      "type": "object",
+      "description": "The initial state object (what init() returns). If omitted, a null-filled object over stateKeys is used."
+    },
+    "actions": {
+      "type": "object",
+      "description": "Map of ACTION_NAME -> { dataFields: { field: typeNote } }. An action with no payload uses an empty dataFields.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "dataFields": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      }
+    },
+    "terminalStates": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Values of the primary state key that end a scenario. Used to check each trace ends where expected."
+    },
+    "specialRules": {
+      "type": "array",
+      "description": "Rules that live outside the main state table (guards, rewrites, special cases). Each should be covered by >=3 windows or validate_corpus warns.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "note": { "type": "string" },
+          "whenState": { "type": "string", "description": "Optional primary-state value this rule applies in." },
+          "whenAction": { "type": "string", "description": "Optional action this rule applies to." }
+        }
+      }
+    }
+  }
+}

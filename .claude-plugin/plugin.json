@@ -1,0 +1,22 @@
+{
+  "name": "bare-next-verify",
+  "displayName": "bare-next() verification",
+  "version": "0.1.0",
+  "description": "Trace-driven consistency checking for stateful code: derive a bare next(state, action, data) spec from your source with an LLM, replay real execution traces against it, and surface every disagreement as a spec-error, code-finding, or contract-error.",
+  "author": {
+    "name": "TODO — set before publishing",
+    "url": "https://github.com/OWNER/bare-next-verify"
+  },
+  "homepage": "https://github.com/OWNER/bare-next-verify",
+  "repository": "https://github.com/OWNER/bare-next-verify",
+  "license": "Apache-2.0",
+  "keywords": [
+    "verification",
+    "state-machine",
+    "trace-validation",
+    "transition-function",
+    "llm",
+    "formal-methods",
+    "consistency-check"
+  ]
+}

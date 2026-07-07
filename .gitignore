@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+# generation / replay outputs
+out/
+**/out/
+specs/spec_*.js
+examples/turnstile/out/
+test/.tmp/
+*.log
