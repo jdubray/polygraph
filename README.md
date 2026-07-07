@@ -122,12 +122,18 @@ assets/                      brand art
 
 ## Origin
 
-The method comes from the SysMoBench / JS-SAM study, where a bare `next()`
-contract was the most reliable spec target across seven models from two vendors,
-and the approach found real defects in a production payment workflow. The
-`scripts/tv.mjs` replayer is that study's task-agnostic transition-validation
-runner, bundled here. Reference implementation and the full case study:
-<https://github.com/jdubray/SysMoBench-1>.
+The method is introduced in:
+
+> Jean-Jacques Dubray. **Can Code Specify a System Precisely Enough to Formally
+> Verify It?** arXiv:2607.05076, July 2026. <https://arxiv.org/abs/2607.05076>
+
+Across seven models from two vendors, a bare `next()` contract was the most
+reliable spec target, and the approach found real defects in a production
+payment workflow. The `scripts/tv.mjs` replayer is that study's task-agnostic
+transition-validation runner, bundled here. Reference implementation and the
+full case study: <https://github.com/jdubray/SysMoBench-1>.
+
+If you use Polygraph in your work, please cite the paper (see `CITATION.cff`).
 
 ## License
 
