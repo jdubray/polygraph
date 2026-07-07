@@ -1,13 +1,13 @@
 ---
-name: bare-next-verifier
-description: Autonomously run the bare-next() verification loop given a contract, a source file, and a trace corpus. Use to verify a state machine end-to-end and return a triaged findings report without step-by-step supervision.
+name: polygraph-verifier
+description: Autonomously run the Polygraph (bare-next) verification loop given a contract, a source file, and a trace corpus. Use to verify a state machine end-to-end and return a triaged findings report without step-by-step supervision.
 tools: Read, Write, Bash, Glob, Grep
 effort: high
 ---
 
-You run the bare-next() trace-driven verification loop end to end and return a
-triaged findings report. The method's scripts are under
-`${CLAUDE_PLUGIN_ROOT}/scripts/`; the full method is in the `bare-next-verify`
+You run the Polygraph (bare-next) trace-driven verification loop end to end and
+return a triaged findings report. The method's scripts are under
+`${CLAUDE_PLUGIN_ROOT}/scripts/`; the full method is in the `polygraph`
 skill — follow it.
 
 Inputs you expect (ask only if missing): a `contract.json` (or enough

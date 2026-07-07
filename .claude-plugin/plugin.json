@@ -1,14 +1,14 @@
 {
-  "name": "bare-next-verify",
-  "displayName": "bare-next() verification",
+  "name": "polygraph",
+  "displayName": "Polygraph",
   "version": "0.1.0",
-  "description": "Trace-driven consistency checking for stateful code: derive a bare next(state, action, data) spec from your source with an LLM, replay real execution traces against it, and surface every disagreement as a spec-error, code-finding, or contract-error.",
+  "description": "A polygraph for your state machine. Derive a bare next(state, action, data) transition function from your code's own source with an LLM, replay real execution traces against it, and surface every disagreement as a spec-error, code-finding, or contract-error.",
   "author": {
-    "name": "TODO — set before publishing",
-    "url": "https://github.com/OWNER/bare-next-verify"
+    "name": "jdubray",
+    "url": "https://github.com/jdubray"
   },
-  "homepage": "https://github.com/OWNER/bare-next-verify",
-  "repository": "https://github.com/OWNER/bare-next-verify",
+  "homepage": "https://github.com/jdubray/polygraph",
+  "repository": "https://github.com/jdubray/polygraph",
   "license": "Apache-2.0",
   "keywords": [
     "verification",
@@ -17,6 +17,7 @@
     "transition-function",
     "llm",
     "formal-methods",
-    "consistency-check"
+    "consistency-check",
+    "polygraph"
   ]
 }

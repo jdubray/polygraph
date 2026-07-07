@@ -1,4 +1,10 @@
-# bare-next-verify
+<p align="center">
+  <img src="assets/polygraph-verify.png" alt="Polygraph — /verify" width="640">
+</p>
+
+# Polygraph
+
+**A polygraph for your state machine.**
 
 A Claude Code plugin for **trace-driven consistency checking of stateful code**.
 You point it at a state machine (a workflow, reducer, protocol, or session
@@ -31,7 +37,7 @@ of its own source — as a **spec-error**, a **code-finding**, or a
    point back at the source, spec-errors point at a generation that missed a
    rule.
 
-The method and its failure modes are documented in the `bare-next-verify` skill.
+The method and its failure modes are documented in the `polygraph` skill.
 
 ## Install (Claude Code plugin)
 
@@ -39,19 +45,19 @@ Clone into your Claude Code plugins directory, or add via a marketplace:
 
 ```bash
 # direct: clone into the user plugins dir
-git clone https://github.com/OWNER/bare-next-verify \
-  ~/.claude/plugins/bare-next-verify
+git clone https://github.com/jdubray/polygraph \
+  ~/.claude/plugins/polygraph
 
 # or, if you host a marketplace entry:
-#   /plugin marketplace add OWNER/your-marketplace
-#   /plugin install bare-next-verify
+#   /plugin marketplace add jdubray/your-marketplace
+#   /plugin install polygraph
 ```
 
 Then in a session:
 
-- run `/verify` (the slash command), or
+- run `/polygraph:verify` (the slash command), or
 - ask Claude to "verify this state machine" (the skill triggers), or
-- delegate to the `bare-next-verifier` subagent for an autonomous run.
+- delegate to the `polygraph-verifier` subagent for an autonomous run.
 
 Requirements: **Node ≥ 20**. Generation calls the Anthropic API and needs
 `ANTHROPIC_API_KEY` plus a model; replay and the controls need neither.
@@ -99,14 +105,15 @@ or step through it manually — see `examples/turnstile/README.md`.
 
 ```
 .claude-plugin/plugin.json   plugin manifest
-skills/bare-next-verify/     the method, as instructions Claude follows
-commands/verify.md           the /verify slash command
-agents/verifier.md           the bare-next-verifier subagent
+skills/polygraph/            the method, as instructions Claude follows
+commands/verify.md           the /polygraph:verify slash command
+agents/verifier.md           the polygraph-verifier subagent
 scripts/                     tv.mjs (replayer), generate, verify, build_prompt,
                              validate_corpus, models, instrument/*
 templates/                   contract.schema.json + contract.example.json
 examples/turnstile/          a tiny worked example + its controls
 test/selftest.mjs            npm test — proves the pipeline without the API
+assets/                      brand art
 ```
 
 ## Origin
@@ -120,6 +127,4 @@ runner, bundled here. Reference implementation and the full case study:
 
 ## License
 
-Apache-2.0. (Replace the `LICENSE` stub with the full license text before
-publishing, and set the `author`/`repository` fields in
-`.claude-plugin/plugin.json` and `package.json`.)
+Apache-2.0 — see `LICENSE`.

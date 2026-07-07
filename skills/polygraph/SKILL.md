@@ -1,9 +1,9 @@
 ---
-name: bare-next-verify
-description: Audit a stateful piece of code by deriving a bare next(state, action, data) transition function from its source with an LLM, replaying real execution traces against it, and surfacing every disagreement as a spec-error, a code-finding, or a contract-error. Use when the user wants to verify a state machine, workflow, reducer, or protocol implementation against its own behavior; check whether code does what it is believed to do; or reproduce/triage suspected state-handling defects. Trigger phrases: "verify this state machine", "check my reducer/workflow", "does this code do what I think", "audit the payment/order/session flow", "bare next / trace validation".
+name: polygraph
+description: A polygraph for your state machine. Audit a stateful piece of code by deriving a bare next(state, action, data) transition function from its source with an LLM, replaying real execution traces against it, and surfacing every disagreement as a spec-error, a code-finding, or a contract-error. Use when the user wants to verify a state machine, workflow, reducer, or protocol implementation against its own behavior; check whether code does what it is believed to do; or reproduce/triage suspected state-handling defects. Trigger phrases: "polygraph", "verify this state machine", "check my reducer/workflow", "does this code do what I think", "audit the payment/order/session flow", "bare next / trace validation".
 ---
 
-# bare-next() verification
+# Polygraph — a polygraph for your state machine
 
 Guide the user through a five-step, trace-driven consistency check. You (the
 in-session assistant) do the intelligent parts — designing the contract,

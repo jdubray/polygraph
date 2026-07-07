@@ -1,10 +1,10 @@
 ---
-description: Run the bare-next() verification loop — generate N transition-function specs from a source file and replay real traces against them, reporting spec-errors vs code-findings.
+description: Run the Polygraph verification loop — generate N transition-function specs from a source file and replay real traces against them, reporting spec-errors vs code-findings.
 argument-hint: --contract <c.json> --source <file> --traces <dir> --model <id> [--n 5]
 allowed-tools: Bash, Read, Write
 ---
 
-Run the bare-next() verification loop over the arguments in `$ARGUMENTS`.
+Run the Polygraph (bare-next) verification loop over the arguments in `$ARGUMENTS`.
 
 This drives `${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs`. Two modes:
 
@@ -26,7 +26,7 @@ exact Anthropic model id if you are not using a known alias).
 Steps to perform:
 1. If no `contract.json` exists yet, help the user build one from
    `${CLAUDE_PLUGIN_ROOT}/templates/contract.example.json` (see the
-   bare-next-verify skill for the full method).
+   polygraph skill for the full method).
 2. Validate the corpus first:
    `node ${CLAUDE_PLUGIN_ROOT}/scripts/validate_corpus.mjs <c.json> <traces>`.
 3. Run `verify.mjs` with the parsed arguments.

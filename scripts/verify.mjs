@@ -91,7 +91,7 @@ export async function verify(opts) {
 
 function renderMarkdown(summary, findings) {
   const L = [];
-  L.push('# bare-next() verification findings\n');
+  L.push('# Polygraph — verification findings\n');
   L.push('> Consistency check, not a proof. Every finding is a lead to investigate by hand.\n');
   L.push(`- specs replayed: **${summary.specs}**`);
   L.push(`- windows: **${summary.windows}**`);

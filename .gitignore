@@ -8,3 +8,7 @@ specs/spec_*.js
 examples/turnstile/out/
 test/.tmp/
 *.log
+
+# Local plugin/indexer state — never ship
+.memsearch/
+.puffin/
