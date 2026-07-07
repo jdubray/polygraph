@@ -30,6 +30,58 @@ bug and an honest look at what the method can and cannot see.
 - **Generation.** Five independent specs from one reasoning model, replayed
   against the 20-window corpus.
 
+## The prompts used
+
+In a Claude Code session with the plugin installed, the whole run started from
+one line:
+
+```
+/polygraph:polygraph run the full trace-capture-and-replay loop on the
+subscription state machine: derive the contract, instrument the transition
+boundary, capture real traces by running the existing test suite, write
+positive+negative controls, then generate 5 specs and replay. Model time
+(now vs periodEndMs) and the processor result as action data, not clock/IO reads.
+```
+
+The agent did Step 2 itself — instrumented the boundary, drove the suite,
+produced the corpus — and only surfaced for the judgment calls (is the observable
+state right, do the controls hold). Broken into steps, the same run is:
+
+```
+1. Build a Polygraph contract.json for the subscription state machine —
+   observable state = the row's decision-driving fields; actions = the handler
+   boundary (CREATE / RENEW_CHARGE / CANCEL / UPDATE_CARD / WEBHOOK_SUCCEEDED /
+   WEBHOOK_FAILED / SWEEPER_TICK); carry time and processor-result in action data.
+
+2. Instrument the transition boundary with withTracing and capture traces by
+   running the test suite — one .ndjson per scenario family. Then validate the corpus.
+
+3. Write a reference next() from the state diagram (must score 100%) and a mutant
+   that breaks one rule (must fail only its window).
+
+4. Generate 5 specs from the source and replay against the corpus; show findings.md.
+```
+
+The equivalent raw commands (the scripts are standalone; `<plugin>` =
+`~/.claude/plugins/marketplaces/polygraph`):
+
+```bash
+# after instrumenting the boundary and running the suite to emit traces/:
+node <plugin>/scripts/validate_corpus.mjs contract.json traces/
+
+# controls (no API key):
+node <plugin>/scripts/verify.mjs --contract contract.json --traces traces/ \
+  --specs refs/ --out out/
+
+# generate + replay:
+node <plugin>/scripts/verify.mjs --contract contract.json \
+  --source path/to/transition-source --traces traces/ \
+  --model <id> --n 5 --max-tokens 32000 --out out/
+```
+
+(`--max-tokens 32000` matters for reasoning models — the first attempt without it
+returned all-`unscoreable`; see the note below.)
+
 ## Result: 19/20 consistent — one real finding
 
 All five independently-derived specs disagreed with the code on the **same**
