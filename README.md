@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/polygraph-verify.png" alt="Polygraph — /verify" width="640">
+  <img src="assets/polygraph-verify.jpg" alt="Polygraph — /verify" width="640">
 </p>
 
 # Polygraph
