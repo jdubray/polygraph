@@ -190,15 +190,18 @@ node scripts/verify.mjs --contract c.json --source src.ts --traces traces/ \
   --model claude-sonnet-5 --n 5 --max-tokens 32000 --out out/
 ```
 
-## Quickstart: the turnstile example
+## Examples
 
-Runs the full controls path with **no API key**:
-
-```bash
-npm test   # validates the corpus + runs positive/negative controls
-```
-
-or step through it manually — see `examples/turnstile/README.md`.
+- **Quickstart — the turnstile.** Runs the full controls path with **no API
+  key**: `npm test` validates the corpus and runs the positive/negative
+  controls. Step through it manually via `examples/turnstile/README.md`, and see
+  `examples/turnstile-sam/` for the same machine as a real SAM instance.
+- **A full-loop run on a production system** — `examples/case-study-subscription.md`
+  walks a real end-to-end run on a closed-source SaaS subscription-billing state
+  machine: five independent LLM-derived specs, replayed against a real trace
+  corpus, that independently corroborated a genuine double-charge bug — plus an
+  honest look at the risks the method *can't* see (the ones at the external-
+  service boundary).
 
 ## Layout
 
