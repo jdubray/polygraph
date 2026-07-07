@@ -39,6 +39,41 @@ of its own source — as a **spec-error**, a **code-finding**, or a
 
 The method and its failure modes are documented in the `polygraph` skill.
 
+## What it needs from you (read before you start)
+
+Polygraph replays **real execution traces** — it cannot verify code from source
+alone. Its power comes from the traces being ground truth captured from the code
+actually running. So the first question is: **can you run the isolated code?**
+
+| your situation | what to do | can it find code bugs? |
+|---|---|---|
+| the module has a clean step boundary you can call (a dispatch, reducer, or handler) | instrument it and drive it (below) | yes |
+| it only runs with its environment (DB, network, a device) | stand up test doubles / an emulator so it runs in isolation first | yes — once it runs |
+| it can't be run at all (a fragment) | you can hand-write windows, but then you're testing against your *expectations*, not the code's behavior | no — only spec-errors vs your hand-written traces |
+
+**Where the effort goes.** Building the contract and running generate/replay are
+cheap (minutes). **Capturing traces is the bulk of the work** — it means
+instrumenting a copy of the code and driving it through scenarios. If you
+already have tests, wrap the step boundary once and every test emits windows for
+free:
+
+```js
+import { withTracing } from '<plugin>/scripts/instrument/trace-emitter.mjs';
+
+// project ONLY your contract's observable keys — exclude everything else:
+const project = () => ({ txState: m.txState, orderId: m.orderId /* ...your keys */ });
+
+// wrap a dispatch(action, data) so every call appends a {pre,action,data,post} window:
+const dispatch = withTracing(rawDispatch, project, 'traces/s1_normal.ndjson');
+
+// Redux-style reducer? use tapReducer(rawReducer, project, file,
+//   { actionName: a => a.type, actionData: a => a.payload })
+```
+
+Then drive scenarios (normal path, each failure class, races, and deliberate
+no-ops — an action sent into a terminal state), one `.ndjson` file per scenario,
+and validate the corpus before generating.
+
 ## Install (Claude Code plugin)
 
 Install from the marketplace (this repo is its own marketplace):
