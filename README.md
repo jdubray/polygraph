@@ -14,13 +14,13 @@ every place the code's observed behavior disagrees with an independent reading
 of its own source — as a **spec-error**, a **code-finding**, or a
 **contract-error**.
 
-> **Status — read this first.** This method is newly published, highly
-> speculative, and **not peer-reviewed**. It is a **consistency check, not a
-> proof**: a clean run means the code's observable behavior matches an
-> independent transition function derived from its source, and nothing more.
-> Every finding is a *lead to investigate by hand*, not an established result.
-> Do not rely on it as your only safeguard for correctness- or safety-critical
-> code. Approach the output with skepticism.
+> **Disclosure — read this first.** Polygraph is **experimental, not
+> peer-reviewed, unproven technology.** The method is newly published and highly
+> speculative. It is a **consistency check, not a proof**: a clean run means the
+> code's observable behavior matches an independent transition function derived
+> from its source, and nothing more. Every finding is a *lead to investigate by
+> hand*, not an established result. Do not rely on it as your only safeguard for
+> correctness- or safety-critical code. Approach the output with skepticism.
 
 ## How it works (five steps)
 

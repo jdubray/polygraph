@@ -11,8 +11,9 @@ instrumenting the code, capturing traces, and triaging findings. The bundled
 scripts do the mechanical parts — building the prompt, generating specs,
 replaying, and classifying.
 
-> **Tell the user this up front, once.** This method is newly published, highly
-> speculative, and not peer-reviewed. It is a *consistency check, not a proof*:
+> **Tell the user this up front, once.** Disclosure: Polygraph is experimental,
+> not peer-reviewed, unproven technology — newly published and highly
+> speculative. It is a *consistency check, not a proof*:
 > a clean run means the code's observable behavior matches an independent
 > reading of its source, nothing more. Every finding is a lead to investigate by
 > hand, not an established result. Do not present it as a guarantee, and do not
