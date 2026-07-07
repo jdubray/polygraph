@@ -127,11 +127,25 @@ git clone https://github.com/jdubray/polygraph \
 
 Update later with `/plugin marketplace update polygraph`.
 
-Then in a session:
+Then in a session, three entry points:
 
-- run `/polygraph:verify` (the slash command), or
-- ask Claude to "verify this state machine" (the skill triggers), or
-- delegate to the `polygraph-verifier` subagent for an autonomous run.
+| you type | what it is | when to use it |
+|---|---|---|
+| `/polygraph:polygraph` | the **skill** (guided method) | the full end-to-end walk-through — Claude designs the contract, captures traces, runs controls, generates, and triages with you |
+| `/polygraph:verify` | the **command** (script runner) | you already have a contract + traces and just want to run generate + replay (`--contract … --traces … --model …`) |
+| `polygraph-verifier` | the **subagent** | hand off the whole loop for an autonomous, unsupervised run |
+
+(The command's fully-qualified form is `/polygraph:verify`; the skill's is
+`/polygraph:polygraph` — the plugin and the skill share the name, hence the
+doubled form.)
+
+**Or just ask in plain language** — the skill triggers on phrases like:
+
+- *"verify this state machine"* / *"polygraph this workflow"*
+- *"check my reducer / workflow"*
+- *"does this code do what I think it does?"*
+- *"audit the payment / order / session flow"*
+- *"bare next / trace validation"*
 
 Requirements: **Node ≥ 20**. Generation calls the Anthropic API and needs
 `ANTHROPIC_API_KEY` plus a model; replay and the controls need neither.
