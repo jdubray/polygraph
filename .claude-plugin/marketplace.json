@@ -1,0 +1,19 @@
+{
+  "name": "polygraph",
+  "owner": {
+    "name": "jdubray",
+    "url": "https://github.com/jdubray"
+  },
+  "plugins": [
+    {
+      "name": "polygraph",
+      "source": "./",
+      "description": "A polygraph for your state machine: derive a bare next(state, action, data) transition function from your code with an LLM, replay real execution traces against it, and surface every disagreement as a spec-error, code-finding, or contract-error.",
+      "version": "0.1.0",
+      "author": {
+        "name": "jdubray",
+        "url": "https://github.com/jdubray"
+      }
+    }
+  ]
+}

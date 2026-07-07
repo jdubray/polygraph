@@ -41,17 +41,21 @@ The method and its failure modes are documented in the `polygraph` skill.
 
 ## Install (Claude Code plugin)
 
-Clone into your Claude Code plugins directory, or add via a marketplace:
+Install from the marketplace (this repo is its own marketplace):
+
+```
+/plugin marketplace add jdubray/polygraph
+/plugin install polygraph@polygraph
+```
+
+Or clone directly into your Claude Code plugins directory:
 
 ```bash
-# direct: clone into the user plugins dir
 git clone https://github.com/jdubray/polygraph \
   ~/.claude/plugins/polygraph
-
-# or, if you host a marketplace entry:
-#   /plugin marketplace add jdubray/your-marketplace
-#   /plugin install polygraph
 ```
+
+Update later with `/plugin marketplace update polygraph`.
 
 Then in a session:
 
