@@ -103,6 +103,32 @@ a reasoning model (e.g. `claude-sonnet-5`) the thinking block spent the token
 budget before any answer. Add `--max-tokens 32000` (the default is already 32000;
 only lower it deliberately).
 
+## Step 4b — Model-check the spec against invariants (THE BUG-FINDER)
+
+Replay (Step 4) only catches a bug when the derived spec DISAGREES with the code.
+A faithful spec — which capable models produce on legible code — does not
+disagree, so replay alone misses real bugs (measured: `eval/FINDING-faithful-reproduction.md`).
+The half that actually finds bugs is iterating the spec against invariants.
+
+- Write `invariants.mjs` WITH the user — rules encoding what the code *should*
+  do (intent), not what it does. Export
+  `{ stateInvariants: [{name, pred:(state)=>bool}], transitionInvariants: [{name, pred:(pre,action,data,post)=>bool}] }`.
+  A predicate returns true when the rule holds. Aim these at the special rules
+  and at the safety properties the code exists to enforce ("never publish without
+  approval", "never charge without confirmation", "lock by N attempts").
+- Provide a finite `dataDomain` in the contract for actions with data (or rely on
+  the values observed in the traces).
+- Run it (verify.mjs runs it automatically when an `invariants.mjs` sits beside
+  the contract, or pass `--invariants`):
+  `node ${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs --spec <mod.js> --contract contract.json --invariants invariants.mjs --traces traces/`
+- A reachable violation is a **bug**, reported with the shortest counterexample
+  path from init. A violation reached by ALL generated specs is a strong signal
+  (every independent reading reaches the bad state). Walk the counterexample in
+  the source.
+- Honest limits: exploration is bounded (report cap hits); and a hazard that
+  depends on an EXTERNAL service (not in the observable state) is invisible to
+  reachability — it needs a real sandbox probe, not a bigger search.
+
 ## Step 5 — Triage each disagreement (do this WITH the user)
 
 `findings.md` classifies every non-consistent window:

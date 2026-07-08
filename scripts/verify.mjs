@@ -15,12 +15,21 @@
 //   fail/unscoreable in SOME only -> likely SPEC-ERROR (a generation missed it)
 //   fail in ALL specs             -> likely CODE-FINDING or CONTRACT-ERROR
 //   unscoreable in ALL specs      -> specs didn't load / no next() (fix specs)
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadWindows, replaySpec } from './replay.mjs';
 import { buildPrompt } from './build_prompt.mjs';
 import { generateSpecs } from './generate.mjs';
+import { check, loadSpec } from './check.mjs';
+
+/** Resolve an invariants module path from --invariants, contract.invariants, or a sibling file. */
+function resolveInvariantsPath(opts, contract) {
+  if (opts.invariants) return resolve(opts.invariants);
+  if (contract.invariants) return resolve(dirname(resolve(opts.contract)), contract.invariants);
+  const sibling = join(dirname(resolve(opts.contract)), 'invariants.mjs');
+  return existsSync(sibling) ? sibling : null;
+}
 
 function parseArgs(argv) {
   const a = {};
@@ -85,22 +94,49 @@ export async function verify(opts) {
   };
   const findings = perWindow.filter((w) => w.verdict !== 'consistent');
 
-  writeFileSync(join(outDir, 'findings.json'), JSON.stringify({ summary, findings, perWindow }, null, 2), 'utf-8');
-  writeFileSync(join(outDir, 'findings.md'), renderMarkdown(summary, findings), 'utf-8');
-  return { summary, findings, outDir };
+  // ── Second half: model-check each spec against invariants (the bug-finder) ──
+  // Replay only catches bugs where the spec DISAGREES with the code; a faithful
+  // spec does not. Iterating the spec against invariants REACHES bad states a
+  // faithful spec still contains. Runs only when invariants are provided.
+  let invReport = null;
+  const invPath = resolveInvariantsPath(opts, contract);
+  if (invPath) {
+    const invMod = await import(pathToFileURL(invPath).href);
+    const invariants = { stateInvariants: invMod.stateInvariants || (invMod.default || {}).stateInvariants || [], transitionInvariants: invMod.transitionInvariants || (invMod.default || {}).transitionInvariants || [] };
+    const perSpec = specPaths.map((p) => { try { return check({ specModule: loadSpec(p), contract, invariants, windows }); } catch (e) { return { ok: true, statesExplored: 0, capHit: false, violations: [], error: String(e && e.message) }; } });
+    // An invariant violated by ALL specs is a strong finding; by some is spec-dependent.
+    const byName = new Map();
+    perSpec.forEach((r, si) => r.violations.forEach((v) => {
+      const e = byName.get(v.invariant) || { invariant: v.invariant, kind: v.kind, specs: 0, example: v };
+      e.specs++; byName.set(v.invariant, e);
+    }));
+    const violations = [...byName.values()].map((e) => ({ ...e, strength: e.specs === specPaths.length ? 'all-specs' : 'some-specs' }));
+    invReport = { specs: specPaths.length, statesExplored: Math.max(0, ...perSpec.map((r) => r.statesExplored)), violations };
+  }
+
+  writeFileSync(join(outDir, 'findings.json'), JSON.stringify({ summary, findings, perWindow, invReport }, null, 2), 'utf-8');
+  writeFileSync(join(outDir, 'findings.md'), renderMarkdown(summary, findings, invReport), 'utf-8');
+  return { summary, findings, invReport, outDir };
 }
 
-function renderMarkdown(summary, findings) {
+function renderMarkdown(summary, findings, invReport) {
   const L = [];
   L.push('# Polygraph — verification findings\n');
   L.push('> Consistency check, not a proof. Every finding is a lead to investigate by hand.\n');
+  L.push('## Part 1 — trace conformance (replay)\n');
   L.push(`- specs replayed: **${summary.specs}**`);
   L.push(`- windows: **${summary.windows}**`);
   L.push(`- consistent (pass in all specs): **${summary.consistent}**`);
   L.push(`- likely spec-error (some specs miss it): **${summary.specError}**`);
   L.push(`- likely code-finding / contract-error (all specs disagree): **${summary.codeFinding}**`);
   L.push(`- unscoreable in all specs (specs didn't load): **${summary.unscoreableAll}**\n`);
-  if (!findings.length) { L.push('All windows consistent across all specs.\n'); return L.join('\n'); }
+  if (!findings.length) {
+    L.push('All windows consistent across all specs — the derived spec reproduces the code.');
+    L.push('_Note: a faithful spec reproduces bugs too, so a clean Part 1 is not a clean bill of');
+    L.push('health. The bug-finding is Part 2._\n');
+    renderInvSection(L, invReport);
+    return L.join('\n');
+  }
   L.push('## Windows to review\n');
   L.push('| scenario | # | action | verdict | per-spec |');
   L.push('|---|---|---|---|---|');
@@ -111,14 +147,38 @@ function renderMarkdown(summary, findings) {
   L.push('- *code-finding / contract-error*: every spec disagrees with the trace here. Either the code does something you did not expect (a defect) or your observable-state contract omits a field that drives this transition. Investigate the source at this (pre-state, action).');
   L.push('- *spec-error*: some generations pass, some fail. Usually one generation missed a rule; check the majority. The missed rules are typically special cases living outside the main state table.');
   L.push('- *unscoreable in all specs*: the generated modules did not load or export next(). Fix generation, not the code.');
+  renderInvSection(L, invReport);
   return L.join('\n');
+}
+
+function renderInvSection(L, invReport) {
+  L.push('\n## Part 2 — invariant violations (model checking)\n');
+  if (!invReport) {
+    L.push('_No invariants provided, so the bug-finding half did not run._ Replay alone only');
+    L.push('catches bugs where the derived spec DISAGREES with the code — a faithful spec does');
+    L.push('not, so it misses bugs on legible code. Add an `invariants.mjs` (rules encoding what');
+    L.push('the code *should* do) and re-run: the checker iterates the spec exhaustively and');
+    L.push('reports any reachable state that breaks a rule, with a counterexample path.');
+    return;
+  }
+  L.push(`- states explored: **${invReport.statesExplored}** · specs checked: **${invReport.specs}**`);
+  if (!invReport.violations.length) { L.push('\nNo invariant violations reachable. (Bounded exploration; not a proof.)'); return; }
+  L.push(`\n**${invReport.violations.length} invariant violation(s) reachable — these are bugs, with counterexamples:**\n`);
+  L.push('| invariant | kind | strength | counterexample (init → …) |');
+  L.push('|---|---|---|---|');
+  for (const v of invReport.violations) {
+    const ex = v.example.path.map((s, i) => i === 0 ? 'init' : `${s.action}(${JSON.stringify(s.data)})`).join(' → ');
+    L.push(`| ${v.invariant} | ${v.kind} | ${v.strength} | ${ex} |`);
+  }
+  L.push('\nAn *all-specs* violation means every independently derived model reaches the bad');
+  L.push('state — a strong signal. Follow the counterexample path in the source.');
 }
 
 // CLI
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const a = parseArgs(process.argv.slice(2));
   if (!a.contract || !a.traces) {
-    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] | --specs <dir>) [--out <dir>]');
+    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] | --specs <dir>) [--invariants <inv.mjs>] [--out <dir>]');
     process.exit(2);
   }
   verify(a).then((r) => {

@@ -1,13 +1,15 @@
 {
   "name": "polygraph",
-  "version": "0.1.1",
-  "description": "A polygraph for your state machine: trace-driven consistency checking via an LLM-derived bare next(state, action, data) spec.",
+  "version": "0.2.0",
+  "description": "A polygraph for your state machine: an LLM derives a bare next(state, action, data) spec from your code, then Polygraph replays real traces against it (conformance) AND model-checks it against invariants (finds bugs by exhaustive iteration).",
   "type": "module",
   "license": "Apache-2.0",
   "keywords": [
     "verification",
     "state-machine",
     "trace-validation",
+    "model-checking",
+    "invariants",
     "llm",
     "consistency-check",
     "polygraph"
@@ -15,7 +17,9 @@
   "scripts": {
     "test": "node test/selftest.mjs",
     "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --out examples/turnstile/out",
+    "check": "node scripts/check.mjs",
     "eval:mechanism": "node eval/mechanism-eval.mjs",
+    "eval:check": "node eval/check-eval.mjs",
     "eval:ab": "node eval/skill-ab.mjs"
   },
   "bin": {

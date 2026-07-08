@@ -9,7 +9,7 @@
       "name": "polygraph",
       "source": "./",
       "description": "A polygraph for your state machine. The agent instruments your code, builds any doubles needed to run it, and captures real execution traces — then has an LLM derive a bare next(state, action, data) spec from the source, replays the traces against it, and surfaces every disagreement as a spec-error, code-finding, or contract-error.",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "author": {
         "name": "jdubray",
         "url": "https://github.com/jdubray"

@@ -13,6 +13,7 @@ import { verify } from '../scripts/verify.mjs';
 import { buildRequest, extractSpec, generateSpecs } from '../scripts/generate.mjs';
 import { buildPrompt } from '../scripts/build_prompt.mjs';
 import { resolveModel } from '../scripts/models.mjs';
+import { check, buildDomain } from '../scripts/check.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EX = join(HERE, '..', 'examples', 'turnstile');
@@ -132,6 +133,36 @@ ok('SAM: PUSH-while-LOCKED no-op has post == pre',
 // hand-written reference next() must score 100% on it.
 ok('SAM: reference spec scores 100% on the SAM-captured corpus',
   replaySpec(join(EX, 'specs', 'reference.js'), samWindows).every((s) => s === 'pass'));
+
+console.log('7) model checker (scripts/check.mjs) — iterate next() against invariants');
+// A tiny counter machine with an off-by-one: it should lock at 3 but locks at 4,
+// so it reaches the illegal state {active, n:3}. Model checking must FIND it.
+const buggy = {
+  init: () => ({ status: 'active', n: 0 }),
+  next: (s, action) => {
+    if (action === 'TICK' && s.status === 'active') { const n = s.n + 1; return n > 3 ? { status: 'locked', n } : { status: 'active', n }; }
+    return { status: s.status, n: s.n };
+  },
+};
+const counterContract = { stateKeys: ['status', 'n'], actions: { TICK: { dataFields: {} } } };
+const inv = { stateInvariants: [{ name: 'locked-by-3', pred: (s) => !(s.status === 'active' && s.n >= 3) }] };
+const buggyRes = check({ specModule: buggy, contract: counterContract, invariants: inv });
+ok('checker FINDS the reachable violation a faithful spec hides', buggyRes.ok === false && buggyRes.violations.length === 1);
+ok('checker returns a shortest counterexample path (init -> 3x TICK)',
+  buggyRes.violations[0].path.length === 4 && buggyRes.violations[0].path.slice(1).every((s) => s.action === 'TICK'));
+
+// The corrected machine (locks at 3) satisfies the invariant — no violation.
+const fixed = { init: () => ({ status: 'active', n: 0 }), next: (s, a) => (a === 'TICK' && s.status === 'active') ? (s.n + 1 >= 3 ? { status: 'locked', n: s.n + 1 } : { status: 'active', n: s.n + 1 }) : { status: s.status, n: s.n } };
+ok('checker passes a correct machine (no false alarm)', check({ specModule: fixed, contract: counterContract, invariants: inv }).ok === true);
+
+// A next() that throws is itself a finding.
+const thrower = { init: () => ({ x: 0 }), next: () => { throw new Error('boom'); } };
+const throwRes = check({ specModule: thrower, contract: { stateKeys: ['x'], actions: { GO: { dataFields: {} } } }, invariants: {} });
+ok('checker reports a throwing next() as a violation', throwRes.ok === false && /threw/.test(throwRes.violations[0].invariant));
+
+// Domain inference from traces (no contract dataDomain).
+const dom = buildDomain({ actions: { CHARGE: { dataFields: { result: 'string' } } } }, [{ action: 'CHARGE', data: { result: 'ok' } }, { action: 'CHARGE', data: { result: 'err5xx' } }]);
+ok('checker infers a finite data domain from traces', dom.steps.length === 2 && dom.steps.some((s) => s.data.result === 'err5xx'));
 
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

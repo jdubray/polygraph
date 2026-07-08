@@ -39,3 +39,12 @@ node scripts/verify.mjs --contract examples/turnstile/contract.json \
 ```
 
 The self-test (`npm test`) runs steps 1–3 and asserts the expected outcomes.
+
+## Model checking (Half 2)
+
+This turnstile is a *replay* example. For the bug-finding half — iterating a
+spec against invariants — see `npm run eval:check`, which model-checks the eval
+machines in `eval/machines/` and finds seeded bugs the replay misses, with
+counterexamples. Note: model checking needs a bounded state space; a machine
+with an unbounded counter (like this turnstile's coin count) is explored only up
+to `--max-states`.

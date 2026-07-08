@@ -22,22 +22,43 @@ of its own source — as a **spec-error**, a **code-finding**, or a
 > hand*, not an established result. Do not rely on it as your only safeguard for
 > correctness- or safety-critical code. Approach the output with skepticism.
 
-## How it works (five steps)
+## How it works (two halves)
+
+An LLM derives a bare `next(state, action, data)` function from your code. Then
+Polygraph does **two** things with it — and the second is where bugs are found.
+
+**Half 1 — conformance (replay).** Check that the derived spec reproduces real
+execution traces.
 
 1. **Define a contract** — the minimal observable state, the action alphabet,
    terminal states, and the special rules that live outside the main state table.
 2. **Capture traces** — instrument a copy of the code to emit one NDJSON
-   `{pre, action, data, post}` window per step, across scenarios (normal,
-   failures, races, deliberate no-ops).
+   `{pre, action, data, post}` window per step, across scenarios.
 3. **Controls first** — a hand-written reference spec must score 100%; a mutated
    one must fail only its target windows. This proves the replay discriminates.
-4. **Generate + replay** — build a *derivation-mode* prompt (it never describes
-   per-state semantics), generate N independent specs, replay each.
-5. **Triage** — classify every disagreement; code-findings and contract-errors
-   point back at the source, spec-errors point at a generation that missed a
-   rule.
+4. **Generate + replay** — generate N independent specs, replay each, triage the
+   disagreements.
 
-The method and its failure modes are documented in the `polygraph` skill.
+**Half 2 — model checking (the bug-finder).** Iterate the spec against
+invariants.
+
+5. **Write invariants** — rules encoding what the code *should* do ("a customer
+   is never charged without a confirmed transaction"), as `invariants.mjs`.
+6. **Check** — `scripts/check.mjs` explores every reachable state of `next()`
+   from `init()` over a finite action/data domain and reports any state that
+   breaks a rule, with a shortest **counterexample path**.
+
+Why both halves are needed: **replay only catches a bug when the spec
+*disagrees* with the code — and a faithful spec doesn't.** On small, legible
+code a capable model reproduces the code exactly, bug included, so replay goes
+silent. Model checking iterates that *same faithful spec* against your intent and
+**reaches** the bad state anyway. This is measured, not asserted — see
+[`eval/FINDING-faithful-reproduction.md`](eval/FINDING-faithful-reproduction.md)
+(replay found 0/5 seeded bugs; model checking found 5/5, with counterexamples:
+`npm run eval:check`).
+
+Versions before 0.2.0 shipped only Half 1. The method and its failure modes are
+documented in the `polygraph` skill.
 
 ## What it needs from you (read before you start)
 

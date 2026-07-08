@@ -59,6 +59,18 @@
           "whenAction": { "type": "string", "description": "Optional action this rule applies to." }
         }
       }
+    },
+    "dataDomain": {
+      "type": "object",
+      "description": "Optional finite domain for the model checker (scripts/check.mjs): ACTION -> field -> [values...]. The checker enumerates these when iterating next(). If omitted, values are inferred from the trace corpus. Keep domains small — the state space is their product.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "type": "array" }
+      }
+    },
+    "invariants": {
+      "type": "string",
+      "description": "Optional path (relative to this contract) to an invariants.mjs exporting { stateInvariants:[{name,pred:(state)=>bool}], transitionInvariants:[{name,pred:(pre,action,data,post)=>bool}] }. When present, verify.mjs model-checks each spec against these rules — the bug-finding half. A sibling invariants.mjs is auto-detected."
     }
   }
 }
