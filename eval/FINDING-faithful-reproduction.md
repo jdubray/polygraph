@@ -4,6 +4,14 @@
 A strong signal about *where* the method works, not a final verdict.
 Measured 2026-07-07 with `eval/skill-ab.mjs`; raw data in `eval/results/`.
 
+**Resolution (2026-07-08, v0.2.0):** this finding diagnosed a missing half of
+the tool, not a dead end. Trace replay is only *conformance* checking; the
+bug-finding half is *model checking* — iterating the faithful spec against
+invariants. That half was added in v0.2.0 (`scripts/check.mjs`). On the same
+five seeded machines where replay found **0/5**, model checking finds **5/5**
+with shortest counterexamples (`npm run eval:check`). See §8 below — the negative
+result stands as written and is what motivated the fix.
+
 ---
 
 ## Summary
@@ -188,3 +196,38 @@ Until those run, the defensible statement is the one at the top: on small,
 legible state machines with a strong model, the bare-next() replay core does not
 help and can mislead; its value lives in the large-code regime, and that regime
 is not yet in this suite.
+
+## 8. Resolution — the missing half was model checking
+
+The finding above is about *replay*, which is only **conformance** checking:
+"does the derived spec reproduce the traces?" A faithful spec reproduces the
+code, bug included, so on legible code it conforms and replay stays silent.
+
+That was never the whole method — it was the half the plugin had shipped. The
+other half is what a spec is *for*: unlike everyday code, a total pure
+`next(state, action, data)` relation can be **exhaustively iterated**. Explore
+every reachable state from `init` over the action/data domain, and check
+**invariants** — rules that encode *intent*, an independent source of truth the
+buggy code violates. The faithful spec that hid the bug under replay **reaches**
+the bad state under model checking.
+
+This half was added in v0.2.0 (`scripts/check.mjs`; `npm run eval:check`). On the
+identical five seeded machines:
+
+| bug | replay (conformance) | model checking (invariants) |
+|---|---|---|
+| m01 grace-on-transient-5xx | missed (spec copied it) | **found** — `init → RENEW_CHARGE(err5xx) → grace` |
+| m02 auth off-by-one | missed | **found** — reaches lock past the threshold |
+| m03 heartbeat requeue | missed | **found** — HEARTBEAT changes status |
+| m04 publish-without-approval | missed | **found** — PUBLISH from draft |
+| m05 wrong partial-capture guard | missed | **found** — partial capture reached |
+| **total** | **0/5** | **5/5** (clean stay clean, out-of-scope stays invisible) |
+
+So the corrected conclusion: **replay checks conformance; model checking finds
+bugs.** Replay's blind spot on legible code is real and worth knowing (it warns
+against trusting a clean conformance run), but it is a property of the *weaker*
+half. The bug-finding lives in iterating the spec against invariants — the same
+step the finixpos study performed by hand in TLC, now built into the tool. The
+honest limits carry over: model checking needs a bounded state space, and a
+hazard that lives in an external service (not the observable state) is invisible
+to both halves — that is the correlated-oracle boundary, unchanged.
