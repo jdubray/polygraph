@@ -14,9 +14,9 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'nod
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildPrompt } from '../scripts/build_prompt.mjs';
-import { generateSpecs } from '../scripts/generate.mjs';
-import { resolveModel } from '../scripts/models.mjs';
+import { generateSpecs, callMessages } from '../scripts/generate.mjs';
 import { loadWindows, replaySpec } from '../scripts/replay.mjs';
+import { classify } from '../scripts/verify.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MACHINES_DIR = join(HERE, 'machines');
@@ -36,18 +36,10 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const DRY = !!args['dry-run'];
 const N = Number(args.n || 3);
-const MODEL = args.model || 'fable-5';
+// NO default model (repo rule). Real runs are gated on --model in main();
+// dry-run needs only a placeholder string for request shaping.
+const MODEL = args.model || 'dry-run-model';
 const MAX_TOKENS = Number(args['max-tokens'] || 32000);
-
-/** classify one window's statuses across all specs (mirrors verify.mjs). */
-function classify(statuses) {
-  const passes = statuses.filter((s) => s === 'pass').length;
-  const n = statuses.length;
-  if (passes === n) return 'consistent';
-  if (statuses.every((s) => s === 'unscoreable')) return 'unscoreable-all';
-  if (passes === 0) return 'code-finding';
-  return 'spec-error';
-}
 
 /** Parse a FLAT verdict {"buggy":bool,"action":str|null,"state":str|null}. */
 function parseVerdict(text) {
@@ -59,19 +51,8 @@ function parseVerdict(text) {
   } catch { return { buggy: null, action: null, state: null }; }
 }
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-async function callAnthropic(prompt, fetchImpl, apiKey) {
-  const body = { model: resolveModel(MODEL).id, max_tokens: MAX_TOKENS, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] };
-  const resp = await fetchImpl(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify(body),
-  });
-  const data = await resp.json();
-  return (data.content || []).map((b) => b.text || '').join('');
-}
-
-/** BASELINE arm: model alone on the source. */
+/** BASELINE arm: model alone on the source. A failed/empty API call returns an
+ *  {error} sentinel — scored as UNSCOREABLE, never as a substantive verdict. */
 async function baselineArm(source, fetchImpl, apiKey) {
   const prompt =
     `Here is a JavaScript state machine implemented as a pure transition function.\n\n` +
@@ -80,8 +61,9 @@ async function baselineArm(source, fetchImpl, apiKey) {
     `source implies. If a transition does something a faithful reader of the source ` +
     `would NOT predict, locate it. Reply with a one-line JSON verdict at the end, ` +
     `flat (no nesting):\n{"buggy": true|false, "action": "ACTION_NAME"|null, "state": "PRE_STATE"|null}`;
-  const text = await callAnthropic(prompt, fetchImpl, apiKey);
-  return parseVerdict(text);
+  const r = await callMessages({ prompt, model: MODEL, maxTokens: MAX_TOKENS, apiKey, fetchImpl });
+  if (!r.ok) return { error: r.error };
+  return parseVerdict(r.text);
 }
 
 /** POLYGRAPH arm: derive N specs, replay, derive the verdict mechanically. */
@@ -93,14 +75,15 @@ async function polygraphArm(dir, source, contract, fetchImpl, apiKey) {
   mkdirSync(specDir, { recursive: true });
   const specPaths = [];
   gens.forEach((g) => { if (g.ok) { const p = join(specDir, `spec_${g.index}.js`); writeFileSync(p, g.spec, 'utf-8'); specPaths.push(p); } });
-  if (!specPaths.length) return { buggy: false, action: null, state: null, note: 'no specs' };
+  // Zero specs = generation failure, NOT evidence the code is clean.
+  if (!specPaths.length) return { error: `no specs generated: ${gens.map((g) => g.error).join('; ')}` };
 
   const windows = loadWindows(join(dir, 'traces'));
   const matrix = specPaths.map((p) => replaySpec(p, windows));
   const primaryKey = (typeof contract.stateKeys[0] === 'string' ? contract.stateKeys[0] : contract.stateKeys[0].name);
   const finding = windows
     .map((w, wi) => ({ w, verdict: classify(matrix.map((row) => row[wi])) }))
-    .find((x) => x.verdict === 'code-finding');
+    .find((x) => x.verdict === 'code-finding-or-contract');
   rmSync(specDir, { recursive: true, force: true });
   if (finding) return { buggy: true, action: finding.w.action, state: String(finding.w.pre[primaryKey]) };
   return { buggy: false, action: null, state: null };
@@ -141,34 +124,47 @@ async function main() {
     (await import(pathToFileURL(join(dir, 'gen-traces.mjs')).href)).run(); // ensure traces exist
 
     const { genFetch, baseFetch } = DRY ? mockFetches(dir) : {};
+    // A run whose API call failed is UNSCOREABLE — excluded from both arms'
+    // rates and counted, never laundered into a buggy:false "clean" verdict.
     const baseScores = [], polyScores = [];
-    let baseFlag = 0, polyFlag = 0;
+    let baseFlag = 0, polyFlag = 0, unscoreableRuns = 0;
     for (let r = 0; r < N; r++) {
       const bv = await baselineArm(source, DRY ? baseFetch : fetch, apiKey);
       const pv = await polygraphArm(dir, source, contract, DRY ? genFetch : fetch, apiKey);
-      baseScores.push(score(bv, gt)); polyScores.push(score(pv, gt));
-      if (bv.buggy === true) baseFlag++; if (pv.buggy === true) polyFlag++;
+      if (bv.error) { unscoreableRuns++; console.error(`[skill-ab] ${name} run ${r} baseline unscoreable: ${bv.error}`); }
+      else { baseScores.push(score(bv, gt)); if (bv.buggy === true) baseFlag++; }
+      if (pv.error) { unscoreableRuns++; console.error(`[skill-ab] ${name} run ${r} polygraph unscoreable: ${pv.error}`); }
+      else { polyScores.push(score(pv, gt)); if (pv.buggy === true) polyFlag++; }
     }
-    const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+    const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
+    const b = mean(baseScores), p = mean(polyScores);
     perMachine.push({
       name, cls,
-      baseline: mean(baseScores), polygraph: mean(polyScores),
-      delta: mean(polyScores) - mean(baseScores),
-      baseFlagRate: baseFlag / N, polyFlagRate: polyFlag / N,
-      regression: mean(polyScores) < mean(baseScores),
+      baseline: b, polygraph: p,
+      delta: b !== null && p !== null ? p - b : null,
+      baseFlagRate: baseScores.length ? baseFlag / baseScores.length : null,
+      polyFlagRate: polyScores.length ? polyFlag / polyScores.length : null,
+      unscoreableRuns,
+      regression: b !== null && p !== null && p < b,
     });
   }
 
-  // Aggregate.
-  const seeded = perMachine.filter((m) => m.cls === 'seeded');
-  const notSeeded = perMachine.filter((m) => m.cls !== 'seeded');
-  const agg = (arm) => ({
-    detection: seeded.length ? seeded.reduce((s, m) => s + m[arm], 0) / seeded.length : 0,
-    falseAlarm: notSeeded.length ? notSeeded.reduce((s, m) => s + (arm === 'baseline' ? m.baseFlagRate : m.polyFlagRate), 0) / notSeeded.length : 0,
-    accuracy: perMachine.reduce((s, m) => s + m[arm], 0) / perMachine.length,
-  });
+  // Aggregate over SCORED machines only (a machine whose arm had zero valid
+  // runs is excluded from that arm's rates and reported, not hidden).
+  const scored = (arm) => perMachine.filter((m) => m[arm] !== null);
+  const agg = (arm) => {
+    const flagKey = arm === 'baseline' ? 'baseFlagRate' : 'polyFlagRate';
+    const seeded = scored(arm).filter((m) => m.cls === 'seeded');
+    const notSeeded = scored(arm).filter((m) => m.cls !== 'seeded' && m[flagKey] !== null);
+    return {
+      detection: seeded.length ? seeded.reduce((s, m) => s + m[arm], 0) / seeded.length : 0,
+      falseAlarm: notSeeded.length ? notSeeded.reduce((s, m) => s + m[flagKey], 0) / notSeeded.length : 0,
+      accuracy: scored(arm).length ? scored(arm).reduce((s, m) => s + m[arm], 0) / scored(arm).length : 0,
+    };
+  };
   const baseAgg = agg('baseline'), polyAgg = agg('polygraph');
   const regressions = perMachine.filter((m) => m.regression);
+  const totalUnscoreable = perMachine.reduce((s, m) => s + m.unscoreableRuns, 0);
 
   mkdirSync(RESULTS, { recursive: true });
   const out = {
@@ -176,6 +172,7 @@ async function main() {
     perMachine, baseline: baseAgg, polygraph: polyAgg,
     delta: { detection: polyAgg.detection - baseAgg.detection, accuracy: polyAgg.accuracy - baseAgg.accuracy },
     regressions: regressions.map((m) => m.name),
+    unscoreableRuns: totalUnscoreable,
   };
   writeFileSync(join(RESULTS, 'scorecard.json'), JSON.stringify(out, null, 2), 'utf-8');
 
@@ -185,9 +182,12 @@ async function main() {
   md.push(`- model: \`${MODEL}\` · N=${N} runs/arm · ${machines.length} machines\n`);
   md.push(`| machine | class | baseline | polygraph | delta | note |`);
   md.push(`|---|---|---|---|---|---|`);
+  const fmt = (x) => (x === null ? 'n/a' : x.toFixed(2));
   for (const m of perMachine) {
-    md.push(`| ${m.name} | ${m.cls} | ${m.baseline.toFixed(2)} | ${m.polygraph.toFixed(2)} | ${m.delta >= 0 ? '+' : ''}${m.delta.toFixed(2)} | ${m.regression ? '⚠️ REGRESSION' : ''} |`);
+    const note = [m.regression ? '⚠️ REGRESSION' : '', m.unscoreableRuns ? `⚠️ ${m.unscoreableRuns} unscoreable run(s)` : ''].filter(Boolean).join(' · ');
+    md.push(`| ${m.name} | ${m.cls} | ${fmt(m.baseline)} | ${fmt(m.polygraph)} | ${m.delta === null ? 'n/a' : (m.delta >= 0 ? '+' : '') + m.delta.toFixed(2)} | ${note} |`);
   }
+  if (totalUnscoreable) md.push(`\n⚠️ **Unscoreable runs: ${totalUnscoreable}** (API call failed/empty — excluded from all rates; see stderr for causes).`);
   md.push(`\n## Aggregate\n`);
   md.push(`| arm | detection (seeded) | false-alarm (clean+oos) | accuracy (all) |`);
   md.push(`|---|---|---|---|`);

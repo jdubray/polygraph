@@ -47,45 +47,56 @@ export function extractSpec(text) {
 }
 
 /**
+ * ONE guarded low-level Messages call for every consumer (spec generation and
+ * the eval's baseline arm alike). Returns { ok:true, text, usage } or
+ * { ok:false, error }. The guards are the point: an HTTP error or an
+ * empty/all-thinking response must surface as a FAILURE, never as parseable
+ * empty text that downstream code scores as a substantive verdict.
+ */
+export async function callMessages({ prompt, model, maxTokens, apiKey, fetchImpl = fetch }) {
+  const body = buildRequest({ prompt, model, maxTokens });
+  try {
+    const resp = await fetchImpl(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      return { ok: false, error: `HTTP ${resp.status}: ${errText.slice(0, 300)}` };
+    }
+    const data = await resp.json();
+    // Only text blocks carry the answer; thinking blocks (reasoning models)
+    // have no .text — if the budget was spent on thinking there is no text at
+    // all. Fail loudly rather than returning empty text.
+    const text = (data.content || []).map((b) => b.text || '').join('');
+    if (!text.trim()) {
+      const hint = data.stop_reason === 'max_tokens'
+        ? ` (stop_reason=max_tokens with no answer text — a reasoning model likely spent the whole budget on thinking; raise --max-tokens, e.g. 32000)`
+        : ` (stop_reason=${data.stop_reason})`;
+      return { ok: false, error: `empty response${hint}` };
+    }
+    return { ok: true, text, usage: data.usage };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message || e) };
+  }
+}
+
+/**
  * Generate N specs. Returns array of { index, ok, spec?, error?, usage? }.
  * fetchImpl is injectable for testing (defaults to global fetch).
  */
 export async function generateSpecs({ prompt, model, n = 5, apiKey, fetchImpl = fetch, maxTokens }) {
   const results = [];
   for (let i = 0; i < n; i++) {
-    const body = buildRequest({ prompt, model, maxTokens });
-    try {
-      const resp = await fetchImpl(ANTHROPIC_URL, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        const errText = await resp.text();
-        results.push({ index: i, ok: false, error: `HTTP ${resp.status}: ${errText.slice(0, 300)}` });
-        continue;
-      }
-      const data = await resp.json();
-      // Only text blocks carry the spec; thinking blocks (reasoning models) have
-      // no .text and are skipped here — but if the budget was spent on thinking
-      // there is no text at all. Fail loudly rather than returning an empty spec
-      // that silently scores unscoreable-all downstream.
-      const text = (data.content || []).map((b) => b.text || '').join('');
-      if (!text.trim()) {
-        const hint = data.stop_reason === 'max_tokens'
-          ? ` (stop_reason=max_tokens with no answer text — a reasoning model likely spent the whole budget on thinking; raise --max-tokens, e.g. 32000)`
-          : ` (stop_reason=${data.stop_reason})`;
-        results.push({ index: i, ok: false, error: `empty response${hint}` });
-        continue;
-      }
-      results.push({ index: i, ok: true, spec: extractSpec(text), usage: data.usage });
-    } catch (e) {
-      results.push({ index: i, ok: false, error: String(e && e.message || e) });
-    }
+    const r = await callMessages({ prompt, model, maxTokens, apiKey, fetchImpl });
+    results.push(r.ok
+      ? { index: i, ok: true, spec: extractSpec(r.text), usage: r.usage }
+      : { index: i, ok: false, error: r.error });
   }
   return results;
 }

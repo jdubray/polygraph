@@ -1,7 +1,7 @@
 {
   "name": "polygraph",
   "displayName": "Polygraph",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A polygraph for your state machine. The agent does the hard part for you: it instruments your code, builds any test doubles needed to run it, and captures real execution traces — then has an LLM derive a bare next(state, action, data) transition function from the source, replays the traces against it, and surfaces every disagreement as a spec-error, code-finding, or contract-error.",
   "author": {
     "name": "jdubray",

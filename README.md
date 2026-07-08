@@ -181,7 +181,7 @@ node scripts/verify.mjs --contract contract.json --traces traces/ --specs specs/
 
 # generate + replay (needs ANTHROPIC_API_KEY)
 node scripts/verify.mjs --contract contract.json --source src/machine.ts \
-  --traces traces/ --model sonnet-4.8 --n 5 --out out/
+  --traces traces/ --model sonnet-5 --n 5 --out out/
 
 # validate a corpus
 node scripts/validate_corpus.mjs contract.json traces/
@@ -193,7 +193,7 @@ There is **no default model** — pass `--model`. Recommended:
 
 | alias | resolves to | notes |
 |---|---|---|
-| `sonnet-4.8` | *(verbatim — supply exact id)* | balanced choice |
+| `sonnet-5` | `claude-sonnet-5` | balanced choice (speed / intelligence) |
 | `fable-5` | `claude-fable-5` | strongest in the origin study |
 
 Any value not in the alias table (`scripts/models.mjs`) is passed to the API

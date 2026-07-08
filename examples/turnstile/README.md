@@ -35,7 +35,7 @@ node scripts/verify.mjs --contract examples/turnstile/contract.json \
 # 4. (Optional) Real generation — needs ANTHROPIC_API_KEY.
 node scripts/verify.mjs --contract examples/turnstile/contract.json \
   --source examples/turnstile/turnstile.js --traces examples/turnstile/traces \
-  --model sonnet-4.8 --n 5 --out /tmp/ts-gen
+  --model sonnet-5 --n 5 --out /tmp/ts-gen
 ```
 
 The self-test (`npm test`) runs steps 1–3 and asserts the expected outcomes.

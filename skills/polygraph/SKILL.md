@@ -21,7 +21,7 @@ replaying, and classifying.
 
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Node ≥ 20 is required.
 Generation needs `ANTHROPIC_API_KEY` and an explicit model (recommend
-`sonnet-4.8` or `fable-5`; there is no default). Replay and controls need no key.
+`sonnet-5` or `fable-5`; there is no default). Replay and controls need no key.
 
 ## Step 1 — Define the contract (do this WITH the user)
 
@@ -91,7 +91,7 @@ Run the full loop:
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs \
   --contract contract.json --source path/to/source --traces traces/ \
-  --model sonnet-4.8 --n 5 --out out/
+  --model sonnet-5 --n 5 --out out/
 ```
 
 This builds a derivation-mode prompt (it never describes per-state semantics),

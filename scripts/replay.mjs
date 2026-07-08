@@ -43,7 +43,12 @@ export function replaySpec(specPath, windows) {
   const proc = spawnSync('node', [TV], { input: JSON.stringify(request), encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
   let resp;
   try {
-    resp = JSON.parse(proc.stdout);
+    // The protocol JSON is the LAST non-empty stdout line. tv.mjs redirects
+    // spec console output to stderr, but parse defensively anyway so stray
+    // stdout writes (a spec calling process.stdout.write directly) can't make
+    // a correct spec unscoreable.
+    const lines = String(proc.stdout || '').split('\n').filter((l) => l.trim());
+    resp = JSON.parse(lines[lines.length - 1]);
   } catch {
     return windows.map(() => 'unscoreable');
   }

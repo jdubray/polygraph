@@ -16,29 +16,15 @@
 // Module usage:  check({ specPath, contract, invariants, windows, maxStates })
 // CLI:  node check.mjs --spec <mod.js> --contract <c.json> --invariants <inv.mjs> [--traces <dir>] [--max-states N] [--json out]
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { resolve, dirname } from 'node:path';
+import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import vm from 'node:vm';
 import { loadWindows } from './replay.mjs';
+import { loadSpec, stable, dataFieldsOf } from './load-spec.mjs';
 
-// ── Spec loader (same CJS-in-any-package mechanism as tv.mjs) ───────────────
-export function loadSpec(specPath) {
-  const abs = resolve(specPath);
-  const code = readFileSync(abs, 'utf-8');
-  const module = { exports: {} };
-  const require = createRequire(abs);
-  const compiled = vm.compileFunction(code, ['module', 'exports', 'require', '__filename', '__dirname'], { filename: abs });
-  compiled(module, module.exports, require, abs, dirname(abs));
-  return module.exports;
-}
-
-// ── Canonical state key (stable across key order) ──────────────────────────
-function stable(v) {
-  if (v === null || typeof v !== 'object') return JSON.stringify(v === undefined ? null : v);
-  if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
-  return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
-}
+// Re-export the shared loader (eval scripts and older callers import it from
+// here). ONE loader for the whole pipeline lives in load-spec.mjs; tv.mjs
+// keeps an internal copy (keep-in-sync comments in both files).
+export { loadSpec };
 
 // ── Build the (action, data) domain from the contract + observed traces ────
 // dataDomain in the contract wins; otherwise values are inferred from the trace
@@ -56,7 +42,10 @@ export function buildDomain(contract, windows = []) {
   const steps = []; // { action, data }
   const notes = [];
   for (const action of actions) {
-    const fields = Object.keys(contract.actions[action].dataFields || {});
+    // dataFieldsOf: the SAME accessor build_prompt uses, so a contract written
+    // with `data:` instead of `dataFields:` gets the same fields in the
+    // explored domain as in the generation prompt.
+    const fields = Object.keys(dataFieldsOf(contract.actions[action]));
     if (fields.length === 0) { steps.push({ action, data: {} }); continue; }
     const perField = fields.map((f) => {
       const fromContract = contract.dataDomain?.[action]?.[f];
@@ -152,7 +141,16 @@ export function render(result) {
   const L = [];
   L.push(`states explored: ${result.statesExplored}${result.capHit ? ' (CAP HIT — exploration bounded)' : ''}`);
   if (result.error) { L.push(`ERROR: ${result.error}`); return L.join('\n'); }
-  if (result.ok) { L.push('no invariant violations reachable ✓'); return L.join('\n'); }
+  // Silent alphabet pruning must be VISIBLE: an action skipped for lack of a
+  // data domain means the clean verdict below only covers the explored subset.
+  const notes = result.domainNotes || [];
+  for (const n of notes) L.push(`WARNING: ${n}`);
+  if (result.ok) {
+    L.push(notes.length
+      ? `no invariant violations reachable over the EXPLORED alphabet ✓ (${notes.length} action/field(s) skipped — see warnings above)`
+      : 'no invariant violations reachable ✓');
+    return L.join('\n');
+  }
   L.push(`${result.violations.length} invariant violation(s):`);
   for (const v of result.violations) {
     L.push(`\n  ✗ ${v.invariant} [${v.kind}] — ${v.detail}`);

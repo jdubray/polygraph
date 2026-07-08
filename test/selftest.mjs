@@ -86,7 +86,8 @@ ok('template adds no per-(state,action) transition table',
 console.log('5) generate.mjs request shape + mocked API');
 const reqBody = buildRequest({ prompt: 'X', model: 'fable-5' });
 ok('model alias resolved (fable-5 -> claude-fable-5)', reqBody.model === 'claude-fable-5');
-ok('unknown model passed verbatim', resolveModel('sonnet-4.8').id === 'sonnet-4.8');
+ok('unknown model passed verbatim', resolveModel('some-exact-api-id').id === 'some-exact-api-id');
+ok('documented recommended alias resolves (sonnet-5)', resolveModel('sonnet-5').resolved === true);
 ok('prompt-cache control on the source turn', reqBody.messages[0].content[0].cache_control.type === 'ephemeral');
 ok('extractSpec pulls the fenced block', extractSpec('```javascript\nmodule.exports={};\n```') === 'module.exports={};');
 
@@ -163,6 +164,112 @@ ok('checker reports a throwing next() as a violation', throwRes.ok === false && 
 // Domain inference from traces (no contract dataDomain).
 const dom = buildDomain({ actions: { CHARGE: { dataFields: { result: 'string' } } } }, [{ action: 'CHARGE', data: { result: 'ok' } }, { action: 'CHARGE', data: { result: 'err5xx' } }]);
 ok('checker infers a finite data domain from traces', dom.steps.length === 2 && dom.steps.some((s) => s.data.result === 'err5xx'));
+
+console.log('8) code-review regression checks — no silent-clean paths');
+
+// (8a) build_prompt: $-patterns and literal placeholders in SOURCE survive byte-identical.
+const trickySource = `s.replace(/x/, '$&!'); const cost = '$$5'; // {state_keys} stays literal`;
+const trickyPrompt = buildPrompt(contract, trickySource, { filePath: 'tricky.js', lang: 'javascript' });
+ok('$& and $$ in source survive prompt embedding', trickyPrompt.includes(trickySource));
+ok('literal {state_keys} in source is not rewritten',
+  trickyPrompt.includes('// {state_keys} stays literal'));
+
+// (8b) verify --specs: empty dir throws; .cjs specs are picked up.
+const emptyDir = join(TMP, 'empty-specs');
+mkdirSync(emptyDir, { recursive: true });
+let threw = false;
+try { await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: emptyDir, out: join(TMP, 'out-empty') }); }
+catch (e) { threw = /no specs found/.test(e.message); }
+ok('--specs with zero matching files throws (no false clean)', threw);
+const cjsDir = join(TMP, 'cjs-specs');
+mkdirSync(cjsDir, { recursive: true });
+cpSync(join(EX, 'specs', 'reference.js'), join(cjsDir, 'reference.cjs'));
+const cjsRun = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: cjsDir, out: join(TMP, 'out-cjs') });
+ok('.cjs reference spec is picked up and passes', cjsRun.summary.specs === 1 && cjsRun.summary.consistent === 12);
+
+// (8c) stdout integrity: a spec that console.logs (top-level AND inside next())
+// still replays pass — logging goes to stderr, protocol stays parseable.
+const noisySpec = join(TMP, 'noisy.js');
+const refBody = readFileSync(join(EX, 'specs', 'reference.js'), 'utf-8');
+writeFileSync(noisySpec, `console.log('top-level noise');
+${refBody}
+const _refNext = module.exports.next;
+module.exports.next = (s, a, d) => { console.log('runtime noise'); return _refNext(s, a, d); };
+`, 'utf-8');
+ok('spec with console.log replays pass (stdout protocol intact)',
+  replaySpec(noisySpec, windows).every((s) => s === 'pass'));
+
+// (8d) dead-spec partition: one dead spec among live ones no longer floods
+// every window as spec-error; all-dead yields unscoreable-all, not consistent.
+const deadMixDir = join(TMP, 'dead-mix');
+mkdirSync(deadMixDir, { recursive: true });
+cpSync(join(EX, 'specs', 'reference.js'), join(deadMixDir, 'spec_0.js'));
+writeFileSync(join(deadMixDir, 'spec_1.js'), 'syntax error(', 'utf-8');
+const deadMix = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-deadmix') });
+ok('dead spec excluded: windows classify from live specs only', deadMix.summary.consistent === 12 && deadMix.summary.specError === 0);
+ok('dead spec is named in the summary', deadMix.summary.deadSpecs.length === 1 && deadMix.summary.deadSpecs[0] === 'spec_1.js');
+const allDeadDir = join(TMP, 'all-dead');
+mkdirSync(allDeadDir, { recursive: true });
+writeFileSync(join(allDeadDir, 'spec_0.js'), 'syntax error(', 'utf-8');
+const allDead = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-alldead') });
+ok('all specs dead -> unscoreable-all, never consistent', allDead.summary.unscoreableAll === 12 && allDead.summary.consistent === 0);
+
+// (8e) invariant phase: a dead spec surfaces as an error and does NOT dilute
+// strength; all-dead prints DID NOT RUN instead of a clean check.
+const invFile = join(TMP, 'inv.mjs');
+writeFileSync(invFile, `export const stateInvariants = [{ name: 'never-unlocked', pred: (s) => s.state !== 'UNLOCKED' }];\nexport const transitionInvariants = [];\n`, 'utf-8');
+// (turnstile coins are unbounded, so bound exploration: capHit must PROPAGATE.)
+const invMix = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-invmix'), invariants: invFile, 'max-states': 50 });
+ok('invariant strength counts only specs the checker ran (all-specs, not diluted)',
+  invMix.invReport.violations.length === 1 && invMix.invReport.violations[0].strength === 'all-specs');
+ok('checker-failure on a spec is surfaced as an error', invMix.invReport.errors.length === 1 && /spec_1\.js/.test(invMix.invReport.errors[0]));
+ok('capHit propagates into invReport (bounded exploration is visible)', invMix.invReport.capHit === true);
+ok('CAP HIT is rendered in findings.md',
+  readFileSync(join(TMP, 'out-invmix', 'findings.md'), 'utf-8').includes('CAP HIT'));
+const invDead = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-invdead'), invariants: invFile, 'max-states': 50 });
+ok('all specs dead -> model check reports DID NOT RUN',
+  invDead.invReport.checkedSpecs === 0 && readFileSync(join(TMP, 'out-invdead', 'findings.md'), 'utf-8').includes('DID NOT RUN'));
+
+// (8f) capHit is reported by check() when exploration is bounded.
+const counter = { init: () => ({ n: 0 }), next: (s, a) => (a === 'TICK' ? { n: s.n + 1 } : s) };
+const capRes = check({ specModule: counter, contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }, invariants: {}, maxStates: 3 });
+ok('check() reports capHit on bounded exploration', capRes.capHit === true);
+
+// (8g) buildDomain accepts the `data:` alias exactly like build_prompt.
+const aliasDom = buildDomain({ actions: { CHARGE: { data: { result: 'string' } } }, dataDomain: { CHARGE: { result: ['ok', 'err'] } } }, []);
+ok('buildDomain reads data: alias (same accessor as the prompt)', aliasDom.steps.length === 2);
+// ...and a skipped action is VISIBLE in the render, qualifying the clean line.
+const skipped = check({ specModule: counter, contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} }, MYSTERY: { dataFields: { x: 'string' } } } }, invariants: {}, maxStates: 5 });
+const { render: renderCheck } = await import('../scripts/check.mjs');
+const skippedText = renderCheck(skipped);
+ok('skipped action surfaces as a WARNING in check render', /WARNING: no domain for MYSTERY\.x/.test(skippedText));
+ok('clean line is qualified when the alphabet was pruned', /EXPLORED alphabet/.test(skippedText));
+
+// (8h) canonical deep-equality: nested-object state in a different key order
+// is EQUAL (replay) — replay and checker share one state-equality definition.
+const nestedTrace = join(TMP, 'nested');
+mkdirSync(nestedTrace, { recursive: true });
+writeFileSync(join(nestedTrace, 's1.ndjson'),
+  JSON.stringify({ pre: { s: { a: 1, b: 2 } }, action: 'X', data: {}, post: { s: { a: 1, b: 2 } } }) + '\n', 'utf-8');
+const nestedSpec = join(TMP, 'nested-spec.js');
+writeFileSync(nestedSpec, `module.exports = { init: () => ({ s: { a: 1, b: 2 } }), next: (st) => ({ s: { b: st.s.b, a: st.s.a } }) };`, 'utf-8');
+ok('nested-object state with reordered keys replays pass (canonical equality)',
+  replaySpec(nestedSpec, loadWindows(nestedTrace)).every((s) => s === 'pass'));
+
+// (8i) guarded shared API call: HTTP errors and empty responses are failures,
+// never parseable-as-clean text (the eval scores them unscoreable).
+const { callMessages } = await import('../scripts/generate.mjs');
+const http500 = await callMessages({ prompt: 'x', model: 'sonnet-5', apiKey: 't', fetchImpl: async () => ({ ok: false, status: 500, text: async () => 'boom' }) });
+ok('callMessages: HTTP error -> ok:false', http500.ok === false && /500/.test(http500.error));
+const emptyResp = await callMessages({ prompt: 'x', model: 'sonnet-5', apiKey: 't', fetchImpl: async () => ({ ok: true, json: async () => ({ content: [{ type: 'thinking', thinking: '…' }], stop_reason: 'max_tokens' }) }) });
+ok('callMessages: empty/all-thinking response -> ok:false with hint', emptyResp.ok === false && /max_tokens/.test(emptyResp.error));
+
+// (8j) canonical verdict vocabulary: classify is exported and zero specs is
+// never 'consistent'.
+const { classify: canonicalClassify } = await import('../scripts/verify.mjs');
+ok('classify is exported (single verdict vocabulary)', typeof canonicalClassify === 'function');
+ok('classify([]) is unscoreable-all, never consistent', canonicalClassify([]) === 'unscoreable-all');
+ok('classify all-fail is code-finding-or-contract', canonicalClassify(['fail', 'fail']) === 'code-finding-or-contract');
 
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

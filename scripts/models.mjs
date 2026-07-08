@@ -6,8 +6,10 @@
 // the exact API id yourself.
 //
 // NOTE: verify each id against the current Anthropic model list before relying
-// on it (https://docs.claude.com/en/docs/about-claude/models). Ids change; this
-// table reflects what was known at authoring time and is intentionally small.
+// on it (https://platform.claude.com/docs/en/about-claude/models). Ids change;
+// this table reflects the published list as of 2026-07-08 (all four verified
+// current on that date; there is no "sonnet-4.8" — the current Sonnet is
+// claude-sonnet-5) and is intentionally small.
 export const MODEL_ALIASES = {
   'fable-5': 'claude-fable-5',
   'opus-4.8': 'claude-opus-4-8',

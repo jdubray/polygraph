@@ -13,7 +13,7 @@ skill — follow it.
 Inputs you expect (ask only if missing): a `contract.json` (or enough
 information to build one from `${CLAUDE_PLUGIN_ROOT}/templates/`), the source
 file under test, and a trace corpus directory. For generation you need
-`ANTHROPIC_API_KEY` and a model (recommend `sonnet-4.8` or `fable-5`).
+`ANTHROPIC_API_KEY` and a model (recommend `sonnet-5` or `fable-5`).
 
 Procedure:
 

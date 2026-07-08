@@ -1,6 +1,6 @@
 ---
 description: Run the Polygraph verification loop — generate N transition-function specs from a source file and replay real traces against them, reporting spec-errors vs code-findings.
-argument-hint: --contract <c.json> --source <file> --traces <dir> --model <id> [--n 5] [--max-tokens 32000] [--invariants <inv.mjs>]
+argument-hint: --contract <c.json> --source <file> --traces <dir> --model <id> [--n 5] [--max-tokens 32000] [--invariants <inv.mjs>] [--invariants <inv.mjs>]
 allowed-tools: Bash, Read, Write
 ---
 
@@ -20,7 +20,7 @@ This drives `${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs`. Two modes:
     --contract <c.json> --traces <dir> --specs <dir> --out out/
   ```
 
-Recommended models: `sonnet-4.8`, `fable-5` (configurable; no default — pass the
+Recommended models: `sonnet-5`, `fable-5` (configurable; no default — pass the
 exact Anthropic model id if you are not using a known alias).
 
 Steps to perform:

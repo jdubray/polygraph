@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { dataFieldsOf } from './load-spec.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -38,7 +39,7 @@ function renderInitState(contract) {
 function renderActions(contract) {
   return Object.entries(contract.actions)
     .map(([name, spec]) => {
-      const fields = spec && spec.dataFields ? spec.dataFields : (spec && spec.data) || {};
+      const fields = dataFieldsOf(spec);
       const shape =
         fields && Object.keys(fields).length
           ? `{ ${Object.entries(fields).map(([f, t]) => `${f}: ${t}`).join(', ')} }`
@@ -51,14 +52,20 @@ function renderActions(contract) {
 export function buildPrompt(contract, sourceCode, { filePath = 'source', lang = 'javascript' } = {}) {
   const tpl = readFileSync(join(HERE, 'prompt_template.txt'), 'utf-8');
   const fence = LANG_FENCE[lang] || 'javascript';
+  // Function replacements throughout: string-form replaceAll interprets
+  // $-patterns ($&, $$, $', $`) in the replacement, which would mangle user
+  // source containing them (e.g. `s.replace(/x/, '$&!')`). And {source_code}
+  // is substituted LAST so no later placeholder pass can rewrite text inside
+  // the embedded source (source legitimately containing the literal string
+  // '{state_keys}' must survive byte-identical).
   return tpl
-    .replaceAll('{lang}', lang)
-    .replaceAll('{fence}', fence)
-    .replaceAll('{file_path}', filePath)
-    .replaceAll('{source_code}', sourceCode)
-    .replaceAll('{state_keys}', renderStateKeys(contract))
-    .replaceAll('{init_state}', renderInitState(contract))
-    .replaceAll('{action_alphabet}', renderActions(contract));
+    .replaceAll('{lang}', () => lang)
+    .replaceAll('{fence}', () => fence)
+    .replaceAll('{file_path}', () => filePath)
+    .replaceAll('{state_keys}', () => renderStateKeys(contract))
+    .replaceAll('{init_state}', () => renderInitState(contract))
+    .replaceAll('{action_alphabet}', () => renderActions(contract))
+    .replaceAll('{source_code}', () => sourceCode);
 }
 
 // CLI
