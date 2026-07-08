@@ -14,7 +14,9 @@
   ],
   "scripts": {
     "test": "node test/selftest.mjs",
-    "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --out examples/turnstile/out"
+    "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --out examples/turnstile/out",
+    "eval:mechanism": "node eval/mechanism-eval.mjs",
+    "eval:ab": "node eval/skill-ab.mjs"
   },
   "bin": {
     "polygraph": "scripts/verify.mjs"

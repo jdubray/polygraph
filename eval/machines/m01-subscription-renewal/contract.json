@@ -1,0 +1,18 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "status", "type": "'active' | 'grace' | 'canceled'" },
+    { "name": "attempts", "type": "number (dunning attempts)" }
+  ],
+  "initState": { "status": "active", "attempts": 0 },
+  "actions": {
+    "RENEW_CHARGE":  { "dataFields": { "result": "'ok' | 'declined' | 'err5xx'" } },
+    "DUNNING_RETRY": { "dataFields": { "result": "'ok' | 'declined' | 'err5xx'" } },
+    "CANCEL":        { "dataFields": {} }
+  },
+  "terminalStates": ["canceled"],
+  "specialRules": [
+    { "name": "5xx-is-transient", "note": "An ambiguous 5xx result should leave the row unchanged (no charge confirmed), in both the renewal and dunning paths.", "whenAction": "RENEW_CHARGE" }
+  ],
+  "noOpRule": "An action that does not apply in the current status yields post == pre."
+}

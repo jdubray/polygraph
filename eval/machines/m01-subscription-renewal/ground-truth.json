@@ -1,0 +1,14 @@
+{
+  "seeded": true,
+  "technique": "sibling-path asymmetry (a special-case handler present in one path, silently missing in a parallel-looking sibling path)",
+  "domain": "subscription billing",
+  "defect": {
+    "scenario": "renewal 5xx",
+    "action": "RENEW_CHARGE",
+    "preState": "active",
+    "data": { "result": "err5xx" },
+    "expectedByReading": "active (no-op — 5xx is transient, mirroring the dunning path)",
+    "actualByCode": "grace (falls through; the next dunning retry then re-charges → double-charge risk)"
+  },
+  "note": "The exemplar case. A reader pattern-matches the two parallel charge paths and expects both to no-op on 5xx; the renewal path is missing the guard."
+}

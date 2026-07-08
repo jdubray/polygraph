@@ -1,0 +1,14 @@
+{
+  "seeded": true,
+  "technique": "off-by-one guard (a comparison that looks like it covers the boundary but takes the wrong branch at exactly the boundary)",
+  "domain": "session / auth",
+  "defect": {
+    "scenario": "3rd consecutive failure",
+    "action": "LOGIN_FAIL",
+    "preState": "active (attempts=2)",
+    "data": {},
+    "expectedByReading": "locked (attempts=3 — MAX_ATTEMPTS reached)",
+    "actualByCode": "active (attempts=3 — `> 3` locks only on the 4th)"
+  },
+  "note": "The constant name MAX_ATTEMPTS=3 and the intent read as 'lock at 3'; the `> 3` guard grants one extra attempt."
+}

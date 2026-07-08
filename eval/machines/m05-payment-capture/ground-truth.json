@@ -1,0 +1,14 @@
+{
+  "seeded": true,
+  "technique": "wrong-comparison guard (a partial-rejection check written as `<= 0` instead of `< amount`)",
+  "domain": "payments",
+  "defect": {
+    "scenario": "partial authorization",
+    "action": "AUTHORIZE",
+    "preState": "pending (amount=100)",
+    "data": { "approved": 60 },
+    "expectedByReading": "declined (partial: approved < amount)",
+    "actualByCode": "captured (the `<= 0` guard lets a partial through)"
+  },
+  "note": "The finixpos partial-approval hazard in miniature."
+}

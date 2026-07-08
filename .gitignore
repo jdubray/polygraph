@@ -12,3 +12,8 @@ test/.tmp/
 # Local plugin/indexer state — never ship
 .memsearch/
 .puffin/
+
+# Eval — traces, generated specs, and results are regenerated on demand
+eval/machines/*/traces/
+eval/machines/*/.ab-specs/
+eval/results/

@@ -1,0 +1,14 @@
+{
+  "seeded": true,
+  "technique": "fall-through mutation where the surrounding structure and the action's name imply a no-op",
+  "domain": "queue / worker",
+  "defect": {
+    "scenario": "heartbeat on a failed job",
+    "action": "HEARTBEAT",
+    "preState": "failed",
+    "data": {},
+    "expectedByReading": "failed (HEARTBEAT is a no-op ping)",
+    "actualByCode": "idle (silently requeues the failed job)"
+  },
+  "note": "HEARTBEAT reads as pure observability; a hidden branch resurrects a dead job."
+}

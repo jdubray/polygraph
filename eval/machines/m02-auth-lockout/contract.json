@@ -1,0 +1,18 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "status", "type": "'active' | 'locked'" },
+    { "name": "attempts", "type": "number (consecutive failures)" }
+  ],
+  "initState": { "status": "active", "attempts": 0 },
+  "actions": {
+    "LOGIN_FAIL": { "dataFields": {} },
+    "LOGIN_OK":   { "dataFields": {} },
+    "UNLOCK":     { "dataFields": {} }
+  },
+  "terminalStates": [],
+  "specialRules": [
+    { "name": "lock-at-max", "note": "Lock the account when the failure count reaches MAX_ATTEMPTS (3).", "whenAction": "LOGIN_FAIL" }
+  ],
+  "noOpRule": "LOGIN_FAIL/LOGIN_OK on a locked account, or UNLOCK on an active one, yields post == pre."
+}

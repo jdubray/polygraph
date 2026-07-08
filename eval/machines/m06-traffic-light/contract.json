@@ -1,0 +1,13 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "light", "type": "'red' | 'green' | 'yellow'" }
+  ],
+  "initState": { "light": "red" },
+  "actions": {
+    "NEXT": { "dataFields": {} }
+  },
+  "terminalStates": [],
+  "specialRules": [],
+  "noOpRule": "Any action other than NEXT yields post == pre."
+}

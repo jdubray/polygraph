@@ -1,0 +1,19 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "status", "type": "'idle' | 'running' | 'done' | 'failed'" }
+  ],
+  "initState": { "status": "idle" },
+  "actions": {
+    "START":     { "dataFields": {} },
+    "COMPLETE":  { "dataFields": {} },
+    "FAIL":      { "dataFields": {} },
+    "RESET":     { "dataFields": {} },
+    "HEARTBEAT": { "dataFields": {} }
+  },
+  "terminalStates": ["done"],
+  "specialRules": [
+    { "name": "heartbeat-is-noop", "note": "HEARTBEAT is a liveness ping and must not change status.", "whenAction": "HEARTBEAT" }
+  ],
+  "noOpRule": "An action that does not apply in the current status yields post == pre."
+}

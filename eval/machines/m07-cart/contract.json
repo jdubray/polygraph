@@ -1,0 +1,16 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "status", "type": "'empty' | 'active' | 'checked_out'" },
+    { "name": "count", "type": "number (items)" }
+  ],
+  "initState": { "status": "empty", "count": 0 },
+  "actions": {
+    "ADD":      { "dataFields": { "qty": "number" } },
+    "REMOVE":   { "dataFields": { "qty": "number" } },
+    "CHECKOUT": { "dataFields": {} }
+  },
+  "terminalStates": ["checked_out"],
+  "specialRules": [],
+  "noOpRule": "An action that does not apply in the current status yields post == pre."
+}

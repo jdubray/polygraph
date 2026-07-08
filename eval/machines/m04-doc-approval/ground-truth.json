@@ -1,0 +1,14 @@
+{
+  "seeded": true,
+  "technique": "an action whose position/name implies one effect (the approval gate) but whose body has an extra branch doing another (publish without review)",
+  "domain": "document workflow",
+  "defect": {
+    "scenario": "publish a draft",
+    "action": "PUBLISH",
+    "preState": "draft",
+    "data": {},
+    "expectedByReading": "draft (PUBLISH only applies from approved; otherwise a no-op)",
+    "actualByCode": "published (bypasses review entirely)"
+  },
+  "note": "The workflow exists to gate publishing on approval; a hidden draft branch defeats it."
+}

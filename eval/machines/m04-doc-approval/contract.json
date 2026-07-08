@@ -1,0 +1,19 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "status", "type": "'draft' | 'review' | 'approved' | 'rejected' | 'published'" }
+  ],
+  "initState": { "status": "draft" },
+  "actions": {
+    "SUBMIT":  { "dataFields": {} },
+    "APPROVE": { "dataFields": {} },
+    "REJECT":  { "dataFields": {} },
+    "RECALL":  { "dataFields": {} },
+    "PUBLISH": { "dataFields": {} }
+  },
+  "terminalStates": ["published", "rejected"],
+  "specialRules": [
+    { "name": "publish-gate", "note": "PUBLISH is the approval gate — only an approved document may be published.", "whenAction": "PUBLISH" }
+  ],
+  "noOpRule": "An action that does not apply in the current status yields post == pre."
+}

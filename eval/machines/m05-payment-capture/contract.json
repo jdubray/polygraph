@@ -1,0 +1,18 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "status", "type": "'pending' | 'captured' | 'declined'" },
+    { "name": "amount", "type": "number (requested)" },
+    { "name": "approved", "type": "number (authorized)" }
+  ],
+  "initState": { "status": "pending", "amount": 0, "approved": 0 },
+  "actions": {
+    "REQUEST":   { "dataFields": { "amount": "number" } },
+    "AUTHORIZE": { "dataFields": { "approved": "number" } }
+  },
+  "terminalStates": ["captured", "declined"],
+  "specialRules": [
+    { "name": "reject-partials", "note": "A partial authorization (approved < requested amount) must be declined, not captured.", "whenAction": "AUTHORIZE" }
+  ],
+  "noOpRule": "An action that does not apply in the current status yields post == pre."
+}

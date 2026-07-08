@@ -1,0 +1,6 @@
+{
+  "seeded": false,
+  "outOfScope": true,
+  "domain": "subscription billing",
+  "note": "A self-consistent invariant violation: the code activates on an idempotency conflict, and a faithful reader derives the same, so there is NO single-step divergence for bare-next() to catch. The real hazard (a replayed decline returned as a conflict → activate without payment) lives at the external-service boundary and needs a sandbox probe. Scored as CORRECTLY-not-detected — flagging it would be a false alarm; the honest result is silence plus a documented boundary."
+}
