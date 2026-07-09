@@ -1,0 +1,6 @@
+{"pre":{"status":"no_code","attempts":0},"action":"ISSUE_CODE","data":{},"post":{"status":"pending","attempts":0}}
+{"pre":{"status":"pending","attempts":0},"action":"ATTEMPT","data":{"match":false,"expired":false},"post":{"status":"pending","attempts":1}}
+{"pre":{"status":"pending","attempts":1},"action":"ATTEMPT","data":{"match":false,"expired":false},"post":{"status":"pending","attempts":2}}
+{"pre":{"status":"pending","attempts":2},"action":"ATTEMPT","data":{"match":false,"expired":false},"post":{"status":"locked","attempts":3}}
+{"pre":{"status":"locked","attempts":3},"action":"ISSUE_CODE","data":{},"post":{"status":"pending","attempts":0}}
+{"pre":{"status":"pending","attempts":0},"action":"ATTEMPT","data":{"match":true,"expired":false},"post":{"status":"verified","attempts":0}}

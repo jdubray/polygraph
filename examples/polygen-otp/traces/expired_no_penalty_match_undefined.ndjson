@@ -1,0 +1,3 @@
+{"pre":{"status":"no_code","attempts":0},"action":"ISSUE_CODE","data":{},"post":{"status":"pending","attempts":0}}
+{"pre":{"status":"pending","attempts":0},"action":"ATTEMPT","data":{"expired":true},"post":{"status":"pending","attempts":0}}
+{"pre":{"status":"pending","attempts":0},"action":"ATTEMPT","data":{"match":true,"expired":false},"post":{"status":"verified","attempts":0}}

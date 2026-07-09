@@ -1,0 +1,4 @@
+{"pre":{"status":"IDLE","captureKey":null},"action":"AUTHORIZE_PAYMENT","data":{"result":"approved"},"post":{"status":"IDLE","captureKey":null}}
+{"pre":{"status":"IDLE","captureKey":null},"action":"RESERVE_INVENTORY","data":{"result":"success"},"post":{"status":"RESERVED","captureKey":null}}
+{"pre":{"status":"RESERVED","captureKey":null},"action":"AUTHORIZE_PAYMENT","data":{"result":"approved"},"post":{"status":"AUTHORIZED","captureKey":null}}
+{"pre":{"status":"AUTHORIZED","captureKey":null},"action":"CAPTURE","data":{"idempotencyKey":"K1","result":"success"},"post":{"status":"CAPTURED","captureKey":"K1"}}

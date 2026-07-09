@@ -54,7 +54,15 @@ Rules:
   - specialRules: guards, rewrites, or special cases that live outside the
     main state table — the cases a careless implementation is most likely to
     get wrong or omit. Name every one you can think of; each becomes a target
-    for extra test coverage later.
+    for extra test coverage later. "note" may be a full sentence, but
+    "whenState"/"whenAction" MUST be a single EXACT value already declared
+    above — the bare primary-state value (e.g. "pending", not
+    "status == 'pending'") and the bare action name (e.g. "ATTEMPT", not
+    "ATTEMPT (expired == true)"). A rule that only applies for a specific data
+    value belongs in the "note" text, not encoded into whenState/whenAction —
+    coverage tooling matches these two fields by exact string equality, so
+    anything else silently reports the rule as zero-coverage even when it is
+    well-covered.
   - terminalStates: values of the primary state key where the scenario ends.
 
 ## Output
@@ -233,6 +241,48 @@ ${source}
 
 Output EXACTLY ONE fenced \`\`\`${fenceFor(lang)} code block containing the
 CORRECTED module, and nothing else (no prose).`;
+}
+
+/**
+ * Domain-gap repair: the contract's dataDomain and the authored code come
+ * from TWO INDEPENDENT model calls, so nothing guarantees they agree on enum
+ * spelling (contract says 'all_ok', code checks 'success'). A value declared
+ * in dataDomain but never referenced in the code means the model checker can
+ * never explore whatever transition that value should gate — a coverage
+ * collapse that looks like a clean "converged: true" for the wrong reason.
+ */
+export function buildDomainGapRepairPrompt(contract, code, gaps, { lang = 'javascript' } = {}) {
+  return `The transition function below was cross-checked against its own contract's
+declared \`dataDomain\` values. Some declared values are NEVER referenced in the
+code — meaning whatever behavior they're supposed to trigger is unreachable.
+This is usually a naming mismatch (the code checks a different string than the
+contract declares for the same concept). Fix the CODE to handle EVERY declared
+value explicitly, using the contract's EXACT spelling — do not rename the
+contract's values instead.
+
+## Unreferenced dataDomain values
+
+${gaps.map((g) => `- ${g}`).join('\n')}
+
+## Current code
+
+\`\`\`${fenceFor(lang)}
+${code}
+\`\`\`
+
+## Observable state (EXACTLY these keys — unchanged)
+
+${renderStateKeys(contract)}
+
+## Special rules (apply ALL of these — do not omit any)
+
+${renderSpecialRules(contract)}
+
+## Output
+
+Output EXACTLY ONE fenced \`\`\`${fenceFor(lang)} code block containing the
+CORRECTED module (still \`module.exports = { init, next }\`), and nothing else
+(no prose).`;
 }
 
 /**

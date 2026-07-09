@@ -60,6 +60,56 @@ silent. Model checking iterates that *same faithful spec* against your intent an
 Versions before 0.2.0 shipped only Half 1. The method and its failure modes are
 documented in the `polygraph` skill.
 
+## polygen — the other direction: author NEW verifiable code
+
+`/polygraph:verify` **audits** code that already exists. `polygen` **authors**
+new code so it's verifiable from the moment it's written — closing the loop at
+creation time instead of retrofitting it later. Given a one-sentence feature
+description, it:
+
+1. **Drafts a contract** — observable state, action alphabet, `dataDomain`
+   (concrete enumerable values for every parameterized action field — this is
+   how the model checker knows what to explore), terminal states, special
+   rules.
+2. **Authors `init()`/`next(state, action, data)`** against that contract.
+3. **Proposes `invariants.mjs`** — rules encoding intent, not just behavior.
+4. **Self-repairs** — model-checks the code against its own invariants
+   (exhaustive reachability, the same `check.mjs` engine `verify.mjs` uses)
+   and, on a reachable violation, patches the code and re-checks. Capped
+   (`--repair-max`, default 3); a run that doesn't converge is reported as NOT
+   converged, never silently presented as clean. It also cross-checks that
+   every `dataDomain` value the contract declares is actually referenced in
+   the code — the contract and the code come from **two independent model
+   calls**, so nothing else guarantees they agree on vocabulary, and a
+   mismatch there silently collapses how much of the state space the checker
+   can even reach. See
+   [`examples/case-study-polygen-domain-gap.md`](examples/case-study-polygen-domain-gap.md)
+   for a real run where this happened and how it was fixed — including an
+   honest look at a false positive the fix introduces.
+5. **Synthesizes a demo/regression trace corpus** by driving the final code
+   through model-proposed scenarios, validates it, and independently replays
+   it in a **separate process** as a sanity check (catches nondeterminism the
+   in-process generation wouldn't expose).
+
+Everything lands in `<out>/`: `contract.json`, `next.cjs`, `invariants.mjs`,
+`traces/*.ndjson`, `polygen-report.md`.
+
+```bash
+node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/
+```
+
+**Then the handoff, deliberately not scripted**: review the contract and
+invariants (both are the model's reading of your intent, not ground truth),
+wire `next()` into the real handler/reducer (call it — don't reimplement the
+transition logic inline), then run `/polygraph:verify` against REAL captured
+traces from the integrated code. That last step is what catches drift between
+the pure model and the glue code around it.
+
+**v1 is JS/TS only.** The generated `next()` is directly usable only in a
+JS/TS codebase; porting a verified model to another language is a real,
+separate problem (the port itself would need its own differential check
+against the JS original) and is out of scope here.
+
 ## What it needs from you (read before you start)
 
 Polygraph replays **real execution traces** — it cannot verify code from source
@@ -148,25 +198,32 @@ git clone https://github.com/jdubray/polygraph \
 
 Update later with `/plugin marketplace update polygraph`.
 
-Then in a session, three entry points:
+Then in a session, six entry points — three for auditing existing code, three
+for authoring new code:
 
 | you type | what it is | when to use it |
 |---|---|---|
-| `/polygraph:polygraph` | the **skill** (guided method) | the full end-to-end walk-through — Claude designs the contract, captures traces, runs controls, generates, and triages with you |
-| `/polygraph:verify` | the **command** (script runner) | you already have a contract + traces and just want to run generate + replay (`--contract … --traces … --model …`) |
-| `polygraph-verifier` | the **subagent** | hand off the whole loop for an autonomous, unsupervised run |
+| `/polygraph:polygraph` | audit **skill** (guided method) | full end-to-end audit walk-through — Claude designs the contract, captures traces, runs controls, generates, and triages with you |
+| `/polygraph:verify` | audit **command** (script runner) | you already have a contract + traces and just want to run generate + replay (`--contract … --traces … --model …`) |
+| `polygraph-verifier` | audit **subagent** | hand off the whole audit loop for an autonomous, unsupervised run |
+| `/polygraph:polygen` | author **skill** (guided method) | write a NEW state machine from a feature description, self-repaired before it ships |
+| `/polygraph:polygen` | author **command** (script runner) | you know exactly what you want and just want to run it (`--intent "…" --model …`) |
+| `polygen` | author **subagent** | hand off the whole author loop for an autonomous, unsupervised run |
 
-(The command's fully-qualified form is `/polygraph:verify`; the skill's is
-`/polygraph:polygraph` — the plugin and the skill share the name, hence the
-doubled form.)
+(The `verify` command's fully-qualified form is `/polygraph:verify`; the
+`polygraph` skill's is `/polygraph:polygraph` — the plugin and the skill share
+the name, hence the doubled form. `polygen`'s skill and command share the
+`polygen` name directly.)
 
-**Or just ask in plain language** — the skill triggers on phrases like:
+**Or just ask in plain language** — each skill triggers on phrases like:
 
-- *"verify this state machine"* / *"polygraph this workflow"*
-- *"check my reducer / workflow"*
-- *"does this code do what I think it does?"*
-- *"audit the payment / order / session flow"*
-- *"bare next / trace validation"*
+- Audit: *"verify this state machine"* / *"polygraph this workflow"* /
+  *"check my reducer / workflow"* / *"does this code do what I think it
+  does?"* / *"audit the payment / order / session flow"* / *"bare next /
+  trace validation"*
+- Author: *"polygen"* / *"write a verifiable state machine"* / *"author
+  verifiable code"* / *"build me a X flow that's already checked"* /
+  *"generate a reducer/workflow and verify it"*
 
 Requirements: **Node ≥ 20**. Generation calls the Anthropic API and needs
 `ANTHROPIC_API_KEY` plus a model; replay and the controls need neither.
@@ -185,6 +242,9 @@ node scripts/verify.mjs --contract contract.json --source src/machine.ts \
 
 # validate a corpus
 node scripts/validate_corpus.mjs contract.json traces/
+
+# author NEW verifiable code from a feature description (needs ANTHROPIC_API_KEY)
+node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/
 ```
 
 ## Models
@@ -223,19 +283,37 @@ node scripts/verify.mjs --contract c.json --source src.ts --traces traces/ \
   corpus, that independently corroborated a genuine double-charge bug — plus an
   honest look at the risks the method *can't* see (the ones at the external-
   service boundary).
+- **polygen — OTP verification flow** (`examples/polygen-otp/`) — a state
+  machine authored from a one-sentence description, self-repaired against a
+  domain-ref gap in one round, converged clean: 8 states, 0 violations, a
+  134-window synthesized corpus, 0 independent-replay failures.
+- **polygen — cart checkout, and a bug polygen found in itself**
+  (`examples/polygen-cart-checkout/`, narrated in
+  `examples/case-study-polygen-domain-gap.md`) — the run that motivated the
+  domain-ref cross-check: the drafted contract and the authored code
+  disagreed on enum spelling, silently collapsing the reachable state space
+  to 2 states behind a "converged: true." Includes an honest look at a false
+  positive the fix itself introduces.
 
 ## Layout
 
 ```
 .claude-plugin/plugin.json   plugin manifest
-skills/polygraph/            the method, as instructions Claude follows
-commands/verify.md           the /polygraph:verify slash command
-agents/verifier.md           the polygraph-verifier subagent
+skills/polygraph/            the audit method, as instructions Claude follows
+skills/polygen/              the author method, as instructions Claude follows
+commands/verify.md           the /polygraph:verify slash command (audit)
+commands/polygen.md          the /polygraph:polygen slash command (author)
+agents/verifier.md           the polygraph-verifier subagent (audit)
+agents/polygen.md            the polygen subagent (author)
 scripts/                     tv.mjs (replayer), generate, verify, build_prompt,
+                             polygen, polygen_prompts, contract_render,
                              validate_corpus, models, instrument/*
 templates/                   contract.schema.json + contract.example.json
-examples/turnstile/          a tiny worked example + its controls
-test/selftest.mjs            npm test — proves the pipeline without the API
+examples/turnstile/          a tiny worked example + its controls (audit)
+examples/polygen-otp/        a from-scratch worked example (author)
+examples/polygen-cart-checkout/  a from-scratch worked example with a real
+                             self-repair round (author)
+test/selftest.mjs            npm test — proves the audit pipeline without the API
 assets/                      brand art
 ```
 

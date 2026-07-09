@@ -1,0 +1,6 @@
+{"pre":{"status":"IDLE","captureKey":null},"action":"RESERVE_INVENTORY","data":{"result":"success"},"post":{"status":"RESERVED","captureKey":null}}
+{"pre":{"status":"RESERVED","captureKey":null},"action":"AUTHORIZE_PAYMENT","data":{"result":"approved"},"post":{"status":"AUTHORIZED","captureKey":null}}
+{"pre":{"status":"AUTHORIZED","captureKey":null},"action":"CAPTURE","data":{"idempotencyKey":"K1","result":"declined"},"post":{"status":"CAPTURE_DECLINED","captureKey":"K1"}}
+{"pre":{"status":"CAPTURE_DECLINED","captureKey":"K1"},"action":"CAPTURE","data":{"idempotencyKey":"K2","result":"error"},"post":{"status":"CAPTURE_ERROR","captureKey":"K2"}}
+{"pre":{"status":"CAPTURE_ERROR","captureKey":"K2"},"action":"CAPTURE","data":{"idempotencyKey":"K1","result":"declined"},"post":{"status":"CAPTURE_DECLINED","captureKey":"K1"}}
+{"pre":{"status":"CAPTURE_DECLINED","captureKey":"K1"},"action":"CAPTURE","data":{"idempotencyKey":"K3","result":"success"},"post":{"status":"CAPTURED","captureKey":"K3"}}

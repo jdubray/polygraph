@@ -1,6 +1,6 @@
 {
   "name": "polygraph",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A polygraph for your state machine: an LLM derives a bare next(state, action, data) spec from your code, then Polygraph replays real traces against it (conformance) AND model-checks it against invariants (finds bugs by exhaustive iteration). Also includes polygen: author NEW verifiable code from a feature description.",
   "type": "module",
   "license": "Apache-2.0",

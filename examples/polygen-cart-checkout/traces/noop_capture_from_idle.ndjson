@@ -1,0 +1,2 @@
+{"pre":{"status":"IDLE","captureKey":null},"action":"CAPTURE","data":{"idempotencyKey":"K1","result":"success"},"post":{"status":"IDLE","captureKey":null}}
+{"pre":{"status":"IDLE","captureKey":null},"action":"RESERVE_INVENTORY","data":{"result":"failed"},"post":{"status":"RESERVE_FAILED","captureKey":null}}

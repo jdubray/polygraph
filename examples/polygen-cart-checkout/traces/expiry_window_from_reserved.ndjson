@@ -1,0 +1,2 @@
+{"pre":{"status":"IDLE","captureKey":null},"action":"RESERVE_INVENTORY","data":{"result":"success"},"post":{"status":"RESERVED","captureKey":null}}
+{"pre":{"status":"RESERVED","captureKey":null},"action":"CHECK_EXPIRY","data":{"expired":true},"post":{"status":"EXPIRED","captureKey":null}}

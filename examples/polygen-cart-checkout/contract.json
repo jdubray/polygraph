@@ -1,0 +1,131 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "status",
+      "type": "enum: IDLE | RESERVED | RESERVE_FAILED | EXPIRED | AUTHORIZED | AUTH_DECLINED | AUTH_ERROR | CAPTURED | CAPTURE_DECLINED | CAPTURE_ERROR"
+    },
+    {
+      "name": "captureKey",
+      "type": "string | null (idempotency key used in the most recent capture attempt, or null if none attempted yet)"
+    }
+  ],
+  "initState": {
+    "status": "IDLE",
+    "captureKey": null
+  },
+  "actions": {
+    "RESERVE_INVENTORY": {
+      "dataFields": {
+        "result": "outcome of the inventory reservation attempt for this checkout"
+      }
+    },
+    "CHECK_EXPIRY": {
+      "dataFields": {
+        "expired": "whether the reservation/hold timeout has elapsed as of this check"
+      }
+    },
+    "AUTHORIZE_PAYMENT": {
+      "dataFields": {
+        "result": "payment authorization outcome from the processor"
+      }
+    },
+    "CAPTURE": {
+      "dataFields": {
+        "idempotencyKey": "client-supplied key identifying this capture attempt",
+        "result": "capture outcome from the processor for this attempt (only meaningful if the attempt actually proceeds)"
+      }
+    }
+  },
+  "dataDomain": {
+    "RESERVE_INVENTORY": {
+      "result": [
+        "success",
+        "partial",
+        "failed"
+      ]
+    },
+    "CHECK_EXPIRY": {
+      "expired": [
+        true,
+        false
+      ]
+    },
+    "AUTHORIZE_PAYMENT": {
+      "result": [
+        "approved",
+        "declined",
+        "error"
+      ]
+    },
+    "CAPTURE": {
+      "idempotencyKey": [
+        "K1",
+        "K2"
+      ],
+      "result": [
+        "success",
+        "declined",
+        "error"
+      ]
+    }
+  },
+  "terminalStates": [
+    "RESERVE_FAILED",
+    "EXPIRED",
+    "AUTH_DECLINED",
+    "AUTH_ERROR",
+    "CAPTURED"
+  ],
+  "specialRules": [
+    {
+      "name": "partialReservationRollback",
+      "note": "RESERVE_INVENTORY with result='partial' means some items were reserved during this attempt before others failed; those already-reserved items must be released (rolled back) in the same transition, landing in RESERVE_FAILED exactly like result='failed'. Never leave status at RESERVED or any partially-reserved intermediate state.",
+      "whenState": "status == IDLE",
+      "whenAction": "RESERVE_INVENTORY"
+    },
+    {
+      "name": "reserveOnlyFromIdle",
+      "note": "RESERVE_INVENTORY only has effect from IDLE; once reservation has been attempted (success or failure), a repeated RESERVE_INVENTORY action is a no-op.",
+      "whenState": "status != IDLE",
+      "whenAction": "RESERVE_INVENTORY"
+    },
+    {
+      "name": "expiryWindow",
+      "note": "CHECK_EXPIRY with expired=true releases the reservation (and any authorization hold) and moves to EXPIRED. This applies while stalled at RESERVED (waiting on authorization) or AUTHORIZED (waiting on capture). Once a CAPTURE attempt has produced any result (CAPTURED/CAPTURE_DECLINED/CAPTURE_ERROR), expiry no longer applies.",
+      "whenState": "status == RESERVED || status == AUTHORIZED",
+      "whenAction": "CHECK_EXPIRY"
+    },
+    {
+      "name": "expiredFalseIsNoOp",
+      "note": "CHECK_EXPIRY with expired=false never changes state, regardless of current status.",
+      "whenState": "any",
+      "whenAction": "CHECK_EXPIRY"
+    },
+    {
+      "name": "authorizeOnlyWhileReserved",
+      "note": "AUTHORIZE_PAYMENT only has effect when status == RESERVED (not yet expired, not already authorized/failed). Declined/error outcomes are terminal in this model (no retry path specified).",
+      "whenState": "status == RESERVED",
+      "whenAction": "AUTHORIZE_PAYMENT"
+    },
+    {
+      "name": "captureIdempotentAfterSuccess",
+      "note": "Once status == CAPTURED, ANY subsequent CAPTURE action (matching idempotencyKey, different idempotencyKey, or any result value) is a full no-op: post == pre. This encodes both 'same key returns same captured state without re-charging' and 'different key is not allowed to proceed once already captured' as a single rule -- captureKey and status never change again after CAPTURED.",
+      "whenState": "status == CAPTURED",
+      "whenAction": "CAPTURE"
+    },
+    {
+      "name": "captureFirstAttempt",
+      "note": "From AUTHORIZED, any idempotencyKey is accepted as the first capture attempt: captureKey is set to that key and status becomes CAPTURED/CAPTURE_DECLINED/CAPTURE_ERROR per the supplied result.",
+      "whenState": "status == AUTHORIZED",
+      "whenAction": "CAPTURE"
+    },
+    {
+      "name": "captureRetryAllowedAfterFailure",
+      "note": "From CAPTURE_DECLINED or CAPTURE_ERROR, a new CAPTURE action is allowed to proceed to a fresh attempt regardless of whether idempotencyKey matches the prior captureKey or is a brand-new key -- because no successful charge has occurred yet. captureKey is updated to the key on this action, and status is set per the new result.",
+      "whenState": "status == CAPTURE_DECLINED || status == CAPTURE_ERROR",
+      "whenAction": "CAPTURE"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state yields post == pre."
+}

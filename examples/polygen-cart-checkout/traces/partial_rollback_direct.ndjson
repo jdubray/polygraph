@@ -1,0 +1,1 @@
+{"pre":{"status":"IDLE","captureKey":null},"action":"RESERVE_INVENTORY","data":{"result":"partial"},"post":{"status":"RESERVE_FAILED","captureKey":null}}

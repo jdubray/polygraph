@@ -28,9 +28,35 @@ import {
   buildAuthorPrompt,
   buildInvariantsPrompt,
   buildRepairPrompt,
+  buildDomainGapRepairPrompt,
   buildScenariosPrompt,
   buildSyntaxFixPrompt,
 } from './polygen_prompts.mjs';
+
+/**
+ * Cross-check: every dataDomain value the contract declares should be
+ * referenced verbatim somewhere in the authored code. The contract and the
+ * code come from two INDEPENDENT model calls, so nothing else guarantees they
+ * agree on enum spelling — a mismatch means the model checker can never
+ * explore whatever transition that value should gate (a coverage collapse
+ * that can look like a clean "no violations found" for the wrong reason).
+ * Heuristic (string presence, not a real reference analysis) — flags
+ * likely gaps, not a proof either way.
+ */
+function findDataDomainRefGaps(contract, code) {
+  const gaps = [];
+  for (const [action, fields] of Object.entries(contract.dataDomain || {})) {
+    for (const [field, values] of Object.entries(fields)) {
+      for (const v of values) {
+        const found = typeof v === 'string'
+          ? code.includes(`'${v}'`) || code.includes(`"${v}"`)
+          : code.includes(String(v));
+        if (!found) gaps.push(`${action}.${field} = ${JSON.stringify(v)} (declared in dataDomain, never referenced in the code — the transition it should gate may be unreachable)`);
+      }
+    }
+  }
+  return gaps;
+}
 
 /** Extract the first fenced block of ANY (or no) language tag — for JSON blocks extractSpec (js/ts-only tags) won't match. */
 function extractFenced(text) {
@@ -113,32 +139,44 @@ export async function polygen(opts) {
   });
   const invariants = { stateInvariants: invMod.stateInvariants || [], transitionInvariants: invMod.transitionInvariants || [] };
 
-  // ── Stage 3: self-repair loop against reachable invariant violations ──────
-  // A violation is a bug in the CODE (invariants encode intent, not behavior);
-  // patch the code and re-check. Capped: a non-converging loop is reported
-  // plainly, never silently presented as clean.
+  // ── Stage 3: self-repair loop ───────────────────────────────────────────────
+  // Two DIFFERENT classes of defect, checked in order every round:
+  //   (a) domain-ref gaps: a dataDomain value the contract declares but the
+  //       code never references — fix these FIRST, because until they're
+  //       fixed the model checker below may never even reach the transitions
+  //       an invariant is meant to guard (a coverage collapse, not a clean
+  //       result).
+  //   (b) invariant violations: a reachable state that breaks a stated rule —
+  //       the code is wrong, not the invariant.
+  // Capped at repairMax total rounds (either kind of repair spends budget);
+  // a non-converging loop is reported plainly, never silently presented as
+  // clean.
   const repairHistory = [];
   let lastResult = null;
+  let lastGaps = [];
   for (let i = 0; i <= repairMax; i++) {
     const specModule = loadSpec(codePath); // already load-validated by writeAndLoadWithSyntaxRetry above/below
+    lastGaps = findDataDomainRefGaps(contract, code);
     lastResult = check({ specModule, contract, invariants, windows: [], maxStates });
     repairHistory.push({
       iteration: i,
       statesExplored: lastResult.statesExplored,
       capHit: lastResult.capHit,
+      domainGaps: lastGaps,
       violationCount: lastResult.violations.length,
       violations: lastResult.violations.map((v) => v.invariant),
     });
-    if (lastResult.violations.length === 0) break;
+    if (lastGaps.length === 0 && lastResult.violations.length === 0) break;
     if (i === repairMax) break; // out of budget — do not call the model again
-    const violation = lastResult.violations[0];
-    const repairText = await call(`repair-${i}`, buildRepairPrompt(contract, code, violation, { lang }));
+    const repairText = lastGaps.length
+      ? await call(`repair-${i}-domain-gap`, buildDomainGapRepairPrompt(contract, code, lastGaps, { lang }))
+      : await call(`repair-${i}-violation`, buildRepairPrompt(contract, code, lastResult.violations[0], { lang }));
     ({ source: code } = await writeAndLoadWithSyntaxRetry({
       label: `repair-${i}`, source: extractSpec(repairText), path: codePath,
       loadFn: async (p) => loadSpec(p), call, lang,
     }));
   }
-  const converged = lastResult.violations.length === 0;
+  const converged = lastGaps.length === 0 && lastResult.violations.length === 0;
 
   // ── Stage 4: synthesize a demo/regression trace corpus from the FINAL code ─
   // The model proposes scenarios (action sequences); polygen drives them
@@ -169,7 +207,7 @@ export async function polygen(opts) {
     out, contractDrafted, contract, domainNotes,
     code, codePath,
     invariants: invSource, invPath,
-    repairHistory, converged, finalCheck: lastResult,
+    repairHistory, converged, finalCheck: lastResult, finalDomainGaps: lastGaps,
     corpus: corpusReport,
     replay: { windows: windows.length, fails: replayFails },
   };
@@ -239,18 +277,35 @@ function renderReport(r) {
   L.push('```\n');
 
   L.push('## Self-repair loop\n');
-  L.push('| iteration | states explored | cap hit | violations |');
-  L.push('|---|---|---|---|');
+  L.push('Two defect classes are checked every round, in order: domain-ref gaps (a');
+  L.push('`dataDomain` value the contract declares but the code never handles — these');
+  L.push('are fixed FIRST, since until they\'re gone the checker may never even reach');
+  L.push('what an invariant is meant to guard) and invariant violations.\n');
+  L.push('| iteration | states explored | cap hit | domain gaps | violations |');
+  L.push('|---|---|---|---|---|');
   for (const it of r.repairHistory) {
-    L.push(`| ${it.iteration} | ${it.statesExplored} | ${it.capHit ? 'yes' : 'no'} | ${it.violationCount ? it.violations.join(', ') : '—'} |`);
+    L.push(`| ${it.iteration} | ${it.statesExplored} | ${it.capHit ? 'yes' : 'no'} | ${it.domainGaps.length ? it.domainGaps.length : '—'} | ${it.violationCount ? it.violations.join(', ') : '—'} |`);
+  }
+  for (const it of r.repairHistory) {
+    if (it.domainGaps.length) {
+      L.push(`\n**Iteration ${it.iteration} domain-ref gaps (what got fixed before the next round):**`);
+      for (const g of it.domainGaps) L.push(`  - ${g}`);
+    }
   }
   if (r.converged) {
-    L.push('\n**Converged — no invariant violations reachable in the final code**, over the');
-    L.push('explored (bounded) state space. Not a proof.\n');
+    L.push('\n**Converged — no domain-ref gaps and no invariant violations reachable in the');
+    L.push('final code**, over the explored (bounded) state space. Not a proof.\n');
   } else {
-    L.push('\n⚠️ **DID NOT CONVERGE within the repair budget.** The final code still');
-    L.push(`reaches: ${r.finalCheck.violations.map((v) => v.invariant).join(', ')}.`);
-    L.push('Do NOT treat this as clean — fix by hand or re-run with a higher --repair-max.\n');
+    L.push('\n⚠️ **DID NOT CONVERGE within the repair budget.**');
+    if (r.finalDomainGaps.length) {
+      L.push(`\nUnresolved domain-ref gaps (the checker\'s exploration may be understating what`);
+      L.push(`it actually examined):`);
+      for (const g of r.finalDomainGaps) L.push(`  - ${g}`);
+    }
+    if (r.finalCheck.violations.length) {
+      L.push(`\nThe final code still reaches: ${r.finalCheck.violations.map((v) => v.invariant).join(', ')}.`);
+    }
+    L.push('\nDo NOT treat this as clean — fix by hand or re-run with a higher --repair-max.\n');
   }
 
   L.push('## Demo / regression trace corpus\n');
