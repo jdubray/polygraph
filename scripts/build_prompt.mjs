@@ -9,45 +9,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { dataFieldsOf } from './load-spec.mjs';
+import { renderStateKeys, renderInitState, renderActions } from './contract_render.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 const LANG_FENCE = { javascript: 'javascript', typescript: 'typescript', js: 'javascript', ts: 'typescript' };
-
-/** Render the observable-state key list from the contract. */
-function renderStateKeys(contract) {
-  return contract.stateKeys
-    .map((k) => {
-      const name = typeof k === 'string' ? k : k.name;
-      const type = typeof k === 'string' ? '' : (k.type ? ` — ${k.type}` : '');
-      return `  - \`${name}\`${type}`;
-    })
-    .join('\n');
-}
-
-/** Render the initial-state object literal. */
-function renderInitState(contract) {
-  if (contract.initState) return JSON.stringify(contract.initState);
-  // Fall back to a null-filled object over the declared keys.
-  const obj = {};
-  for (const k of contract.stateKeys) obj[typeof k === 'string' ? k : k.name] = null;
-  return JSON.stringify(obj);
-}
-
-/** Render the action alphabet with data shapes. */
-function renderActions(contract) {
-  return Object.entries(contract.actions)
-    .map(([name, spec]) => {
-      const fields = dataFieldsOf(spec);
-      const shape =
-        fields && Object.keys(fields).length
-          ? `{ ${Object.entries(fields).map(([f, t]) => `${f}: ${t}`).join(', ')} }`
-          : '{ }';
-      return `          '${name}'  data: ${shape}`;
-    })
-    .join('\n');
-}
 
 export function buildPrompt(contract, sourceCode, { filePath = 'source', lang = 'javascript' } = {}) {
   const tpl = readFileSync(join(HERE, 'prompt_template.txt'), 'utf-8');

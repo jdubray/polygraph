@@ -1,8 +1,8 @@
 {
   "name": "polygraph",
   "displayName": "Polygraph",
-  "version": "0.2.1",
-  "description": "A polygraph for your state machine. The agent does the hard part for you: it instruments your code, builds any test doubles needed to run it, and captures real execution traces — then has an LLM derive a bare next(state, action, data) transition function from the source, replays the traces against it, and surfaces every disagreement as a spec-error, code-finding, or contract-error.",
+  "version": "0.5.0",
+  "description": "A polygraph for your state machine. The agent does the hard part for you: it instruments your code, builds any test doubles needed to run it, and captures real execution traces — then has an LLM derive a bare next(state, action, data) transition function from the source, replays the traces against it, and surfaces every disagreement as a spec-error, code-finding, or contract-error. Also includes polygen: author NEW verifiable code from a feature description, self-repaired against reachable invariant violations before it ships.",
   "author": {
     "name": "jdubray",
     "url": "https://github.com/jdubray"
@@ -18,6 +18,8 @@
     "llm",
     "formal-methods",
     "consistency-check",
-    "polygraph"
+    "polygraph",
+    "polygen",
+    "code-generation"
   ]
 }
