@@ -1,0 +1,23 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "status", "type": "'trialing' | 'active' | 'past_due' | 'canceled'" },
+    { "name": "retries", "type": "number (dunning retry count)" }
+  ],
+  "initState": { "status": "trialing", "retries": 0 },
+  "actions": {
+    "TRIAL_END": { "dataFields": {} },
+    "CHARGE": { "dataFields": { "result": "'ok' | 'declined' | 'error'" } },
+    "RETRY": { "dataFields": { "result": "'ok' | 'declined' | 'error'" } },
+    "CANCEL": { "dataFields": {} }
+  },
+  "terminalStates": ["canceled"],
+  "specialRules": [
+    {
+      "name": "error-is-transient",
+      "note": "An ambiguous gateway error ('error') should leave the row unchanged (no charge confirmed), in both the charge and retry paths.",
+      "whenAction": "CHARGE"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current status yields post == pre."
+}

@@ -1,0 +1,3 @@
+{"pre":{"status":"trialing","retries":0},"action":"TRIAL_END","data":{},"post":{"status":"active","retries":0}}
+{"pre":{"status":"active","retries":0},"action":"CHARGE","data":{"result":"error"},"post":{"status":"past_due","retries":1}}
+{"pre":{"status":"past_due","retries":1},"action":"CANCEL","data":{},"post":{"status":"canceled","retries":1}}
