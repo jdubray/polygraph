@@ -69,7 +69,17 @@ task regresses.
 npm run eval:mechanism            # free, deterministic — validates the suite
 node eval/skill-ab.mjs --dry-run  # free — validates the A/B scoring with mocked fetch
 ANTHROPIC_API_KEY=... node eval/skill-ab.mjs --model <id> --n 3   # the real A/B
+# artifact A/B (P8 ship gate): legacy bare-next vs v2 SAM strict, both arms:
+ANTHROPIC_API_KEY=... node eval/ab-v2.mjs --model haiku-4.5 [--machines m01-m04]
+node eval/ab-v2.mjs --reference   # degraded replay-only mode (no key)
 ```
+
+The artifact A/B (`ab-v2.mjs`) records, per machine per arm: seeded-bug
+detection split by mechanism (replay vs model-check), dead-spec count, and the
+two v2-only assertions (a rejection-reason classification appears; the
+determinism double-pass ran). Results merge into
+`results/ab-v2-scorecard.json`; the analyzed run lives in
+[`AB-V2-RESULTS.md`](AB-V2-RESULTS.md).
 
 Cost note: the real A/B is `machines × N × (1 baseline call + N generation
 calls)` — with 8 machines, N=3, that is 8×3 baseline + 8×3×3 generation ≈ 96

@@ -20,6 +20,9 @@ import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { loadWindows } from './replay.mjs';
 import { loadSpec, stable, dataFieldsOf } from './load-spec.mjs';
+import samAdapter from './sam-adapter.cjs';
+
+const { isSamV2Module, makeSamAdapter, domainFromManifest } = samAdapter;
 
 // Re-export the shared loader (eval scripts and older callers import it from
 // here). ONE loader for the whole pipeline lives in load-spec.mjs; tv.mjs
@@ -69,71 +72,132 @@ export function buildDomain(contract, windows = []) {
 }
 
 /**
- * Explore the reachable state graph of a {init, next} module and check invariants.
+ * Explore the reachable state graph of a spec and check invariants. The spec
+ * is either a legacy {init, next} module or a v2 SAM strict-profile module
+ * ({instance, init, actions, getState, setState} — auto-detected, driven
+ * through scripts/sam-adapter.cjs with manifest() domains; pass
+ * legacyBareNext: true to force the bare-next path).
  * invariants = { stateInvariants: [{name, pred:(state)=>bool}],
  *                transitionInvariants: [{name, pred:(pre,action,data,post)=>bool}] }
  * A predicate returns TRUE when the rule HOLDS; a FALSE (or throw) is a violation.
+ * Every check runs a determinism double-pass: two identical explorations whose
+ * digests differ add a 'deterministic-exploration' violation (kind
+ * 'nondeterminism') and set result.nondeterministic.
  */
-export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000 }) {
-  const mod = specModule;
-  if (!mod || typeof mod.next !== 'function' || typeof mod.init !== 'function') {
-    return { ok: false, error: 'spec must export init() and next()', statesExplored: 0, capHit: false, violations: [] };
+export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000, legacyBareNext = false }) {
+  // ── Engine selection ──────────────────────────────────────────────────────
+  // A v2 SAM strict-profile module is driven through the {init,next} adapter
+  // (rejections return the input state — a legal, observable no-op) with the
+  // (action, data) domain read from the spec's OWN manifest() declarations
+  // instead of buildDomain() inference — the "silently EXCLUDED from
+  // exploration" failure class disappears by construction. --legacy-bare-next
+  // forces the bare-next path even for a module that happens to look v2.
+  let mod = specModule;
+  let steps, notes;
+  let engine = 'legacy';
+  if (!legacyBareNext && isSamV2Module(specModule)) {
+    try {
+      mod = makeSamAdapter(specModule);
+      ({ steps, notes } = domainFromManifest(specModule));
+      engine = 'sam-v2';
+    } catch (e) {
+      return { ok: false, error: `v2 SAM module rejected by the adapter: ${e && e.message}`, statesExplored: 0, capHit: false, violations: [] };
+    }
+  } else {
+    if (!mod || typeof mod.next !== 'function' || typeof mod.init !== 'function') {
+      return { ok: false, error: 'spec must export init() and next() (or the v2 SAM surface)', statesExplored: 0, capHit: false, violations: [] };
+    }
+    ({ steps, notes } = buildDomain(contract, windows));
   }
   const stateInv = invariants.stateInvariants || [];
   const transInv = invariants.transitionInvariants || [];
-  const { steps, notes } = buildDomain(contract, windows);
 
   const clone = (o) => JSON.parse(JSON.stringify(o));
-  const init = mod.init();
-  const initKey = stable(init);
-  const parent = new Map([[initKey, { prev: null, action: null, data: null, state: init }]]);
-  const queue = [init];
-  const violations = [];
-  const seen = new Set(); // invariant names already recorded (keep shortest = first via BFS)
-  let capHit = false;
 
-  const pathTo = (key) => {
-    const chain = [];
-    let k = key;
-    while (k !== null && parent.has(k)) { const n = parent.get(k); chain.push({ action: n.action, data: n.data, state: n.state }); k = n.prev; }
-    return chain.reverse();
-  };
-  const record = (name, kind, path, detail) => { if (seen.has(name)) return; seen.add(name); violations.push({ invariant: name, kind, path, detail }); };
+  // One full BFS exploration. Kept as an inner function so the determinism
+  // double-pass below can run it twice under identical inputs.
+  const explore = () => {
+    const violations = [];
+    const seen = new Set(); // invariant names already recorded (keep shortest = first via BFS)
+    let capHit = false;
+    let init;
+    try { init = mod.init(); }
+    catch (e) { return { error: `init() threw: ${e && e.message}`, parent: new Map(), violations, capHit }; }
+    const initKey = stable(init);
+    const parent = new Map([[initKey, { prev: null, action: null, data: null, state: init }]]);
+    const queue = [init];
 
-  // invariants on the initial state
-  for (const inv of stateInv) {
-    let ok; try { ok = inv.pred(init); } catch { ok = false; }
-    if (!ok) record(inv.name, 'state', pathTo(initKey), 'violated in the initial state');
-  }
+    const pathTo = (key) => {
+      const chain = [];
+      let k = key;
+      while (k !== null && parent.has(k)) { const n = parent.get(k); chain.push({ action: n.action, data: n.data, state: n.state }); k = n.prev; }
+      return chain.reverse();
+    };
+    const record = (name, kind, path, detail) => { if (seen.has(name)) return; seen.add(name); violations.push({ invariant: name, kind, path, detail }); };
 
-  while (queue.length && parent.size < maxStates) {
-    const s = queue.shift();
-    const sKey = stable(s);
-    for (const { action, data } of steps) {
-      let post;
-      try { post = mod.next(clone(s), action, data); }
-      catch (e) {
-        record(`next() threw on ${action}`, 'throw', [...pathTo(sKey), { action, data, state: `THREW: ${e && e.message}` }], String(e && e.message || e));
-        continue;
-      }
-      // transition invariants
-      for (const inv of transInv) {
-        let ok; try { ok = inv.pred(s, action, data, post); } catch { ok = false; }
-        if (!ok) record(inv.name, 'transition', [...pathTo(sKey), { action, data, state: post }], `violated by ${action} from this state`);
-      }
-      const pKey = stable(post);
-      if (!parent.has(pKey)) {
-        for (const inv of stateInv) {
-          let ok; try { ok = inv.pred(post); } catch { ok = false; }
-          if (!ok) record(inv.name, 'state', [...pathTo(sKey), { action, data, state: post }], `reachable state violates the rule`);
+    // invariants on the initial state
+    for (const inv of stateInv) {
+      let ok; try { ok = inv.pred(init); } catch { ok = false; }
+      if (!ok) record(inv.name, 'state', pathTo(initKey), 'violated in the initial state');
+    }
+
+    while (queue.length && parent.size < maxStates) {
+      const s = queue.shift();
+      const sKey = stable(s);
+      for (const { action, data } of steps) {
+        let post;
+        try { post = mod.next(clone(s), action, data); }
+        catch (e) {
+          record(`next() threw on ${action}`, 'throw', [...pathTo(sKey), { action, data, state: `THREW: ${e && e.message}` }], String(e && e.message || e));
+          continue;
         }
-        parent.set(pKey, { prev: sKey, action, data, state: post });
-        queue.push(post);
+        // transition invariants
+        for (const inv of transInv) {
+          let ok; try { ok = inv.pred(s, action, data, post); } catch { ok = false; }
+          if (!ok) record(inv.name, 'transition', [...pathTo(sKey), { action, data, state: post }], `violated by ${action} from this state`);
+        }
+        const pKey = stable(post);
+        if (!parent.has(pKey)) {
+          for (const inv of stateInv) {
+            let ok; try { ok = inv.pred(post); } catch { ok = false; }
+            if (!ok) record(inv.name, 'state', [...pathTo(sKey), { action, data, state: post }], `reachable state violates the rule`);
+          }
+          parent.set(pKey, { prev: sKey, action, data, state: post });
+          queue.push(post);
+        }
       }
     }
+    if (parent.size >= maxStates) capHit = true;
+    return { parent, violations, capHit };
+  };
+
+  // ── Determinism double-pass ───────────────────────────────────────────────
+  // Two identical explorations must produce the SAME state graph and the SAME
+  // violations. A digest mismatch means the spec's transitions depend on
+  // something outside (state, action, data) — Math.random, Date.now, retained
+  // mutable module state — which invalidates both replay and exploration, so
+  // it is surfaced as a first-class 'nondeterministic' finding.
+  const digestOf = (r) => stable({
+    states: [...r.parent.keys()].sort(),
+    violations: r.violations.map((v) => ({ invariant: v.invariant, kind: v.kind, detail: v.detail })),
+    capHit: r.capHit,
+    error: r.error || null,
+  });
+  const pass1 = explore();
+  const pass2 = explore();
+  const nondeterministic = digestOf(pass1) !== digestOf(pass2);
+
+  const { parent, violations, capHit, error } = pass1;
+  if (error) return { ok: false, error, statesExplored: 0, capHit: false, violations: [], engine };
+  if (nondeterministic) {
+    violations.push({
+      invariant: 'deterministic-exploration',
+      kind: 'nondeterminism',
+      path: [],
+      detail: 'two identical explorations produced different state graphs or violations — the spec is nondeterministic (Math.random / Date.now / retained mutable state); its replay and exploration verdicts cannot be trusted',
+    });
   }
-  if (parent.size >= maxStates) capHit = true;
-  return { ok: violations.length === 0, statesExplored: parent.size, capHit, violations, domainNotes: notes };
+  return { ok: violations.length === 0, statesExplored: parent.size, capHit, violations, domainNotes: notes, engine, nondeterministic };
 }
 
 // ── Readable render ─────────────────────────────────────────────────────────
@@ -154,6 +218,7 @@ export function render(result) {
   L.push(`${result.violations.length} invariant violation(s):`);
   for (const v of result.violations) {
     L.push(`\n  ✗ ${v.invariant} [${v.kind}] — ${v.detail}`);
+    if (!v.path.length) continue; // e.g. a nondeterminism finding has no single counterexample path
     L.push('    counterexample (shortest path from init):');
     v.path.forEach((step, i) => {
       const st = typeof step.state === 'string' ? step.state : JSON.stringify(step.state);

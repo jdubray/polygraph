@@ -29,7 +29,7 @@ for (const name of machines) {
   gen.run();
 
   const windows = loadWindows(join(dir, 'traces'));
-  const statuses = replaySpec(join(dir, 'reference.cjs'), windows);
+  const statuses = replaySpec(join(dir, 'reference.cjs'), windows, 'legacy'); // eval machines are bare-next artifacts
   const fails = windows
     .map((w, i) => ({ scenario: w.scenario, action: w.action, pre: w.pre, st: statuses[i] }))
     .filter((x) => x.st !== 'pass');

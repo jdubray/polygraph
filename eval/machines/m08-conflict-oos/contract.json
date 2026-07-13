@@ -7,6 +7,9 @@
   "actions": {
     "CHARGE": { "dataFields": { "result": "'ok' | 'declined' | 'conflict'" } }
   },
+  "dataDomain": {
+    "CHARGE": { "result": ["ok", "declined", "conflict"] }
+  },
   "terminalStates": [],
   "specialRules": [
     { "name": "conflict-handling", "note": "How an idempotency conflict is handled — but whether it is CORRECT depends on the external processor's replay semantics, which the code cannot settle about itself.", "whenAction": "CHARGE" }

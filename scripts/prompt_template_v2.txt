@@ -1,0 +1,177 @@
+You are an expert in the SAM pattern (State-Action-Model, https://sam.js.org) —
+a JavaScript software engineering pattern grounded in TLA+ semantics: actions
+compute proposals, the model accepts or rejects them in a synchronized step,
+and state is a pure function of the model.
+
+Convert the following production source into an executable {lang} SAM
+specification using the @cognitive-fab/sam-pattern library, version 2 STRICT
+PROFILE — NO other libraries, NO frameworks, NO I/O. The module is replayed
+against real execution traces captured from this exact code, so it must be
+constrained to the same observable state and reproduce the code's single-step
+behavior.
+
+## Source (the real implementation)
+
+Source from {file_path}:
+```{lang}
+{source_code}
+```
+
+## Observable state (EXACTLY these keys)
+
+The harness pins a captured pre-state via setState(), applies ONE action with
+the trace's data, and compares getState() to the captured post-state over
+EXACTLY these keys — declare no others:
+
+{state_keys}
+
+Do NOT add any other keys and do NOT keep any hidden bookkeeping state — the
+strict profile THROWS on any write to an undeclared model key.
+
+The initial state is:
+
+    {init_state}
+
+## Mandatory module contract (v2 strict profile — hard requirements)
+
+Your specification is a CommonJS module evaluated by an automated harness. It
+MUST export exactly this shape:
+
+    module.exports = { instance, init, actions, getState, setState };
+
+- `instance` — the SAM instance, created with:
+  `const instance = createInstance({ strict: true, hasAsyncActions: false });`
+  (`strict: true` and `hasAsyncActions: false` are REQUIRED)
+- Component declaration (v2 strict form):
+  - `modelShape` — declare EXACTLY the observable keys:
+
+{model_shape}
+
+  - `actions` — an OBJECT keyed by the action names. Each entry is the full
+    form `{ action, schema, domain }` with `action: (data = {}) => ({ ...data })`
+    (the proposal is the data payload). Use EXACTLY these payload schemas:
+
+{intent_schemas}
+
+    and EXACTLY these input domains (payload objects, one per entry — this is
+    the pinned exploration domain; a model checker fires these intents in all
+    combinations from the initial state, so the model must behave safely for
+    EVERY payload below in ANY state it can reach):
+
+{intent_domains}
+
+  - `acceptors` — an OBJECT keyed by the same action names (the framework
+    binds proposals to acceptors; do NOT write flag guards or a dispatch
+    switch). Each acceptor is `(model) => (proposal, { reject }) => { ... }`.
+  - COMMIT RULE: for a FLAT state key, assign it directly
+    (`model.someKey = value`). For a state key holding a NESTED map/object,
+    commit every mutation with a TOP-LEVEL write so the strict profile's write
+    tracker sees it: compute the updated record, then
+    `model.<key> = { ...model.<key>, [k]: updated };` — do NOT mutate
+    `model.<key>[k].field` in place.
+- `init()` — resets to the initial state: EXACTLY `setState(INITIAL_STATE)` and
+  nothing else. Do NOT call `instance({}).state()` (no clearError idiom;
+  `getState()` is the safe snapshot accessor).
+- `getState()` — `instance({}).getState()` (the strict profile derives the
+  snapshot from modelShape).
+- `setState(snapshot)` — `instance({}).setState(snapshot)`.
+- `actions` (export) — the named intents:
+  `{ ACTION: (data = {}) => intents.ACTION(data), ... }`.
+
+Action alphabet, for reference (name — data shape):
+
+{action_alphabet}
+
+## Special rules (REQUIRED reject(reason) cases)
+
+Each rule below must be an OBSERVABLE rejection in the matching acceptor —
+never a silent fall-through:
+
+{special_rules_rejections}
+
+## DETERMINISM RULES (violations are detected and fail the verification)
+
+- No I/O, no timers, no Date/clock access, no Math.random, no async actions
+- Acceptors must guard against invalid proposals (an action that the
+  implementation does not act on in the current state must be a no-op via
+  `reject(reason)`, NOT a throw)
+- No hidden state: every piece of state lives under the declared modelShape keys
+- Do NOT include component `safety` conditions or a `render` function —
+  invariants are verified in a separate phase
+
+## In-context example: Rocket Launcher in the v2 strict profile
+
+```javascript
+'use strict';
+
+const { createInstance } = require('@cognitive-fab/sam-pattern');
+
+const instance = createInstance({ strict: true, hasAsyncActions: false });
+
+// status: 'ready' | 'counting' | 'aborted' | 'launched'
+const INITIAL_STATE = { counter: 10, status: 'ready' };
+
+const control = instance({
+  initialState: { ...INITIAL_STATE },
+  component: {
+    modelShape: {
+      counter: { type: 'number' },
+      status: { type: 'string' },
+    },
+    actions: {
+      START: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
+      DECREMENT: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
+      ABORT: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
+    },
+    acceptors: {
+      START: (model) => (proposal, { reject }) => {
+        if (model.status !== 'ready') return reject('start-only-when-ready');
+        model.status = 'counting';
+      },
+      DECREMENT: (model) => (proposal, { reject }) => {
+        if (model.status !== 'counting') return reject('not-counting');
+        model.counter -= 1;
+        if (model.counter === 0) model.status = 'launched';
+      },
+      ABORT: (model) => (proposal, { reject }) => {
+        if (model.status !== 'counting') return reject('nothing-to-abort');
+        model.status = 'aborted';
+      },
+    },
+    reactors: [],
+  },
+});
+
+const { intents } = control;
+
+const getState = () => instance({}).getState();
+const setState = (snapshot) => { instance({}).setState(snapshot); };
+
+// NOTE: do not use instance({}).state() anywhere — getState() is the safe
+// snapshot accessor (a model data key like 'state' would return data, not the
+// method; see sam-lib #29). init() is EXACTLY this one call:
+const init = () => { setState(INITIAL_STATE); };
+
+const actions = {
+  START: (data = {}) => intents.START(data),
+  DECREMENT: (data = {}) => intents.DECREMENT(data),
+  ABORT: (data = {}) => intents.ABORT(data),
+};
+
+module.exports = { instance, init, actions, getState, setState };
+```
+
+(The rocket's state is flat, so its acceptors assign model keys directly. When
+a state key holds a nested map/object, commit each change with the top-level
+write `model.<key> = { ...model.<key>, [k]: updated }` instead.)
+
+Model the observable single-step behavior of the real code as implemented in
+the source above — INCLUDING what happens when an action arrives in a state
+where the code does not act on it (an ignored action must be an observable
+no-op via `reject(reason)`: post == pre, not an error and not a throw).
+
+## Output
+
+Output EXACTLY ONE fenced ```{fence} code block containing the complete,
+self-contained CommonJS module following the v2 strict contract above, and
+nothing else (no prose).

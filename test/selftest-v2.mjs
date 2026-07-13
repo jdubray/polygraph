@@ -1,0 +1,243 @@
+// Self-test for the v2 (SAM strict-profile) pipeline: contract renderers,
+// sam-tv.mjs replay (incl. rejection triage), the checker's manifest-domain
+// exploration through the {init,next} adapter, and the determinism
+// double-pass. NO API calls; the vendored sam-lib bundle is the only SAM
+// dependency exercised.
+//
+// Run: node test/selftest-v2.mjs   (also wired into `npm test`)
+import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  renderModelShape, renderIntentSchemas, renderIntentDomains, renderSpecialRulesAsRejections,
+} from '../scripts/contract_render.mjs';
+import { loadWindows, replaySpec, replaySpecResults } from '../scripts/replay.mjs';
+import { loadSpec } from '../scripts/load-spec.mjs';
+import { check } from '../scripts/check.mjs';
+import { verify } from '../scripts/verify.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, '..');
+const EX = join(ROOT, 'examples', 'turnstile-v2');
+const V2_SPEC = join(EX, 'specs', 'reference.js');
+const contract = JSON.parse(readFileSync(join(EX, 'contract.json'), 'utf-8'));
+const TMP = join(HERE, '.tmp-v2');
+rmSync(TMP, { recursive: true, force: true });
+mkdirSync(TMP, { recursive: true });
+
+let passed = 0;
+function ok(name, cond) {
+  assert.ok(cond, name);
+  console.log('  ok  ' + name);
+  passed++;
+}
+
+// ── Fixture specs (written at runtime; loaded via the pipeline loader, so
+//    require('@cognitive-fab/sam-pattern') resolves to the VENDORED bundle) ──
+
+const V2_HEADER = `'use strict';
+const { createInstance } = require('@cognitive-fab/sam-pattern');
+const instance = createInstance({ strict: true, hasAsyncActions: false });
+`;
+const V2_FOOTER = `
+const { intents } = control;
+const getState = () => instance({}).getState();
+const setState = (s) => { instance({}).setState(s); };
+const init = () => { setState(INITIAL_STATE); };
+const actions = Object.fromEntries(Object.keys(intents).map((k) => [k, (d = {}) => intents[k](d)]));
+module.exports = { instance, init, actions, getState, setState };
+`;
+
+// Seeded bug: the third COIN jams the machine into the undeclared 'JACKPOT'
+// control state — reachable only by ITERATION (every individual trace window
+// still conforms), i.e. exactly what the checker exists to find.
+const buggySpec = join(TMP, 'buggy-v2.js');
+writeFileSync(buggySpec, `${V2_HEADER}
+const INITIAL_STATE = { state: 'LOCKED', coins: 0 };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { state: { type: 'string' }, coins: { type: 'number' } },
+    actions: {
+      COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
+      PUSH: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
+    },
+    acceptors: {
+      COIN: (model) => () => {
+        model.state = model.coins >= 2 ? 'JACKPOT' : 'UNLOCKED'; // seeded bug
+        model.coins = model.coins + 1;
+      },
+      PUSH: (model) => (p, { reject }) => {
+        if (model.state === 'LOCKED') return reject('push-while-locked-is-noop');
+        model.state = 'LOCKED';
+      },
+    },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+
+// Nondeterministic spec: Math.random in an acceptor — the determinism
+// double-pass must flag it.
+const randomSpec = join(TMP, 'random-v2.js');
+writeFileSync(randomSpec, `${V2_HEADER}
+const INITIAL_STATE = { state: 'LOCKED', coins: 0 };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { state: { type: 'string' }, coins: { type: 'number' } },
+    actions: { COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
+    acceptors: { COIN: (model) => () => { model.coins = Math.random(); } },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+
+// Strict-schema spec: CHARGE requires a string 'result' — firing it without
+// one must surface as a SamSchemaError window failure, not a protocol error.
+const gatedSpec = join(TMP, 'gated-v2.js');
+writeFileSync(gatedSpec, `${V2_HEADER}
+const INITIAL_STATE = { txState: 'idle' };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { txState: { type: 'string' } },
+    actions: {
+      CHARGE: {
+        action: (d = {}) => ({ ...d }),
+        schema: { result: { type: 'string', required: true } },
+        domain: [{ result: 'ok' }, { result: 'err5xx' }],
+      },
+    },
+    acceptors: {
+      CHARGE: (model) => (p) => { model.txState = p.result === 'ok' ? 'paid' : 'failed'; },
+    },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+
+console.log('1) P1 — v2 contract renderers (derived from the EXISTING schema fields)');
+const shape = renderModelShape(contract);
+ok('modelShape: types inferred from initState', /state: \{ type: 'string' \}/.test(shape) && /coins: \{ type: 'number' \}/.test(shape));
+const nullableShape = renderModelShape({ stateKeys: [{ name: 'holder', type: 'string or null' }], initState: { holder: null } });
+ok('modelShape: null initState value renders nullable with note-derived type', /holder: \{ type: 'string', nullable: true \}/.test(nullableShape));
+const schemas = renderIntentSchemas({
+  actions: { COIN: { dataFields: {} }, CHARGE: { dataFields: { result: 'string', amount: 'number of cents' } } },
+  dataDomain: { CHARGE: { result: ['ok', 'err5xx'], amount: [100, 250] } },
+});
+ok('intent schemas: empty payload renders {}', /COIN: \{\},/.test(schemas));
+ok('intent schemas: types inferred from dataDomain values, required: true',
+  /result: \{ type: 'string', required: true \}/.test(schemas) && /amount: \{ type: 'number', required: true \}/.test(schemas));
+const domains = renderIntentDomains({
+  actions: { COIN: { dataFields: {} }, CHARGE: { dataFields: { result: 'string', amount: 'number' } } },
+  dataDomain: { CHARGE: { result: ['ok', 'err'], amount: [1, 2] } },
+});
+ok('intent domains: no-payload action gets [{}]', /COIN: \[\{\}\],/.test(domains));
+ok('intent domains: cartesian product over declared fields (2x2 = 4 payloads)',
+  (domains.match(/\{"result"/g) || []).length === 4);
+let domainThrew = null;
+try { renderIntentDomains({ actions: { CHARGE: { dataFields: { result: 'string' } } } }); }
+catch (e) { domainThrew = e.message; }
+ok('intent domains: action with data fields but no dataDomain FAILS LOUDLY',
+  domainThrew !== null && /dataDomain/.test(domainThrew) && /CHARGE/.test(domainThrew));
+const rejections = renderSpecialRulesAsRejections(contract);
+ok('specialRules render as REQUIRED reject(reason) cases',
+  /reject\('push-while-locked-is-noop'\)/.test(rejections) && /MUST/.test(rejections));
+ok('legacy renderers untouched: no-rules fallback still demands reject()',
+  /reject\(reason\)/.test(renderSpecialRulesAsRejections({})));
+
+console.log('2) P2 — sam-tv.mjs replay of the v2 turnstile (positive control + rejection triage)');
+const windows = loadWindows(join(EX, 'traces'));
+const resp = replaySpecResults(V2_SPEC, windows, 'sam');
+ok('v2 reference replays: protocol ok', resp.ok === true);
+ok('v2 reference passes all 12 windows', resp.results.length === 12 && resp.results.every((r) => r.status === 'pass'));
+const rejectedWindows = resp.results.filter((r) => r.classification === 'rejected');
+const pushLockedCount = windows.filter((w) => w.action === 'PUSH' && w.pre.state === 'LOCKED').length;
+ok('the PUSH-while-LOCKED no-ops classify as rejected (not unhandled)',
+  rejectedWindows.length === pushLockedCount && pushLockedCount === 3);
+ok('rejected windows carry the contract-anchored rejectionReason',
+  rejectedWindows.every((r) => r.rejectionReason === 'push-while-locked-is-noop'));
+ok('mutating windows classify as mutated',
+  resp.results.filter((r) => r.classification === 'mutated').length === 12 - pushLockedCount);
+ok('replaySpec (status projection) agrees', replaySpec(V2_SPEC, windows, 'sam').every((s) => s === 'pass'));
+
+// A rejected window that CONTRADICTS the trace still fails — with the reason attached.
+const badWindow = [{ scenario: 'x', index: 0, action: 'PUSH', data: {}, pre: { state: 'LOCKED', coins: 0 }, post: { state: 'LOCKED', coins: 5 } }];
+const badResp = replaySpecResults(V2_SPEC, badWindow, 'sam');
+ok('a rejection that disagrees with the trace is a FAIL carrying rejectionReason',
+  badResp.results[0].status === 'fail' && badResp.results[0].classification === 'rejected'
+  && badResp.results[0].rejectionReason === 'push-while-locked-is-noop');
+
+// Strict-profile throw: missing required payload field -> window failure with the error NAME.
+const gateResp = replaySpecResults(gatedSpec, [
+  { action: 'CHARGE', data: {}, pre: { txState: 'idle' }, post: { txState: 'paid' } },
+  { action: 'CHARGE', data: { result: 'ok' }, pre: { txState: 'idle' }, post: { txState: 'paid' } },
+], 'sam');
+ok('strict schema violation -> fail with the error name in the result',
+  gateResp.ok === true && gateResp.results[0].status === 'fail' && /SamSchemaError/.test(gateResp.results[0].error));
+ok('well-formed payload on the same spec passes', gateResp.results[1].status === 'pass');
+
+// Mode mismatches are LOUD, never silently clean.
+const legacyThroughSam = replaySpecResults(join(ROOT, 'examples', 'turnstile', 'specs', 'reference.js'), windows, 'sam');
+ok('legacy bare-next spec through the sam replayer -> ok:false naming the fix',
+  legacyThroughSam.ok === false && /legacy/.test(legacyThroughSam.error));
+ok('v2 spec through the LEGACY replayer -> unscoreable (no next())',
+  replaySpec(V2_SPEC, windows, 'legacy').every((s) => s === 'unscoreable'));
+
+console.log('3) P4 — checker drives the v2 module via the adapter + manifest() domains');
+const invariants = {
+  stateInvariants: [
+    { name: 'control-state-is-declared', pred: (s) => s.state === 'LOCKED' || s.state === 'UNLOCKED' },
+    { name: 'coins-never-negative', pred: (s) => s.coins >= 0 },
+  ],
+};
+const good = check({ specModule: loadSpec(V2_SPEC), contract, invariants, maxStates: 40 });
+ok('v2 engine selected (adapter + manifest domains)', good.engine === 'sam-v2');
+ok('exploration is real (multiple states from manifest domains)', good.statesExplored > 1);
+ok('good v2 spec: no violations, deterministic', good.violations.length === 0 && good.nondeterministic === false);
+ok('manifest supplies every domain (no skip notes)', (good.domainNotes || []).length === 0);
+
+const buggy = check({ specModule: loadSpec(buggySpec), contract, invariants, maxStates: 40 });
+ok('seeded bug FOUND via manifest-domain exploration', buggy.ok === false
+  && buggy.violations.some((v) => v.invariant === 'control-state-is-declared'));
+const cx = buggy.violations.find((v) => v.invariant === 'control-state-is-declared');
+ok('counterexample is the shortest path (init + 3x COIN)',
+  cx.path.length === 4 && cx.path.slice(1).every((s) => s.action === 'COIN'));
+ok('rejections explored as legal no-ops (PUSH@LOCKED did not throw)',
+  !buggy.violations.some((v) => v.kind === 'throw'));
+
+const legacyCheck = check({
+  specModule: { init: () => ({ n: 0 }), next: (s, a) => (a === 'TICK' ? { n: s.n + 1 } : s) },
+  contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }, invariants: {}, maxStates: 5,
+});
+ok('legacy {init,next} module still uses the legacy engine + buildDomain', legacyCheck.engine === 'legacy');
+const forcedLegacy = check({ specModule: loadSpec(V2_SPEC), contract, invariants, maxStates: 40, legacyBareNext: true });
+ok('--legacy-bare-next forces the bare-next path even on a v2 module (loud error, no silent clean)',
+  forcedLegacy.ok === false && /init\(\) and next\(\)/.test(forcedLegacy.error));
+
+console.log('4) P4 — determinism double-pass');
+const rand = check({ specModule: loadSpec(randomSpec), contract: {}, invariants: {}, maxStates: 30 });
+ok('Math.random spec flagged nondeterministic', rand.nondeterministic === true);
+ok("a first-class 'nondeterminism' finding is reported", rand.ok === false
+  && rand.violations.some((v) => v.kind === 'nondeterminism' && v.invariant === 'deterministic-exploration'));
+
+console.log('5) end-to-end — verify.mjs over the v2 example (replay-only, default sam mode)');
+const e2e = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: join(EX, 'specs'), out: join(TMP, 'out-v2') });
+ok('verify (sam mode): 12/12 windows consistent', e2e.summary.consistent === 12 && e2e.summary.specs === 1);
+ok('no dead specs', e2e.summary.deadSpecs.length === 0);
+
+// CLI flag threading: --legacy-bare-next is a boolean flag selecting tv.mjs end-to-end.
+const cli = spawnSync('node', [join(ROOT, 'scripts', 'verify.mjs'),
+  '--contract', join(ROOT, 'examples', 'turnstile', 'contract.json'),
+  '--traces', join(ROOT, 'examples', 'turnstile', 'traces'),
+  '--specs', join(ROOT, 'examples', 'turnstile', 'specs'),
+  '--legacy-bare-next',
+  '--out', join(TMP, 'out-legacy-cli')], { encoding: 'utf-8' });
+ok('CLI --legacy-bare-next replays the legacy example clean (12/12)',
+  cli.status === 0 && /12\/12 windows consistent/.test(cli.stdout));
+
+rmSync(TMP, { recursive: true, force: true });
+console.log(`\nALL ${passed} CHECKS PASSED`);

@@ -7,6 +7,7 @@ out/
 specs/spec_*.js
 examples/turnstile/out/
 test/.tmp/
+test/.tmp-v2/
 *.log
 
 # Local plugin/indexer state — never ship

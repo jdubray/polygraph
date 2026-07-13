@@ -1,13 +1,29 @@
 {
   "lang": "javascript",
   "stateKeys": [
-    { "name": "light", "type": "'red' | 'green' | 'yellow'" }
+    {
+      "name": "light",
+      "type": "'red' | 'green' | 'yellow'"
+    }
   ],
-  "initState": { "light": "red" },
+  "initState": {
+    "light": "red"
+  },
   "actions": {
-    "NEXT": { "dataFields": {} }
+    "NEXT": {
+      "dataFields": {}
+    },
+    "STOP": {
+      "dataFields": {}
+    }
   },
   "terminalStates": [],
-  "specialRules": [],
-  "noOpRule": "Any action other than NEXT yields post == pre."
+  "specialRules": [
+    {
+      "name": "stop-is-noop",
+      "note": "STOP is accepted by the dispatcher but the controller ignores it in every state; it must never change the light.",
+      "whenAction": "STOP"
+    }
+  ],
+  "noOpRule": "STOP always yields post == pre; any undeclared action must not appear in traces."
 }

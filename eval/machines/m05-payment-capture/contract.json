@@ -10,6 +10,10 @@
     "REQUEST":   { "dataFields": { "amount": "number" } },
     "AUTHORIZE": { "dataFields": { "approved": "number" } }
   },
+  "dataDomain": {
+    "REQUEST":   { "amount": [50, 100] },
+    "AUTHORIZE": { "approved": [0, 50, 60, 100, 120] }
+  },
   "terminalStates": ["captured", "declined"],
   "specialRules": [
     { "name": "reject-partials", "note": "A partial authorization (approved < requested amount) must be declined, not captured.", "whenAction": "AUTHORIZE" }

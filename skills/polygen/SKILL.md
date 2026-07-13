@@ -1,6 +1,6 @@
 ---
 name: polygen
-description: Write NEW stateful code that is verifiable from the moment it's written, instead of auditing code that already exists (that's the "polygraph" skill). Draft a contract from a feature description, author init()/next(state, action, data) against it, self-repair against reachable invariant violations before anything ships, and synthesize a demo/regression trace corpus. Use when the user wants to write a new state machine, workflow, or reducer and have it come out pre-verified; when they say "build a verifiable X"; or as the first half of a lifecycle that ends with wiring the result into a real app and auditing the integration with polygraph. Trigger phrases: "polygen", "write a verifiable state machine", "author verifiable code", "build me a X flow that's already checked", "generate a reducer/workflow and verify it".
+description: Write NEW stateful code that is verifiable from the moment it's written, instead of auditing code that already exists (that's the "polygraph" skill). Draft a contract from a feature description, author a SAM v2 strict-profile module against it (named intents/schemas/domains, keyed acceptors, reject(reason), sealed model; --legacy-bare-next authors the legacy init()/next(state, action, data) artifact), self-repair against reachable invariant violations before anything ships, and synthesize a demo/regression trace corpus. Use when the user wants to write a new state machine, workflow, or reducer and have it come out pre-verified; when they say "build a verifiable X"; or as the first half of a lifecycle that ends with wiring the result into a real app and auditing the integration with polygraph. Trigger phrases: "polygen", "write a verifiable state machine", "author verifiable code", "build me a X flow that's already checked", "generate a reducer/workflow and verify it".
 ---
 
 # polygen — author verifiable code, out of the box
@@ -8,10 +8,23 @@ description: Write NEW stateful code that is verifiable from the moment it's wri
 Companion to the `polygraph` skill. That one AUDITS code that already exists.
 This one AUTHORS new code so it's verifiable from the start — closing the loop
 at creation time instead of retrofitting it later. v1 is **JS/TS only**: the
-generated `next()` is directly usable only in a JS/TS codebase (porting a
+generated module is directly usable only in a JS/TS codebase (porting a
 verified model to another language is a real, separate problem — the port
 itself would need its own differential check against the JS original — and is
 out of scope here).
+
+**The authored artifact (v0.6):** by default a **SAM v2 strict-profile
+module** (`module.exports = { instance, init, actions, getState, setState }`,
+sam-lib 2.0.0-alpha vendored in the plugin): named intents with schemas and
+finite domains, acceptors keyed by intent name, every not-applicable action
+an observable `reject(reason)` (never a throw), sealed model. Generated code
+must load **strict-clean** — `instance({}).validate()` is a hard gate at
+every stage boundary, so schema/shape errors block instead of becoming report
+lines, and dead wiring cannot ship silently. The self-repair loop feeds back
+`lastStep()` classifications and determinism flags, not only windows and
+invariants. `--legacy-bare-next` authors the original `init()`/`next()`
+artifact instead. (House rule from sam-lib #29, fixed in 2.0.0-alpha.2: never rely on
+`instance({}).state()`; the pipeline uses `getState()`/`setState()` only.)
 
 > **Same disclosure as `polygraph`.** This is experimental, unproven
 > technology and a *consistency check, not a proof*. A converged run means the
@@ -50,7 +63,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs \
   --intent "<feature description>" --model sonnet-5 --out out/
 ```
 
-This authors `init()`/`next()`, proposes `invariants.mjs`, then self-repairs:
+This authors the v2 SAM module (add `--legacy-bare-next` for `init()`/`next()`),
+proposes `invariants.mjs`, then self-repairs:
 model-checks the code against its own invariants and, on a reachable
 violation, patches the code and re-checks — up to `--repair-max` (default 3)
 rounds. It then synthesizes a demo/regression trace corpus by driving the
@@ -59,8 +73,10 @@ final code through model-proposed scenarios, validates it
 process** as a sanity check (catches nondeterminism the in-process generation
 wouldn't expose).
 
-Everything lands in `<out>/`: `contract.json`, `next.cjs`, `invariants.mjs`,
-`traces/*.ndjson`, and `polygen-report.md`.
+Everything lands in `<out>/`: `contract.json`, `next.cjs` (the module file —
+the name is historical; in the default mode it contains the v2 SAM module),
+`invariants.mjs`, `traces/*.ndjson`, and `polygen-report.md` (which names the
+artifact mode it was authored in).
 
 ## Step 3 — Read the report and triage (do this WITH the user)
 
@@ -85,9 +101,10 @@ Wiring the generated `next()` into the real app is deliberately NOT scripted —
 it needs a human or an integrating agent making real judgment calls about the
 handler/route/reducer it plugs into. Instruct whoever does this:
 
-- **Call `next()`; do not reimplement the transition logic inline.** The whole
-  point of authoring it this way is that the transition logic lives in exactly
-  one place.
+- **Call the module; do not reimplement the transition logic inline.** (v2:
+  dispatch through `actions[name](data)` and read via `getState()`; legacy:
+  call `next()`.) The whole point of authoring it this way is that the
+  transition logic lives in exactly one place.
 - Once wired up, **capture REAL traces from the running integration** and run
   `/polygraph:verify` (the `polygraph` skill) against them. This is the step
   that catches drift — e.g. someone "helpfully" tweaking the wiring later and

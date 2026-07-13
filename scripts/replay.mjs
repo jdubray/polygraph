@@ -6,7 +6,8 @@ import { dirname, join, resolve } from 'node:path';
 import { readFileSync, readdirSync } from 'node:fs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const TV = join(HERE, 'tv.mjs');
+const TV = join(HERE, 'tv.mjs'); // legacy bare-next() replayer
+const SAM_TV = join(HERE, 'sam-tv.mjs'); // v2 SAM strict-profile replayer (default)
 
 /** Load and flatten an NDJSON trace corpus (a dir of *.ndjson or a single file). */
 export function loadWindows(tracePath) {
@@ -34,24 +35,37 @@ export function loadWindows(tracePath) {
   return windows;
 }
 
-/** Replay a single spec file. Returns ['pass'|'fail'|'unscoreable', ...] aligned to windows. */
-export function replaySpec(specPath, windows) {
+/**
+ * Replay a single spec file against the windows, returning the replayer's full
+ * per-window results. `mode` selects the artifact contract:
+ *   'sam'    (default) — v2 SAM strict-profile module via sam-tv.mjs; results
+ *            additionally carry { classification, deep, rejectionReason?, error? }.
+ *   'legacy' — bare next(state, action, data) module via tv.mjs.
+ * Returns { ok, results:[{ status, ... }], error? }; ok:false means the spec
+ * did not load / lacks the expected surface (caller scores all windows unscoreable).
+ */
+export function replaySpecResults(specPath, windows, mode = 'sam') {
+  const runner = mode === 'legacy' ? TV : SAM_TV;
   const request = {
     specPath: resolve(specPath).replaceAll('\\', '/'),
     windows: windows.map((w) => ({ action: w.action, data: w.data, preState: w.pre, postState: w.post })),
   };
-  const proc = spawnSync('node', [TV], { input: JSON.stringify(request), encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
-  let resp;
+  const proc = spawnSync('node', [runner], { input: JSON.stringify(request), encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
   try {
-    // The protocol JSON is the LAST non-empty stdout line. tv.mjs redirects
-    // spec console output to stderr, but parse defensively anyway so stray
-    // stdout writes (a spec calling process.stdout.write directly) can't make
-    // a correct spec unscoreable.
+    // The protocol JSON is the LAST non-empty stdout line. Both replayers
+    // redirect spec console output to stderr, but parse defensively anyway so
+    // stray stdout writes (a spec calling process.stdout.write directly) can't
+    // make a correct spec unscoreable.
     const lines = String(proc.stdout || '').split('\n').filter((l) => l.trim());
-    resp = JSON.parse(lines[lines.length - 1]);
+    return JSON.parse(lines[lines.length - 1]);
   } catch {
-    return windows.map(() => 'unscoreable');
+    return { ok: false, error: 'replayer produced no parseable output' };
   }
+}
+
+/** Replay a single spec file. Returns ['pass'|'fail'|'unscoreable', ...] aligned to windows. */
+export function replaySpec(specPath, windows, mode = 'sam') {
+  const resp = replaySpecResults(specPath, windows, mode);
   if (!resp.ok) return windows.map(() => 'unscoreable');
   return resp.results.map((r) => r.status);
 }

@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadWindows, replaySpec } from './replay.mjs';
+import { loadWindows, replaySpecResults } from './replay.mjs';
 import { buildPrompt } from './build_prompt.mjs';
 import { generateSpecs } from './generate.mjs';
 import { check, loadSpec } from './check.mjs';
@@ -35,7 +35,14 @@ function resolveInvariantsPath(opts, contract) {
 function parseArgs(argv) {
   const a = {};
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith('--')) { a[argv[i].slice(2)] = argv[i + 1]; i++; }
+    if (argv[i].startsWith('--')) {
+      // A flag followed by another flag (or by nothing) is boolean, e.g.
+      // --legacy-bare-next; otherwise it consumes the next token as its value.
+      const key = argv[i].slice(2);
+      const nxt = argv[i + 1];
+      if (nxt === undefined || nxt.startsWith('--')) a[key] = true;
+      else { a[key] = nxt; i++; }
+    }
   }
   return a;
 }
@@ -61,6 +68,10 @@ export async function verify(opts) {
   const windows = loadWindows(opts.traces);
   const outDir = opts.out || 'out';
   mkdirSync(outDir, { recursive: true });
+  // Artifact mode (Option A full switch): the default artifact is a v2 SAM
+  // strict-profile module; --legacy-bare-next selects the bare next() contract
+  // end-to-end (replayer, checker domain source, and — once wired — prompts).
+  const mode = opts['legacy-bare-next'] || opts.legacyBareNext ? 'legacy' : 'sam';
 
   // Obtain spec file paths.
   let specPaths = [];
@@ -79,7 +90,14 @@ export async function verify(opts) {
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set (or use --specs to replay saved specs)');
     const source = readFileSync(opts.source, 'utf-8');
     const lang = contract.lang || (String(opts.source).endsWith('.ts') ? 'typescript' : 'javascript');
-    const prompt = buildPrompt(contract, source, { filePath: opts.source, lang });
+    // Prompt selection follows the artifact mode end-to-end: 'sam' (default)
+    // builds the v2 strict-profile prompt (prompt_template_v2.txt — modelShape
+    // / intent schemas / domains / reject() rules rendered from the contract);
+    // 'legacy' builds the bare-next prompt_template.txt. Note the v2 path
+    // hard-requires a dataDomain entry for every declared data field
+    // (buildPrompt throws otherwise — the domain is also the exploration and
+    // transpilation domain, so a gap must block generation loudly).
+    const prompt = buildPrompt(contract, source, { filePath: opts.source, lang, mode });
     const maxTokens = opts['max-tokens'] ? Number(opts['max-tokens']) : undefined;
     const gens = await generateSpecs({ prompt, model: opts.model, n: Number(opts.n || 5), apiKey, maxTokens });
     const specDir = join(outDir, 'specs');
@@ -91,8 +109,14 @@ export async function verify(opts) {
     if (!specPaths.length) throw new Error('no specs generated');
   }
 
-  // Replay every spec; build a per-window status matrix.
-  const matrix = specPaths.map((p) => replaySpec(p, windows)); // matrix[spec][window]
+  // Replay every spec; build a per-window status matrix. In 'sam' mode each
+  // result additionally carries the step classification from lastStep()
+  // ('mutated' | 'rejected' | 'identity-by-mutation' | 'unhandled', plus
+  // rejectionReason) — new triage evidence: a failing no-op window now says
+  // WHY the spec did nothing.
+  const detail = specPaths.map((p) => replaySpecResults(p, windows, mode)); // detail[spec]
+  const matrix = detail.map((resp) =>
+    resp.ok ? resp.results.map((r) => r.status) : windows.map(() => 'unscoreable')); // matrix[spec][window]
 
   // Partition specs into LIVE and DEAD. A dead spec (failed to load/replay) is
   // unscoreable on EVERY window; classifying over it would flood every window
@@ -103,7 +127,18 @@ export async function verify(opts) {
   const deadSpecs = deadIdx.map((i) => specPaths[i].replace(/^.*[\\/]/, ''));
   const perWindow = windows.map((w, wi) => {
     const statuses = liveIdx.map((si) => matrix[si][wi]);
-    return { scenario: w.scenario, index: w.index, action: w.action, statuses, verdict: classify(statuses) };
+    // Per-live-spec step classifications ('sam' mode; legacy tv.mjs has none).
+    // 'rejected' and 'identity-by-mutation' are the two GOOD no-op classes;
+    // 'unhandled' on a failing window is a first-class finding — the spec
+    // neither acted nor rejected.
+    const classifications = liveIdx.map((si) => {
+      const r = detail[si].ok ? detail[si].results[wi] : null;
+      if (!r || r.classification === undefined) return null;
+      return r.rejectionReason !== undefined ? `${r.classification}(${r.rejectionReason})` : r.classification;
+    });
+    const entry = { scenario: w.scenario, index: w.index, action: w.action, statuses, verdict: classify(statuses) };
+    if (classifications.some((c) => c !== null)) entry.classifications = classifications;
+    return entry;
   });
 
   const summary = {
@@ -115,6 +150,11 @@ export async function verify(opts) {
     specError: perWindow.filter((w) => w.verdict === 'spec-error').length,
     codeFinding: perWindow.filter((w) => w.verdict === 'code-finding-or-contract').length,
     unscoreableAll: perWindow.filter((w) => w.verdict === 'unscoreable-all').length,
+    // Non-consistent windows where some live spec classified 'unhandled': the
+    // spec neither acted nor rejected — unexplained silence, a finding class
+    // only the v2 artifact can surface.
+    unhandledWindows: perWindow.filter((w) =>
+      w.verdict !== 'consistent' && (w.classifications || []).some((c) => c === 'unhandled')).length,
   };
   const findings = perWindow.filter((w) => w.verdict !== 'consistent');
 
@@ -135,7 +175,10 @@ export async function verify(opts) {
     const perSpec = specPaths.map((p, i) => {
       const name = p.replace(/^.*[\\/]/, '');
       try {
-        const r = check({ specModule: loadSpec(p), contract, invariants, windows, ...(maxStates ? { maxStates } : {}) });
+        // mode threads through: 'legacy' forces the bare-next engine +
+        // buildDomain(); 'sam' lets check() auto-detect a v2 module and drive
+        // it through the adapter with manifest() domains.
+        const r = check({ specModule: loadSpec(p), contract, invariants, windows, legacyBareNext: mode === 'legacy', ...(maxStates ? { maxStates } : {}) });
         return r.error ? { name, error: r.error } : { name, ...r };
       } catch (e) { return { name, error: String(e && e.message) }; }
     });
@@ -160,12 +203,100 @@ export async function verify(opts) {
     };
   }
 
-  writeFileSync(join(outDir, 'findings.json'), JSON.stringify({ summary, findings, perWindow, invReport }, null, 2), 'utf-8');
-  writeFileSync(join(outDir, 'findings.md'), renderMarkdown(summary, findings, invReport), 'utf-8');
-  return { summary, findings, invReport, outDir };
+  // ── TLC escalation tier (--tla): transpile the winning live spec to TLA+
+  // and run TLC when the toolchain is available. Turns Part 2 from "bounded
+  // exploration says" into "TLC says". Opt-in; a missing toolchain is a NOTE
+  // in the report, never an error — but a transpiler refusal or a TLC-level
+  // failure is reported loudly.
+  let tlaReport = null;
+  if (opts.tla) {
+    tlaReport = await tlaEscalation({ specPaths, liveIdx, matrix, mode, outDir, invPath, contractPath: resolve(opts.contract), opts });
+  }
+
+  writeFileSync(join(outDir, 'findings.json'), JSON.stringify({ summary, findings, perWindow, invReport, tlaReport }, null, 2), 'utf-8');
+  writeFileSync(join(outDir, 'findings.md'), renderMarkdown(summary, findings, invReport, tlaReport), 'utf-8');
+  return { summary, findings, invReport, tlaReport, outDir };
 }
 
-function renderMarkdown(summary, findings, invReport) {
+/**
+ * Run the TLC escalation tier: pick the winning live spec (most windows
+ * passed; tie -> first), transpile it via to-tla.mjs, run TLC via
+ * tla-check.mjs. Never throws: every outcome is folded into the returned
+ * report object ({ skipped } | { spec, transpileError } | { spec,
+ * toolchainNote, ... } | the full TLC result).
+ */
+async function tlaEscalation({ specPaths, liveIdx, matrix, mode, outDir, invPath, contractPath, opts }) {
+  if (mode === 'legacy') {
+    return { skipped: 'TLC escalation requires the v2 SAM artifact — not available with --legacy-bare-next' };
+  }
+  if (!liveIdx.length) {
+    return { skipped: 'no live specs to escalate (every spec failed to load/replay)' };
+  }
+  // Winner = live spec with the most passing windows; ties go to the first.
+  let winner = liveIdx[0], best = -1;
+  for (const si of liveIdx) {
+    const passes = matrix[si].filter((s) => s === 'pass').length;
+    if (passes > best) { best = passes; winner = si; }
+  }
+  const specPath = specPaths[winner];
+  const specName = specPath.replace(/^.*[\\/]/, '');
+  // TLA+ module name = output basename; must be alphanumeric and match the file.
+  let moduleName = specName.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9_]/g, '_');
+  if (!/^[A-Za-z]/.test(moduleName)) moduleName = 'M' + moduleName;
+  const tlaDir = join(outDir, 'tla');
+  mkdirSync(tlaDir, { recursive: true });
+
+  const report = { spec: specName, windowsPassed: best, windowsTotal: matrix[winner].length };
+  let transpiled;
+  try {
+    const { transpile } = await import('./to-tla.mjs');
+    transpiled = await transpile(specPath, {
+      outPath: join(tlaDir, `${moduleName}.tla`),
+      bound: opts['tla-bound'] ? Number(opts['tla-bound']) : undefined,
+      invariantsPath: invPath || null,
+      contractPath,
+    });
+  } catch (e) {
+    // Transpiler refusal (construct outside the transpilable subset) — a
+    // checkable property of the spec, reported loudly, not a crash.
+    return { ...report, transpileError: String(e && e.message) };
+  }
+  report.tlaPath = transpiled.tlaPath;
+  report.cfgPath = transpiled.cfgPath;
+  report.actions = transpiled.actions;
+  report.invariants = transpiled.invariants;
+  report.skippedInvariants = transpiled.skippedInvariants;
+
+  try {
+    const { runTlc, TlcNotAvailableError } = await import('./tla-check.mjs');
+    try {
+      const timeoutMs = opts['tla-timeout'] ? Number(opts['tla-timeout']) * 1000 : undefined;
+      const r = runTlc(transpiled.tlaPath, { cfgPath: transpiled.cfgPath, ...(timeoutMs ? { timeoutMs } : {}) });
+      report.tlc = {
+        status: r.status,
+        statesGenerated: r.statesGenerated,
+        distinctStates: r.distinctStates,
+        violatedInvariants: r.violatedInvariants,
+        counterexample: r.counterexample,
+        durationMs: r.durationMs,
+      };
+      if (r.status === 'error') report.tlc.output = r.output;
+    } catch (e) {
+      if (e instanceof TlcNotAvailableError) {
+        // Toolchain missing = a note, not an error: the .tla/.cfg artifacts
+        // are still on disk for the user to run elsewhere.
+        report.toolchainNote = String(e.message);
+      } else {
+        report.tlc = { status: 'error', error: String(e && e.message) };
+      }
+    }
+  } catch (e) {
+    report.tlc = { status: 'error', error: String(e && e.message) };
+  }
+  return report;
+}
+
+function renderMarkdown(summary, findings, invReport, tlaReport) {
   const L = [];
   L.push('# Polygraph — verification findings\n');
   L.push('> Consistency check, not a proof. Every finding is a lead to investigate by hand.\n');
@@ -178,25 +309,35 @@ function renderMarkdown(summary, findings, invReport) {
   L.push(`- consistent (pass in all live specs): **${summary.consistent}**`);
   L.push(`- likely spec-error (some specs miss it): **${summary.specError}**`);
   L.push(`- likely code-finding / contract-error (all specs disagree): **${summary.codeFinding}**`);
-  L.push(`- unscoreable in all specs (specs didn't load): **${summary.unscoreableAll}**\n`);
+  L.push(`- unscoreable in all specs (specs didn't load): **${summary.unscoreableAll}**`);
+  if (summary.unhandledWindows) {
+    L.push(`- ⚠️ windows where a spec neither acted nor REJECTED (\`unhandled\`): **${summary.unhandledWindows}** — unexplained silence; a faithful spec should either transition or reject(reason).`);
+  }
+  L.push('');
   if (!findings.length) {
     L.push('All windows consistent across all specs — the derived spec reproduces the code.');
     L.push('_Note: a faithful spec reproduces bugs too, so a clean Part 1 is not a clean bill of');
     L.push('health. The bug-finding is Part 2._\n');
     renderInvSection(L, invReport);
+    renderTlaSection(L, tlaReport);
     return L.join('\n');
   }
   L.push('## Windows to review\n');
-  L.push('| scenario | # | action | verdict | per-spec |');
-  L.push('|---|---|---|---|---|');
+  L.push('| scenario | # | action | verdict | per-spec | step classification (per live spec) |');
+  L.push('|---|---|---|---|---|---|');
   for (const f of findings) {
-    L.push(`| ${f.scenario} | ${f.index} | ${f.action} | ${f.verdict} | ${f.statuses.join(', ')} |`);
+    const cls = (f.classifications || []).map((c) => c ?? '—').join(', ') || '—';
+    L.push(`| ${f.scenario} | ${f.index} | ${f.action} | ${f.verdict} | ${f.statuses.join(', ')} | ${cls} |`);
   }
   L.push('\n**Reading the verdicts**');
   L.push('- *code-finding / contract-error*: every spec disagrees with the trace here. Either the code does something you did not expect (a defect) or your observable-state contract omits a field that drives this transition. Investigate the source at this (pre-state, action).');
   L.push('- *spec-error*: some generations pass, some fail. Usually one generation missed a rule; check the majority. The missed rules are typically special cases living outside the main state table.');
   L.push('- *unscoreable in all specs*: the generated modules did not load or export next(). Fix generation, not the code.');
+  L.push('\n**Reading the step classifications** (v2 SAM artifact only)');
+  L.push('- *rejected(reason)* and *identity-by-mutation* are the two GOOD no-op classes: the spec explicitly declined or explicitly re-committed the same state.');
+  L.push('- *unhandled* on a failing window is itself a finding: the spec neither acted nor rejected — usually a missing acceptor case (spec-error) or a rule the code has that the contract does not.');
   renderInvSection(L, invReport);
+  renderTlaSection(L, tlaReport);
   return L.join('\n');
 }
 
@@ -239,16 +380,89 @@ function renderInvSection(L, invReport) {
   L.push('state — a strong signal. Follow the counterexample path in the source.');
 }
 
+/** Render the TLC escalation subsection (only when --tla was requested). */
+function renderTlaSection(L, tlaReport) {
+  if (!tlaReport) return;
+  L.push('\n### TLC escalation (`--tla`)\n');
+  if (tlaReport.skipped) {
+    L.push(`_Skipped: ${tlaReport.skipped}_`);
+    return;
+  }
+  L.push(`Winning spec escalated to TLA+: **${tlaReport.spec}** (${tlaReport.windowsPassed}/${tlaReport.windowsTotal} windows passed).`);
+  if (tlaReport.transpileError) {
+    L.push('\n⚠️ **Transpiler refused this spec** — it uses a construct outside the mechanically');
+    L.push('transpilable subset (transpilability is a checkable property, not a best-effort guess):');
+    L.push('```');
+    L.push(tlaReport.transpileError);
+    L.push('```');
+    L.push('The bounded JS exploration in Part 2 above still stands; only the TLC tier is unavailable for this spec.');
+    return;
+  }
+  L.push(`- artifacts: \`${tlaReport.tlaPath}\` + \`${tlaReport.cfgPath}\``);
+  L.push(`- actions transpiled: ${tlaReport.actions.map((a) => `${a.name}(${a.payloadCount})`).join(', ')}`);
+  L.push(`- invariants translated to TLA+: ${tlaReport.invariants.length ? tlaReport.invariants.map((n) => `\`${n}\``).join(', ') : '(none)'}`);
+  for (const s of tlaReport.skippedInvariants || []) {
+    L.push(`- ⚠️ invariant NOT carried into TLC — \`${s.name}\` (${s.kind}): ${s.reason}`);
+  }
+  if (tlaReport.toolchainNote) {
+    L.push(`\n_TLC did not run (toolchain unavailable): ${tlaReport.toolchainNote}_`);
+    L.push('_The .tla/.cfg artifacts above are complete — run TLC on them wherever Java is available._');
+    return;
+  }
+  const t = tlaReport.tlc;
+  if (!t) return;
+  if (t.error) {
+    L.push(`\n⚠️ TLC failed to run: ${t.error}`);
+    return;
+  }
+  if (t.status === 'pass') {
+    L.push(`\n**TLC: PASS** — ${t.statesGenerated} states generated, ${t.distinctStates} distinct; no translated invariant is violated in the FULL bounded state space (exhaustive within the payload domains and bound, not a proof beyond them).`);
+  } else if (t.status === 'invariant-violation') {
+    L.push(`\n**TLC: INVARIANT VIOLATION** — ${t.violatedInvariants.map((n) => `\`${n}\``).join(', ')} (${t.statesGenerated} states generated, ${t.distinctStates} distinct).`);
+  } else {
+    L.push(`\n⚠️ **TLC: ${t.status.toUpperCase()}**${t.statesGenerated != null ? ` — ${t.statesGenerated} states generated` : ''}. See \`findings.json\` (tlaReport.tlc) for the raw output.`);
+  }
+  if (tlaReport.invariants.length) {
+    L.push('\n| invariant | TLC verdict |');
+    L.push('|---|---|');
+    for (const n of tlaReport.invariants) {
+      const violated = t.violatedInvariants && t.violatedInvariants.includes(n);
+      // TLC stops at the first violation, so co-checked invariants that are
+      // not the violated one are NOT thereby established.
+      const verdict = violated ? '❌ violated'
+        : t.status === 'pass' ? '✅ holds (full bounded space)'
+        : '❓ not established (run stopped early)';
+      L.push(`| ${n} | ${verdict} |`);
+    }
+  }
+  if (t.counterexample && t.counterexample.length) {
+    L.push('\n**Counterexample (TLC behavior trace):**\n');
+    L.push('```');
+    for (const s of t.counterexample) {
+      L.push(`State ${s.num}: ${s.action}`);
+      if (s.vars) L.push(s.vars.split('\n').map((l) => '  ' + l).join('\n'));
+    }
+    L.push('```');
+  }
+}
+
 // CLI
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const a = parseArgs(process.argv.slice(2));
   if (!a.contract || !a.traces) {
-    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] | --specs <dir>) [--invariants <inv.mjs>] [--max-states N] [--out <dir>]');
+    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] | --specs <dir>) [--invariants <inv.mjs>] [--max-states N] [--out <dir>] [--legacy-bare-next] [--tla [--tla-bound N] [--tla-timeout <s>]]');
     process.exit(2);
   }
   verify(a).then((r) => {
     console.log(`\n${r.summary.consistent}/${r.summary.windows} windows consistent across ${r.summary.specs} spec(s).`);
     console.log(`findings: ${r.summary.specError} spec-error, ${r.summary.codeFinding} code-finding/contract, ${r.summary.unscoreableAll} unscoreable-all`);
+    if (r.tlaReport) {
+      const t = r.tlaReport;
+      if (t.skipped) console.log(`tla: skipped — ${t.skipped}`);
+      else if (t.transpileError) console.log(`tla: transpiler refused ${t.spec} (see report)`);
+      else if (t.toolchainNote) console.log(`tla: transpiled ${t.spec} -> ${t.tlaPath}; TLC not run (toolchain unavailable)`);
+      else if (t.tlc) console.log(`tla: ${t.spec} -> TLC ${t.tlc.status}${t.tlc.statesGenerated != null ? ` (${t.tlc.statesGenerated} states)` : ''}`);
+    }
     console.log(`report: ${join(r.outDir, 'findings.md')}`);
   }).catch((e) => { console.error('[verify] ' + e.message); process.exit(1); });
 }

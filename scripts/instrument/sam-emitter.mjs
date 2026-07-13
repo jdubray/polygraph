@@ -33,6 +33,16 @@
 //
 // NOTE: instrument a COPY of your code, keep the change as a diff/patch, and
 // never leave the emitter in production (it does synchronous file I/O).
+// v2 path (sam-pattern 2.0.0-alpha strict profile): `withSamTracingV2` hooks
+// the framework's own per-step observability (`instance({ stepListener })`)
+// instead of injecting a capture acceptor / emit reactor. Strictly cleaner:
+// the listener fires once per presented proposal — INCLUDING steps an
+// acceptor rejected via reject(reason) — so rejected dispatches show up as
+// windows too, carrying an optional `"rejected": "<reason>"` metadata key.
+// A rejected window always has pre == post, so validate_corpus.mjs (and all
+// v1 tooling, which ignores unknown window keys) treats it as a plain no-op
+// window; the `rejected` key is extra triage evidence, not a format change.
+import { appendFileSync } from 'node:fs';
 import { traceStep } from './trace-emitter.mjs';
 
 /** Strip SAM-internal keys (those starting with `__`) from a proposal. */
@@ -80,4 +90,80 @@ export function withSamTracing(component, project, file) {
     acceptors: [captureAcceptor, ...(component.acceptors ?? [])],
     reactors: [...(component.reactors ?? []), emitReactor],
   };
+}
+
+/**
+ * v2 (strict profile) tracing: emit one NDJSON window per SAM step, including
+ * rejected steps, using the framework's stepListener instead of injected
+ * acceptors/reactors.
+ *
+ * Call AFTER the spec's own `instance({ initialState, component })` call has
+ * registered its intents/acceptors (the '*' capture acceptor must not run
+ * before the model shape and intents exist):
+ *
+ *   const control = instance({ initialState, component });
+ *   withSamTracingV2(instance, 'traces/s1_normal.ndjson');
+ *   // ...drive control.intents through your scenarios as usual.
+ *
+ * Window shape: { pre, action, data, post [, rejected] }
+ *   - pre/post come from getState(), which in the v2 strict profile already
+ *     projects to the DECLARED modelShape keys — no project() needed.
+ *   - pre is the previous window's post (the initial pre is getState() at
+ *     wiring time), so wire the tracer before dispatching and do not call
+ *     setState() mid-scenario.
+ *   - a step some acceptor rejected via reject(reason) still emits a window;
+ *     it carries `rejected: "<reason>"` and pre == post. validate_corpus.mjs
+ *     treats such a window as a no-op window (the key is ignored by v1
+ *     tooling; it exists for rejection-reason triage).
+ *   - post is captured when the listener fires: after the acceptor chain,
+ *     BEFORE reactors run. v2 strict specs declare `reactors: []`; if yours
+ *     doesn't, reactor-computed state is not in `post`.
+ *   - framework-internal presentations (no action name, e.g. __error) are
+ *     not steps and are skipped, exactly like the v1 path.
+ *
+ * @param {Function} instance  the spec's sam-pattern instance() function
+ * @param {string|((window: object) => void)} sink  NDJSON file path, or a
+ *        function receiving each window object (handy for tests)
+ * @returns {Function} the same instance function, for chaining
+ */
+export function withSamTracingV2(instance, sink) {
+  const emit =
+    typeof sink === 'function'
+      ? sink
+      : (w) => appendFileSync(sink, JSON.stringify(w) + '\n');
+
+  const { getState } = instance({});
+  let lastPost = getState();
+  let pendingData = {};
+
+  instance({
+    // '*' registers an explicitly cross-cutting acceptor (allowed in strict
+    // mode); it runs on every proposal and only records the payload.
+    component: {
+      acceptors: {
+        '*': () => (proposal) => {
+          if (proposal.__actionName ?? proposal.__name) {
+            pendingData = extractData(proposal);
+          }
+        },
+      },
+    },
+    stepListener: (step) => {
+      if (step.intent == null) return; // __error presentations are not steps
+      try {
+        const post = getState();
+        const window = { pre: lastPost, action: step.intent, data: pendingData, post };
+        if (step.classification === 'rejected') {
+          window.rejected = step.rejections.map((r) => r.reason).join('; ');
+        }
+        emit(window);
+        lastPost = post;
+      } catch {
+        /* tracing must never break the workflow */
+      } finally {
+        pendingData = {};
+      }
+    },
+  });
+  return instance;
 }

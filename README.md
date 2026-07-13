@@ -8,11 +8,18 @@
 
 A Claude Code plugin for **trace-driven consistency checking of stateful code**.
 You point it at a state machine (a workflow, reducer, protocol, or session
-handler); it has an LLM derive a bare `next(state, action, data)` transition
-function from the source, replays real execution traces against it, and reports
-every place the code's observed behavior disagrees with an independent reading
-of its own source — as a **spec-error**, a **code-finding**, or a
-**contract-error**.
+handler); it has an LLM derive a transition-function spec from the source —
+by default a **SAM v2 strict-profile module** ([sam.js.org](https://sam.js.org),
+`@cognitive-fab/sam-pattern` **2.0.0**, published on npm; a vendored copy keeps the plugin zero-install): named intents with
+per-intent schemas and finite payload domains, acceptors keyed by intent name,
+every ignored action an observable `reject(reason)`, and a sealed model —
+replays real execution traces against it, model-checks it against invariants,
+and reports every place the code's observed behavior disagrees with an
+independent reading of its own source — as a **spec-error**, a
+**code-finding**, or a **contract-error**. The original bare
+`next(state, action, data)` artifact remains available end-to-end behind
+`--legacy-bare-next` for one release, and an optional `--tla` tier escalates
+the winning spec to a mechanical TLA+ transpilation checked by TLC.
 
 > **Disclosure — read this first.** Polygraph is **experimental, not
 > peer-reviewed, unproven technology.** The method is newly published and highly
@@ -22,10 +29,35 @@ of its own source — as a **spec-error**, a **code-finding**, or a
 > hand*, not an established result. Do not rely on it as your only safeguard for
 > correctness- or safety-critical code. Approach the output with skepticism.
 
+## What's new in 2.0
+
+Polygraph 2.0 moves the derived artifact from the bare `next()` contract to
+the **SAM v2 strict profile**, released as `@cognitive-fab/sam-pattern` 2.0.0.
+The change is grounded in a measured study (see Provenance): the strict
+profile eliminated every non-semantic failure class the 1.x artifact could
+produce, and the remaining findings are about the code under audit, which is
+where they belong.
+
+- **Structural failure classes closed by construction:** silent no-op specs
+  (dropped payloads now throw), hidden bookkeeping state (sealed model),
+  vacuous exploration, and dispatch-monolith specs.
+- **Richer triage:** every replay window carries a step classification —
+  `rejected(reason)` and `identity-by-mutation` are the two good no-op
+  classes; `unhandled` is itself a finding.
+- **Model checking without configuration:** exploration domains come from the
+  spec's own manifest; a determinism double-pass runs on every check.
+- **`--tla` escalation:** the winning spec transpiles mechanically to TLA+
+  and is checked by TLC when a Java toolchain is available.
+- **Release gate:** the seeded-bug A/B eval passes at parity or better in
+  both arms and at two model tiers (haiku-4.5, fable-5), with two bugs newly
+  caught at the cheap replay tier and zero dead specs.
+- `--legacy-bare-next` preserves the 1.x pipeline end-to-end for one release.
+
 ## How it works (two halves)
 
-An LLM derives a bare `next(state, action, data)` function from your code. Then
-Polygraph does **two** things with it — and the second is where bugs are found.
+An LLM derives a transition-function spec (v2 SAM strict module by default)
+from your code. Then Polygraph does **two** things with it — and the second is
+where bugs are found.
 
 **Half 1 — conformance (replay).** Check that the derived spec reproduces real
 execution traces.
@@ -37,16 +69,28 @@ execution traces.
 3. **Controls first** — a hand-written reference spec must score 100%; a mutated
    one must fail only its target windows. This proves the replay discriminates.
 4. **Generate + replay** — generate N independent specs, replay each, triage the
-   disagreements.
+   disagreements. With the v2 artifact each window also carries a **step
+   classification** — `rejected(reason)` / `identity-by-mutation` (the two good
+   no-op classes) vs `unhandled` (the spec neither acted nor rejected — itself
+   a finding): a failing no-op window now says *why* the spec did nothing.
 
 **Half 2 — model checking (the bug-finder).** Iterate the spec against
 invariants.
 
 5. **Write invariants** — rules encoding what the code *should* do ("a customer
    is never charged without a confirmed transaction"), as `invariants.mjs`.
-6. **Check** — `scripts/check.mjs` explores every reachable state of `next()`
-   from `init()` over a finite action/data domain and reports any state that
-   breaks a rule, with a shortest **counterexample path**.
+6. **Check** — `scripts/check.mjs` explores every reachable state of the spec
+   from `init()` over a finite action/data domain (v2: read from the module's
+   own `manifest()`, so nothing is silently excluded; every check also runs a
+   determinism double-pass) and reports any state that breaks a rule, with a
+   shortest **counterexample path**.
+7. **Escalate to TLC** (optional, `--tla`) — the winning spec is mechanically
+   transpiled to TLA+ (`out/tla/*.tla` + `.cfg`) and, when Java and
+   `tla2tools.jar` are available (`POLYGRAPH_JAVA`, `POLYGRAPH_TLA_JAR`),
+   checked by TLC: the report's Part 2 gains states-generated counts,
+   per-invariant verdicts, counterexample steps, and the list of invariants
+   that could not be carried (named, with reasons). A missing toolchain is a
+   note, not an error — the artifacts are still written.
 
 Why both halves are needed: **replay only catches a bug when the spec
 *disagrees* with the code — and a faithful spec doesn't.** On small, legible
@@ -71,7 +115,11 @@ description, it:
    (concrete enumerable values for every parameterized action field — this is
    how the model checker knows what to explore), terminal states, special
    rules.
-2. **Authors `init()`/`next(state, action, data)`** against that contract.
+2. **Authors the module** against that contract — the v2 SAM strict-profile
+   module by default (it must load strict-clean through the `validate()`
+   gate, so schema/shape errors block at stage boundaries instead of becoming
+   report lines); `init()`/`next(state, action, data)` with
+   `--legacy-bare-next`.
 3. **Proposes `invariants.mjs`** — rules encoding intent, not just behavior.
 4. **Self-repairs** — model-checks the code against its own invariants
    (exhaustive reachability, the same `check.mjs` engine `verify.mjs` uses)
@@ -91,8 +139,9 @@ description, it:
    it in a **separate process** as a sanity check (catches nondeterminism the
    in-process generation wouldn't expose).
 
-Everything lands in `<out>/`: `contract.json`, `next.cjs`, `invariants.mjs`,
-`traces/*.ndjson`, `polygen-report.md`.
+Everything lands in `<out>/`: `contract.json`, `next.cjs` (the module file —
+historical name; in the default mode it holds the v2 SAM module),
+`invariants.mjs`, `traces/*.ndjson`, `polygen-report.md`.
 
 ```bash
 node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/
@@ -105,7 +154,7 @@ transition logic inline), then run `/polygraph:verify` against REAL captured
 traces from the integrated code. That last step is what catches drift between
 the pure model and the glue code around it.
 
-**v1 is JS/TS only.** The generated `next()` is directly usable only in a
+**v1 is JS/TS only.** The generated module is directly usable only in a
 JS/TS codebase; porting a verified model to another language is a real,
 separate problem (the port itself would need its own differential check
 against the JS original) and is out of scope here.
@@ -243,6 +292,10 @@ node scripts/verify.mjs --contract contract.json --source src/machine.ts \
 # validate a corpus
 node scripts/validate_corpus.mjs contract.json traces/
 
+# escalate the winning spec to TLC (optional tier; toolchain via env)
+POLYGRAPH_JAVA=/path/to/java POLYGRAPH_TLA_JAR=/path/to/tla2tools.jar \
+  node scripts/verify.mjs --contract contract.json --traces traces/ --specs specs/ --tla --out out/
+
 # author NEW verifiable code from a feature description (needs ANTHROPIC_API_KEY)
 node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/
 ```
@@ -276,7 +329,9 @@ node scripts/verify.mjs --contract c.json --source src.ts --traces traces/ \
 - **Quickstart — the turnstile.** Runs the full controls path with **no API
   key**: `npm test` validates the corpus and runs the positive/negative
   controls. Step through it manually via `examples/turnstile/README.md`, and see
-  `examples/turnstile-sam/` for the same machine as a real SAM instance.
+  `examples/turnstile-sam/` for the same machine as a real SAM instance and
+  `examples/turnstile-v2/` for its v2 strict-profile spec + traces
+  (`npm run verify:turnstile-v2`).
 - **A full-loop run on a production system** — `examples/case-study-subscription.md`
   walks a real end-to-end run on a closed-source SaaS subscription-billing state
   machine: five independent LLM-derived specs, replayed against a real trace
@@ -305,15 +360,22 @@ commands/verify.md           the /polygraph:verify slash command (audit)
 commands/polygen.md          the /polygraph:polygen slash command (author)
 agents/verifier.md           the polygraph-verifier subagent (audit)
 agents/polygen.md            the polygen subagent (author)
-scripts/                     tv.mjs (replayer), generate, verify, build_prompt,
-                             polygen, polygen_prompts, contract_render,
-                             validate_corpus, models, instrument/*
+scripts/                     sam-tv.mjs (v2 replayer) + tv.mjs (legacy),
+                             check.mjs (model checker), to-tla.mjs +
+                             tla-check.mjs (TLC escalation tier), generate,
+                             verify, build_prompt, polygen, polygen_prompts,
+                             contract_render, validate_corpus, models,
+                             vendor/sam-pattern.cjs (sam-lib v2 bundle),
+                             instrument/*
 templates/                   contract.schema.json + contract.example.json
 examples/turnstile/          a tiny worked example + its controls (audit)
 examples/polygen-otp/        a from-scratch worked example (author)
 examples/polygen-cart-checkout/  a from-scratch worked example with a real
                              self-repair round (author)
-test/selftest.mjs            npm test — proves the audit pipeline without the API
+examples/turnstile-v2/       the same machine as a v2 SAM strict-profile spec
+examples/etcd-raft-v2/       a v2 reference spec + invariants for the TLC tier
+test/                        npm test — selftest (legacy), selftest-v2 (v2
+                             pipeline), selftest-prompts; no API needed
 assets/                      brand art
 ```
 
@@ -329,6 +391,30 @@ reliable spec target, and the approach found real defects in a production
 payment workflow. The `scripts/tv.mjs` replayer is that study's task-agnostic
 transition-validation runner, bundled here. Reference implementation and the
 full case study: <https://github.com/jdubray/SysMoBench-1>.
+
+**Why v2 is now the default artifact.** The paper's data (and its v2
+postscript) split Polygraph's two roles: as a **replay oracle**, bare-next
+plus one discipline sentence was the best performer for pure trace
+conformance — the control showed it was the *sentence*, not the structure,
+that carried the robustness, so it is kept **verbatim** in the v2 prompts:
+"Acceptors must guard against invalid proposals (an action that the
+implementation does not act on in the current state must be a no-op via
+`reject(reason)`, NOT a throw)". As a **checkable substrate**, the v2 strict
+module is strictly stronger: schema-enforced wiring (no silent dead specs),
+sealed model (no hidden state), observable rejection, manifest-declared
+domains, determinism checking, and a mechanical 20/20 path to TLC. One
+artifact ships for both roles because the N-spec voting layer absorbs exactly
+what v2 gives up (occasional individual conformance misses) while v2
+eliminates what voting cannot absorb (dead specs, hidden state, vacuous
+exploration).
+
+House rule (from sam-lib #29, fixed structurally in 2.0.0-alpha.2): never
+call `instance({}).state()` — on machines whose model declares a key named
+`state` it returns data, not the method. The pipeline and the generated
+specs use `getState()`/`setState()` exclusively.
+
+(Lineage note: the repo's disk name, `bare-next-verify`, records the original
+bare-next artifact this project started from; the repo is not being renamed.)
 
 If you use Polygraph in your work, please cite the paper (see `CITATION.cff`).
 

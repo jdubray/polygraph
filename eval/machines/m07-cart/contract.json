@@ -10,6 +10,10 @@
     "REMOVE":   { "dataFields": { "qty": "number" } },
     "CHECKOUT": { "dataFields": {} }
   },
+  "dataDomain": {
+    "ADD":    { "qty": [1, 2] },
+    "REMOVE": { "qty": [1, 2] }
+  },
   "terminalStates": ["checked_out"],
   "specialRules": [],
   "noOpRule": "An action that does not apply in the current status yields post == pre."

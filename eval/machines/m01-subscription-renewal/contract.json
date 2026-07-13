@@ -10,6 +10,10 @@
     "DUNNING_RETRY": { "dataFields": { "result": "'ok' | 'declined' | 'err5xx'" } },
     "CANCEL":        { "dataFields": {} }
   },
+  "dataDomain": {
+    "RENEW_CHARGE":  { "result": ["ok", "declined", "err5xx"] },
+    "DUNNING_RETRY": { "result": ["ok", "declined", "err5xx"] }
+  },
   "terminalStates": ["canceled"],
   "specialRules": [
     { "name": "5xx-is-transient", "note": "An ambiguous 5xx result should leave the row unchanged (no charge confirmed), in both the renewal and dunning paths.", "whenAction": "RENEW_CHARGE" }

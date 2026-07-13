@@ -21,38 +21,13 @@
 //   2. deepEq uses the shared canonical stringify (key-order-insensitive) from
 //      load-spec.mjs, so replay and the model checker share ONE definition of
 //      state equality.
-// KEEP IN SYNC: the loader below is an internal copy of loadSpec() in
-// scripts/load-spec.mjs (which check.mjs uses) — apply loader changes in both.
+// The loader (console-shadowed CJS-in-vm, vendored-SAM require patch) is the
+// SHARED one in scripts/load-spec.mjs — the former internal copy was
+// consolidated away, so replay and the model checker can never disagree about
+// which specs load. Projection-rule semantics below are unchanged from the
+// original runner.
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { resolve, dirname } from 'node:path';
-import vm from 'node:vm';
-import { stable, stderrConsole } from './load-spec.mjs';
-
-// Load a spec as a CommonJS module (module.exports = { init, next }) regardless
-// of the surrounding package's "type" field or the file extension. We wrap the
-// file in the standard CommonJS parameter list (module, exports, require,
-// __filename, __dirname) using vm.compileFunction — the same mechanism Node's
-// own CJS loader uses. The extra `console` parameter shadows the global for all
-// code in the module (top-level AND inside init()/next()), redirecting spec
-// logging to stderr so the stdout JSON protocol stays parseable. The spec
-// source is the compiled function BODY, not interpolated into a template, so
-// there is no injection surface beyond what require() of the same file would
-// already do (executing the spec module is the replayer's purpose).
-// Projection-rule semantics below are unchanged from the original runner.
-function loadSpec(specPath) {
-  const abs = resolve(specPath);
-  const code = readFileSync(abs, 'utf-8');
-  const module = { exports: {} };
-  const require = createRequire(abs);
-  const compiled = vm.compileFunction(
-    code,
-    ['module', 'exports', 'require', '__filename', '__dirname', 'console'],
-    { filename: abs }
-  );
-  compiled(module, module.exports, require, abs, dirname(abs), stderrConsole);
-  return module.exports;
-}
+import { stable, loadSpec } from './load-spec.mjs';
 
 const req = JSON.parse(readFileSync(0, 'utf-8'));
 

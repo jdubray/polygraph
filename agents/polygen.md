@@ -1,6 +1,6 @@
 ---
 name: polygen
-description: Autonomously author NEW verifiable stateful code from a feature description — draft a contract, author init()/next(), self-repair against reachable invariant violations, synthesize a demo/regression corpus — and return the report. Use to generate a state machine, workflow, or reducer that comes out pre-verified, without step-by-step supervision.
+description: Autonomously author NEW verifiable stateful code from a feature description — draft a contract, author a SAM v2 strict-profile module (--legacy-bare-next for init()/next()), self-repair against reachable invariant violations, synthesize a demo/regression corpus — and return the report. Use to generate a state machine, workflow, or reducer that comes out pre-verified, without step-by-step supervision.
 tools: Read, Write, Bash, Glob, Grep
 effort: high
 ---
@@ -45,8 +45,10 @@ Procedure:
    failure and the exact stage it occurred at. Do not retry silently beyond
    what the script itself already does.
 
-Return: the contract (noting if model-drafted), the authored `next()`/`init()`
-code, the proposed invariants (noting they are proposed, not authoritative),
+Return: the contract (noting if model-drafted), the authored module (v2 SAM
+strict-profile by default — it must have loaded strict-clean through the
+`validate()` gate; legacy `next()`/`init()` under `--legacy-bare-next`), the
+proposed invariants (noting they are proposed, not authoritative),
 the repair-loop outcome with counterexamples for any unresolved violation, the
 corpus/replay summary, and the standing handoff instructions — wire `next()`
 into the real handler (call it, do not reimplement the logic inline), then

@@ -1,16 +1,16 @@
 // Shared spec-loading + canonical-state helpers.
 //
 // ONE loader and ONE canonical stringify for the whole pipeline, so the replay
-// half (tv.mjs) and the model-checking half (check.mjs) can never disagree
-// about which specs load or which states are equal. tv.mjs keeps an internal
-// copy of the loader (it is invoked standalone as a child process and stays
-// close to the original SysMoBench runner) — see the keep-in-sync comments in
-// both files.
+// half (tv.mjs / sam-tv.mjs) and the model-checking half (check.mjs) can never
+// disagree about which specs load or which states are equal. tv.mjs and
+// sam-tv.mjs (standalone child processes) import the loader from here — the
+// former internal copy in tv.mjs was consolidated away.
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { Console } from 'node:console';
 import vm from 'node:vm';
+import { SAM_LIB_PATH, SAM_LIB_SPECIFIERS } from './sam-lib.mjs';
 
 // Specs may console.log (LLM output often appends demo logging). Any stdout
 // write from a spec would corrupt tv.mjs's stdout JSON protocol, so the loader
@@ -30,7 +30,17 @@ export function loadSpec(specPath) {
   const abs = resolve(specPath);
   const code = readFileSync(abs, 'utf-8');
   const module = { exports: {} };
-  const require = createRequire(abs);
+  const baseRequire = createRequire(abs);
+  // Require-patch: a spec's require of the SAM library resolves to the VENDORED
+  // 2.0.0-alpha bundle (scripts/vendor/sam-pattern.cjs), never to whatever
+  // version happens to be installed near the spec — the v2 strict surface the
+  // pipeline depends on is pinned by construction. All other specifiers pass
+  // through untouched. (v2 is backward compatible, so legacy SAM specs loaded
+  // through this loader keep working.)
+  const require = Object.assign(
+    (id) => (SAM_LIB_SPECIFIERS.includes(id) ? baseRequire(SAM_LIB_PATH) : baseRequire(id)),
+    baseRequire
+  );
   const compiled = vm.compileFunction(
     code,
     ['module', 'exports', 'require', '__filename', '__dirname', 'console'],

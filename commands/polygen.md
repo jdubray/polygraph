@@ -1,6 +1,6 @@
 ---
-description: Run polygen — draft a contract from a feature description, author a verifiable next(state, action, data) implementation against it, self-repair against reachable invariant violations, and synthesize a demo/regression trace corpus.
-argument-hint: --intent "<feature description>" --model <id> [--contract <c.json>] [--lang javascript] [--out out/] [--repair-max 3] [--max-tokens 32000]
+description: Run polygen — draft a contract from a feature description, author a verifiable SAM v2 strict-profile module against it (--legacy-bare-next for a bare next(state, action, data) implementation), self-repair against reachable invariant violations, and synthesize a demo/regression trace corpus.
+argument-hint: --intent "<feature description>" --model <id> [--contract <c.json>] [--lang javascript] [--out out/] [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]
 allowed-tools: Bash, Read, Write
 ---
 
@@ -15,7 +15,7 @@ This drives `${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs`:
 node ${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs \
   --intent "<feature description>" --model <id> \
   [--contract <c.json>] [--lang javascript] [--out out/] \
-  [--repair-max 3] [--max-tokens 32000]
+  [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]
 ```
 
 Always needs `ANTHROPIC_API_KEY` and an explicit `--model` (no default — pass
@@ -27,7 +27,11 @@ What it does, in order:
    supply with `--contract`) — the observable state, action alphabet,
    `dataDomain` (concrete enumerable values — required for model checking to
    see parameterized actions at all), terminal states, and special rules.
-2. Authors `init()`/`next(state, action, data)` against that contract.
+2. Authors the module against that contract — by default a SAM v2
+   strict-profile module (named intents/schemas/domains, keyed acceptors,
+   `reject(reason)`, sealed model; must load strict-clean through the
+   `validate()` gate), or `init()`/`next(state, action, data)` with
+   `--legacy-bare-next`.
 3. Proposes `invariants.mjs` — rules encoding intent, not just behavior.
 4. Self-repairs: model-checks the code against its own invariants (exhaustive
    reachability, same engine as `check.mjs`), and on a reachable violation,
@@ -45,8 +49,9 @@ Steps to perform:
    (flag as proposed, not authoritative), the repair-loop outcome (converged
    or not), and the corpus/replay results.
 3. Tell the user the next steps explicitly: review the contract and
-   invariants by hand, wire `next()` into the real handler/reducer (call it,
-   don't reimplement the transition logic inline), then run
+   invariants by hand, wire the module into the real handler/reducer (v2:
+   dispatch `actions[name](data)` and read `getState()`; legacy: call
+   `next()` — either way call it, don't reimplement the logic inline), then run
    `/polygraph:verify` against REAL captured traces after integration to
    catch drift between this pure model and the glue code around it.
 

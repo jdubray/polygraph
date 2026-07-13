@@ -79,7 +79,7 @@ async function polygraphArm(dir, source, contract, fetchImpl, apiKey) {
   if (!specPaths.length) return { error: `no specs generated: ${gens.map((g) => g.error).join('; ')}` };
 
   const windows = loadWindows(join(dir, 'traces'));
-  const matrix = specPaths.map((p) => replaySpec(p, windows));
+  const matrix = specPaths.map((p) => replaySpec(p, windows, 'legacy')); // A/B arms are bare-next artifacts
   const primaryKey = (typeof contract.stateKeys[0] === 'string' ? contract.stateKeys[0] : contract.stateKeys[0].name);
   const finding = windows
     .map((w, wi) => ({ w, verdict: classify(matrix.map((row) => row[wi])) }))

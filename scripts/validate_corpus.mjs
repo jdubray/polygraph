@@ -20,6 +20,7 @@ function stateField(contract) {
 export function validateCorpus(contract, tracePath) {
   const sf = stateField(contract);
   const terminals = new Set(contract.terminalStates || []);
+  const declaredActions = new Set(Object.keys(contract.actions || {}));
   const ruleWindows = {}; // ruleName -> count, via specialRules[].matches (optional)
   for (const r of contract.specialRules || []) ruleWindows[r.name] = 0;
 
@@ -42,6 +43,14 @@ export function validateCorpus(contract, tracePath) {
       const pre = w.pre[sf];
       const key = `${pre}|${w.action}`;
       coverage[key] = (coverage[key] || 0) + 1;
+
+      // undeclared action: an ERROR, not a warning. The v2 strict pipeline
+      // cannot no-op an action outside the contract alphabet (schemas and
+      // acceptors are keyed by name), so a corpus that exercises one is a
+      // contract gap that must be fixed at the contract, not absorbed.
+      if (!declaredActions.has(w.action)) {
+        problems.push(`${scenario}[${i}]: action '${w.action}' is not declared in the contract's actions`);
+      }
 
       // chaining: post[k] == pre[k+1]
       if (i + 1 < windows.length && !eq(w.post, windows[i + 1].pre)) {

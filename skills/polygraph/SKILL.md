@@ -1,6 +1,6 @@
 ---
 name: polygraph
-description: A polygraph for your state machine. Audit a stateful piece of code end-to-end: YOU (the agent) instrument a copy, build any test doubles needed to run it, and capture real execution traces, then derive a bare next(state, action, data) transition function from its source with an LLM, replay the traces against it, and surface every disagreement as a spec-error, a code-finding, or a contract-error. Use when the user wants to verify a state machine, workflow, reducer, or protocol implementation against its own behavior; check whether code does what it is believed to do; or reproduce/triage suspected state-handling defects. Trigger phrases: "polygraph", "verify this state machine", "check my reducer/workflow", "does this code do what I think", "audit the payment/order/session flow", "bare next / trace validation".
+description: A polygraph for your state machine. Audit a stateful piece of code end-to-end: YOU (the agent) instrument a copy, build any test doubles needed to run it, and capture real execution traces, then derive a transition-function spec from its source with an LLM (default artifact: a SAM v2 strict-profile module — named intents/schemas/domains, keyed acceptors, observable reject(reason), sealed model; --legacy-bare-next keeps the original bare next(state, action, data) contract), replay the traces against it, model-check it against invariants, and surface every disagreement as a spec-error, a code-finding, or a contract-error. Optional --tla tier escalates the winning spec to TLC. Use when the user wants to verify a state machine, workflow, reducer, or protocol implementation against its own behavior; check whether code does what it is believed to do; or reproduce/triage suspected state-handling defects. Trigger phrases: "polygraph", "verify this state machine", "check my reducer/workflow", "does this code do what I think", "audit the payment/order/session flow", "bare next / trace validation", "SAM spec verification".
 ---
 
 # Polygraph — a polygraph for your state machine
@@ -23,6 +23,25 @@ All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Node ≥ 20 is required
 Generation needs `ANTHROPIC_API_KEY` and an explicit model (recommend
 `sonnet-5` or `fable-5`; there is no default). Replay and controls need no key.
 
+**The artifact (v0.6):** by default the derived spec is a **SAM v2
+strict-profile module** (`@cognitive-fab/sam-pattern` 2.0.0-alpha, vendored at
+`scripts/vendor/sam-pattern.cjs`): named intents with per-intent schemas and
+finite payload **domains** declared in a manifest, acceptors keyed by intent
+name, every ignored action an observable `reject(reason)`, and a sealed model
+(no hidden state). This buys evidence bare-next could not produce: a failing
+no-op window now says *why* the spec did nothing (`rejected(reason)` /
+`identity-by-mutation` / `unhandled`), dead wiring is a load-time error
+instead of a silent zero, the checker's exploration domains come from the
+module's own manifest, every check runs a determinism double-pass, and the
+spec is mechanically transpilable to TLA+ (`--tla`). The original bare
+`next(state, action, data)` artifact remains available end-to-end behind
+`--legacy-bare-next` for one release.
+
+House rule (from sam-lib #29, fixed structurally in 2.0.0-alpha.2): never
+rely on `instance({}).state()` — on machines whose primary control key is
+`state` it returns data, not the method. The pipeline and the prompts use
+`getState()`/`setState()` exclusively.
+
 ## Step 1 — Define the contract (do this WITH the user)
 
 Produce a `contract.json` (schema and example under
@@ -36,10 +55,20 @@ Produce a `contract.json` (schema and example under
   action, one handled message).
 - **initState**, **terminalStates**, and **specialRules** (guards / rewrites /
   special cases that live outside the main state table — these are the rules
-  models most often miss, so flag them for extra trace coverage).
+  models most often miss, so flag them for extra trace coverage). In the v2
+  pipeline specialRules render as named rejection requirements, so the
+  replayer's rejection-reason column has something contract-anchored to check.
+- **dataDomain** — REQUIRED in the v2 default for every action with data
+  fields: a finite list of representative payload values per field. It is the
+  generation domain, the model-checking exploration domain, and the TLC
+  transpilation domain; a gap blocks generation loudly (no silent exclusion).
 
 State the **no-op rule** explicitly: an action arriving where the code ignores
-it yields `post == pre`. This makes the replay total.
+it yields `post == pre`. This makes the replay total. In the v2 artifact the
+spec makes that no-op *observable* — it must `reject(reason)`, never throw.
+Every action that appears in the traces must be declared in the contract: the
+strict module has no silent-unknown-action fallback (an undeclared action
+classifies as a contract-error, which is what it is).
 
 ## Step 2 — Capture traces from the code (YOU run this, autonomously)
 
@@ -97,6 +126,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs \
 This builds a derivation-mode prompt (it never describes per-state semantics),
 generates N independent specs, replays each, and writes `out/findings.md` and
 `out/findings.json`. Use `--n 3` or more; a single generation may omit a rule.
+Add `--legacy-bare-next` to run the whole loop on the legacy bare-next
+artifact instead (prompt, replayer, and checker domains all follow the flag).
 
 If every window comes back `unscoreable-all`, the generations were empty — with
 a reasoning model (e.g. `claude-sonnet-5`) the thinking block spent the token
@@ -125,9 +156,29 @@ The half that actually finds bugs is iterating the spec against invariants.
   path from init. A violation reached by ALL generated specs is a strong signal
   (every independent reading reaches the bad state). Walk the counterexample in
   the source.
+- In the v2 default, exploration domains come from the module's own
+  `manifest()` (no `buildDomain()` inference, so nothing is silently excluded)
+  and every check runs a determinism double-pass — a `nondeterminism` finding
+  means two identical explorations diverged (a clock/random read in the spec).
 - Honest limits: exploration is bounded (report cap hits); and a hazard that
   depends on an EXTERNAL service (not in the observable state) is invisible to
   reachability — it needs a real sandbox probe, not a bigger search.
+
+## Step 4c — TLC escalation (optional, `--tla`)
+
+Add `--tla` to `verify.mjs` to escalate the winning live spec (most windows
+passed; tie → first) from "bounded exploration says" to "TLC says": the spec
+is mechanically transpiled to TLA+ (`out/tla/*.tla` + `.cfg`), state
+invariants whose predicates stay inside the translatable subset are carried
+along as TLA+ INVARIANTs, and TLC runs when a toolchain is available
+(`POLYGRAPH_JAVA` or `java` on PATH, plus `POLYGRAPH_TLA_JAR` pointing at
+`tla2tools.jar`). The findings report gains a "TLC escalation" subsection:
+states generated/distinct, a per-invariant verdict table, counterexample
+steps on violation, and every skipped invariant named with its reason
+(transition invariants are skipped by kind; check.mjs still checks them in
+JS). A missing toolchain is a note, not an error — the `.tla`/`.cfg` are
+still written for running elsewhere. A transpiler refusal names the offending
+construct: transpilability is a checkable property of the spec.
 
 ## Step 5 — Triage each disagreement (do this WITH the user)
 
@@ -140,8 +191,17 @@ The half that actually finds bugs is iterating the spec against invariants.
 - **spec-error** (some specs pass, some fail): usually one generation missed a
   rule; check the majority. Note *which* rule — it is typically a special case
   outside the main state table, and worth a code comment for the next reader.
-- **unscoreable in all specs**: the generated modules did not load or export
-  `next()`. Fix generation, not the code.
+- **unscoreable in all specs**: the generated modules did not load or lack the
+  expected surface. Fix generation, not the code.
+
+In the v2 default each finding row also carries a **step classification** per
+live spec. `rejected(reason)` and `identity-by-mutation` are the two GOOD
+no-op classes (the spec explicitly declined, or explicitly re-committed the
+same state); `unhandled` — the spec neither acted nor rejected — is itself a
+finding (usually a missing acceptor case, or a rule the code has that the
+contract does not). A *uniform* rejection-reason on a code-finding window
+usually means the contract took a side (a specialRule rendered as a rejection
+requirement) that the code did not — triage it as a contract question first.
 
 When every window is consistent across all specs, report it as exactly what it
 is: the code's observable behavior matches an independent reading of its source.
@@ -161,5 +221,26 @@ checked against an explicit environment.
 - The spec must be deterministic. Model timeouts and other time-driven behavior
   as explicit actions issued by the environment, never as a clock read.
 
+## Provenance — why these two artifacts, and why v2 is the default
+
+The design follows the SysMoBench paper's findings (and its v2 postscript).
+The paper's data splits Polygraph's two roles: as a **replay oracle**, the
+bare-next artifact plus one discipline sentence was the best performer for
+pure trace conformance — and the control showed it was the sentence, not the
+structure, that carried the robustness. That sentence is kept **verbatim** in
+the v2 prompts: "Acceptors must guard against invalid proposals (an action
+that the implementation does not act on in the current state must be a no-op
+via `reject(reason)`, NOT a throw)". As a **checkable substrate**, the v2
+strict module is strictly stronger: schema-enforced wiring (no silent dead
+specs), sealed model (no hidden state), observable rejection, manifest-
+declared domains (closing the silent-exclusion gap), determinism checking,
+and a mechanical path to TLC. Polygraph ships one artifact for both roles —
+v2 — because the N-spec voting layer absorbs exactly the failure mode v2
+gives up (occasional individual conformance misses) while v2 eliminates the
+failure modes voting cannot absorb (dead specs, hidden state, vacuous
+exploration).
+
 Reference implementation and origin: the SysMoBench "finixpos" study at
-<https://github.com/jdubray/SysMoBench-1>.
+<https://github.com/jdubray/SysMoBench-1>. (Lineage note: this repo's disk
+name, `bare-next-verify`, records the original bare-next artifact; the repo
+is not being renamed.)

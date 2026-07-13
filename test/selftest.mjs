@@ -38,9 +38,9 @@ ok('no under-covered special rules', rep.underCovered.length === 0);
 
 console.log('2) controls (positive + negative) via the replayer');
 const windows = loadWindows(join(EX, 'traces'));
-const refStatuses = replaySpec(join(EX, 'specs', 'reference.js'), windows);
+const refStatuses = replaySpec(join(EX, 'specs', 'reference.js'), windows, 'legacy');
 ok('reference passes all 12 windows', refStatuses.every((s) => s === 'pass'));
-const mutStatuses = replaySpec(join(EX, 'specs-mutant', 'mutant.js'), windows);
+const mutStatuses = replaySpec(join(EX, 'specs-mutant', 'mutant.js'), windows, 'legacy');
 const failIdx = mutStatuses.map((s, i) => (s === 'fail' ? i : -1)).filter((i) => i >= 0);
 ok('mutant fails exactly 3 windows', failIdx.length === 3);
 ok('mutant failures are all PUSH-while-LOCKED no-ops',
@@ -53,7 +53,7 @@ const mixDir = join(TMP, 'mix');
 mkdirSync(mixDir, { recursive: true });
 cpSync(join(EX, 'specs', 'reference.js'), join(mixDir, 'spec_0.js'));
 cpSync(join(EX, 'specs-mutant', 'mutant.js'), join(mixDir, 'spec_1.js'));
-const mix = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: mixDir, out: join(TMP, 'out-mix') });
+const mix = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: mixDir, out: join(TMP, 'out-mix') });
 ok('mix: 9 consistent windows', mix.summary.consistent === 9);
 ok('mix: 3 spec-error windows', mix.summary.specError === 3);
 ok('mix: 0 code-finding windows', mix.summary.codeFinding === 0);
@@ -62,13 +62,16 @@ ok('mix: 0 code-finding windows', mix.summary.codeFinding === 0);
 const soloDir = join(TMP, 'solo');
 mkdirSync(soloDir, { recursive: true });
 cpSync(join(EX, 'specs-mutant', 'mutant.js'), join(soloDir, 'spec_0.js'));
-const solo = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: soloDir, out: join(TMP, 'out-solo') });
+const solo = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: soloDir, out: join(TMP, 'out-solo') });
 ok('solo: 9 consistent windows', solo.summary.consistent === 9);
 ok('solo: 3 code-finding windows', solo.summary.codeFinding === 3);
 ok('findings.md written', readFileSync(join(TMP, 'out-solo', 'findings.md'), 'utf-8').includes('verification findings'));
 
 console.log('4) prompt build (derivation mode — no per-state semantics leaked)');
-const prompt = buildPrompt(contract, readFileSync(join(EX, 'turnstile.js'), 'utf-8'), { filePath: 'turnstile.js', lang: 'javascript' });
+// mode 'legacy' is explicit here: the DEFAULT prompt is now the v2 SAM strict
+// profile (covered by test/selftest-prompts.mjs); this suite pins the
+// --legacy-bare-next arm.
+const prompt = buildPrompt(contract, readFileSync(join(EX, 'turnstile.js'), 'utf-8'), { filePath: 'turnstile.js', lang: 'javascript', mode: 'legacy' });
 ok('prompt embeds the source', prompt.includes('class Turnstile'));
 ok('prompt lists the state keys', prompt.includes('`state`') && prompt.includes('`coins`'));
 ok('prompt lists the actions', prompt.includes("'COIN'") && prompt.includes("'PUSH'"));
@@ -77,7 +80,7 @@ ok('prompt states the no-op rule', /ignored action must\s+return the state uncha
 // semantics (the source may legitimately describe its own behavior in comments;
 // that is what the model derives from). Build with a neutral source and confirm
 // no per-action behavior is described by our own scaffolding.
-const neutralPrompt = buildPrompt(contract, '// (source omitted for this check)', { filePath: 'x.js', lang: 'javascript' });
+const neutralPrompt = buildPrompt(contract, '// (source omitted for this check)', { filePath: 'x.js', lang: 'javascript', mode: 'legacy' });
 ok('template instructs derivation from source (not description)',
   /Model the observable single-step behavior of the real code\s+as implemented in the source above/.test(neutralPrompt));
 ok('template adds no per-(state,action) transition table',
@@ -133,7 +136,7 @@ ok('SAM: PUSH-while-LOCKED no-op has post == pre',
 // The SAM-captured corpus is validated by the same controls path: the existing
 // hand-written reference next() must score 100% on it.
 ok('SAM: reference spec scores 100% on the SAM-captured corpus',
-  replaySpec(join(EX, 'specs', 'reference.js'), samWindows).every((s) => s === 'pass'));
+  replaySpec(join(EX, 'specs', 'reference.js'), samWindows, 'legacy').every((s) => s === 'pass'));
 
 console.log('7) model checker (scripts/check.mjs) — iterate next() against invariants');
 // A tiny counter machine with an off-by-one: it should lock at 3 but locks at 4,
@@ -178,13 +181,13 @@ ok('literal {state_keys} in source is not rewritten',
 const emptyDir = join(TMP, 'empty-specs');
 mkdirSync(emptyDir, { recursive: true });
 let threw = false;
-try { await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: emptyDir, out: join(TMP, 'out-empty') }); }
+try { await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: emptyDir, out: join(TMP, 'out-empty') }); }
 catch (e) { threw = /no specs found/.test(e.message); }
 ok('--specs with zero matching files throws (no false clean)', threw);
 const cjsDir = join(TMP, 'cjs-specs');
 mkdirSync(cjsDir, { recursive: true });
 cpSync(join(EX, 'specs', 'reference.js'), join(cjsDir, 'reference.cjs'));
-const cjsRun = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: cjsDir, out: join(TMP, 'out-cjs') });
+const cjsRun = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: cjsDir, out: join(TMP, 'out-cjs') });
 ok('.cjs reference spec is picked up and passes', cjsRun.summary.specs === 1 && cjsRun.summary.consistent === 12);
 
 // (8c) stdout integrity: a spec that console.logs (top-level AND inside next())
@@ -197,7 +200,7 @@ const _refNext = module.exports.next;
 module.exports.next = (s, a, d) => { console.log('runtime noise'); return _refNext(s, a, d); };
 `, 'utf-8');
 ok('spec with console.log replays pass (stdout protocol intact)',
-  replaySpec(noisySpec, windows).every((s) => s === 'pass'));
+  replaySpec(noisySpec, windows, 'legacy').every((s) => s === 'pass'));
 
 // (8d) dead-spec partition: one dead spec among live ones no longer floods
 // every window as spec-error; all-dead yields unscoreable-all, not consistent.
@@ -205,13 +208,13 @@ const deadMixDir = join(TMP, 'dead-mix');
 mkdirSync(deadMixDir, { recursive: true });
 cpSync(join(EX, 'specs', 'reference.js'), join(deadMixDir, 'spec_0.js'));
 writeFileSync(join(deadMixDir, 'spec_1.js'), 'syntax error(', 'utf-8');
-const deadMix = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-deadmix') });
+const deadMix = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-deadmix') });
 ok('dead spec excluded: windows classify from live specs only', deadMix.summary.consistent === 12 && deadMix.summary.specError === 0);
 ok('dead spec is named in the summary', deadMix.summary.deadSpecs.length === 1 && deadMix.summary.deadSpecs[0] === 'spec_1.js');
 const allDeadDir = join(TMP, 'all-dead');
 mkdirSync(allDeadDir, { recursive: true });
 writeFileSync(join(allDeadDir, 'spec_0.js'), 'syntax error(', 'utf-8');
-const allDead = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-alldead') });
+const allDead = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-alldead') });
 ok('all specs dead -> unscoreable-all, never consistent', allDead.summary.unscoreableAll === 12 && allDead.summary.consistent === 0);
 
 // (8e) invariant phase: a dead spec surfaces as an error and does NOT dilute
@@ -219,14 +222,14 @@ ok('all specs dead -> unscoreable-all, never consistent', allDead.summary.unscor
 const invFile = join(TMP, 'inv.mjs');
 writeFileSync(invFile, `export const stateInvariants = [{ name: 'never-unlocked', pred: (s) => s.state !== 'UNLOCKED' }];\nexport const transitionInvariants = [];\n`, 'utf-8');
 // (turnstile coins are unbounded, so bound exploration: capHit must PROPAGATE.)
-const invMix = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-invmix'), invariants: invFile, 'max-states': 50 });
+const invMix = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-invmix'), invariants: invFile, 'max-states': 50 });
 ok('invariant strength counts only specs the checker ran (all-specs, not diluted)',
   invMix.invReport.violations.length === 1 && invMix.invReport.violations[0].strength === 'all-specs');
 ok('checker-failure on a spec is surfaced as an error', invMix.invReport.errors.length === 1 && /spec_1\.js/.test(invMix.invReport.errors[0]));
 ok('capHit propagates into invReport (bounded exploration is visible)', invMix.invReport.capHit === true);
 ok('CAP HIT is rendered in findings.md',
   readFileSync(join(TMP, 'out-invmix', 'findings.md'), 'utf-8').includes('CAP HIT'));
-const invDead = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-invdead'), invariants: invFile, 'max-states': 50 });
+const invDead = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-invdead'), invariants: invFile, 'max-states': 50 });
 ok('all specs dead -> model check reports DID NOT RUN',
   invDead.invReport.checkedSpecs === 0 && readFileSync(join(TMP, 'out-invdead', 'findings.md'), 'utf-8').includes('DID NOT RUN'));
 
@@ -254,7 +257,7 @@ writeFileSync(join(nestedTrace, 's1.ndjson'),
 const nestedSpec = join(TMP, 'nested-spec.js');
 writeFileSync(nestedSpec, `module.exports = { init: () => ({ s: { a: 1, b: 2 } }), next: (st) => ({ s: { b: st.s.b, a: st.s.a } }) };`, 'utf-8');
 ok('nested-object state with reordered keys replays pass (canonical equality)',
-  replaySpec(nestedSpec, loadWindows(nestedTrace)).every((s) => s === 'pass'));
+  replaySpec(nestedSpec, loadWindows(nestedTrace), 'legacy').every((s) => s === 'pass'));
 
 // (8i) guarded shared API call: HTTP errors and empty responses are failures,
 // never parseable-as-clean text (the eval scores them unscoreable).

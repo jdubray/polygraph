@@ -1,7 +1,7 @@
 {
   "name": "polygraph",
-  "version": "0.5.1",
-  "description": "A polygraph for your state machine: an LLM derives a bare next(state, action, data) spec from your code, then Polygraph replays real traces against it (conformance) AND model-checks it against invariants (finds bugs by exhaustive iteration). Also includes polygen: author NEW verifiable code from a feature description.",
+  "version": "2.0.0",
+  "description": "A polygraph for your state machine: an LLM derives a transition-function spec from your code (default: SAM v2 strict-profile module; --legacy-bare-next for the bare next(state, action, data) artifact), then Polygraph replays real traces against it (conformance) AND model-checks it against invariants (finds bugs by exhaustive iteration), with an optional TLC escalation tier (--tla). Also includes polygen: author NEW verifiable code from a feature description.",
   "type": "module",
   "license": "Apache-2.0",
   "keywords": [
@@ -17,13 +17,18 @@
     "code-generation"
   ],
   "scripts": {
-    "test": "node test/selftest.mjs",
-    "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --out examples/turnstile/out",
+    "test": "node test/selftest.mjs && node test/selftest-v2.mjs && node test/selftest-prompts.mjs",
+    "test:legacy": "node test/selftest.mjs",
+    "test:v2": "node test/selftest-v2.mjs",
+    "test:prompts": "node test/selftest-prompts.mjs",
+    "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --legacy-bare-next --out examples/turnstile/out",
+    "verify:turnstile-v2": "node scripts/verify.mjs --contract examples/turnstile-v2/contract.json --traces examples/turnstile-v2/traces --specs examples/turnstile-v2/specs --out examples/turnstile-v2/out",
     "check": "node scripts/check.mjs",
     "polygen": "node scripts/polygen.mjs",
     "eval:mechanism": "node eval/mechanism-eval.mjs",
     "eval:check": "node eval/check-eval.mjs",
-    "eval:ab": "node eval/skill-ab.mjs"
+    "eval:ab": "node eval/skill-ab.mjs",
+    "eval:ab-v2": "node eval/ab-v2.mjs"
   },
   "bin": {
     "polygraph": "scripts/verify.mjs",
@@ -33,7 +38,10 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@cognitive-fab/sam-fsm": "^1.0.0",
-    "@cognitive-fab/sam-pattern": "^1.6.1"
+    "@cognitive-fab/sam-fsm": "^2.0.0"
+  },
+  "dependencies": {
+    "acorn": "^8.17.0",
+    "@cognitive-fab/sam-pattern": "^2.0.0"
   }
 }
