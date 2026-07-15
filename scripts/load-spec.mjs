@@ -51,12 +51,19 @@ export function loadSpec(specPath) {
 }
 
 /**
- * Canonical JSON stringify: key-order-insensitive, undefined normalized to
- * null. THE state-equality definition for the whole pipeline (replay diff and
- * checker visited-set alike) — two states are equal iff stable(a) === stable(b).
+ * Canonical stringify: key-order-insensitive. THE state-equality definition
+ * for the whole pipeline (replay diff and checker visited-set alike) — two
+ * states are equal iff stable(a) === stable(b).
+ *
+ * undefined, NaN and ±Infinity render as DISTINCT non-JSON sentinels, never
+ * as 'null': trace windows come from JSON.parse and can only contain null,
+ * so a spec that DROPPED a field (undefined) or computed NaN must NOT compare
+ * equal to a trace value of null — that would score a failing window as a
+ * pass.
  */
 export function stable(v) {
-  if (v === undefined) return 'null';
+  if (v === undefined) return 'undefined';
+  if (typeof v === 'number' && !Number.isFinite(v)) return String(v); // NaN / Infinity / -Infinity
   if (v === null || typeof v !== 'object') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
   return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';

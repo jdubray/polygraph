@@ -24,7 +24,7 @@
 //
 // Usage (module): polygen({ intent, contractPath?, lang, model, apiKey, out, repairMax, maxTokens, legacyBareNext })
 // Usage (CLI):     node polygen.mjs --intent "<text>" --model <id> [--contract <c.json>] [--lang javascript] [--out out/] [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { callMessages, extractSpec, DEFAULT_MAX_TOKENS } from './generate.mjs';
@@ -56,14 +56,22 @@ const { isSamV2Module } = samAdapter;
  * Heuristic (string presence, not a real reference analysis) — flags
  * likely gaps, not a proof either way.
  */
-function findDataDomainRefGaps(contract, code) {
+export function findDataDomainRefGaps(contract, code) {
   const gaps = [];
   for (const [action, fields] of Object.entries(contract.dataDomain || {})) {
     for (const [field, values] of Object.entries(fields)) {
       for (const v of values) {
+        // Strings: quoted-literal presence. Numbers/booleans: standalone-token
+        // match — bare `code.includes(String(v))` made these UNFALSIFIABLE
+        // (any digit in a comment matched `3`; every module contains `true`
+        // in `strict: true`). Token matching still can't tell `true` the
+        // domain value from `true` the option flag — booleans stay a weak
+        // signal; the checker's manifest-driven exploration + coverage notes
+        // carry the real guarantee for those.
+        const token = String(v).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
         const found = typeof v === 'string'
           ? code.includes(`'${v}'`) || code.includes(`"${v}"`)
-          : code.includes(String(v));
+          : new RegExp(`(?<![\\w.$])${token}(?![\\w.$])`).test(code);
         if (!found) gaps.push(`${action}.${field} = ${JSON.stringify(v)} (declared in dataDomain, never referenced in the code — the transition it should gate may be unreachable)`);
       }
     }
@@ -98,7 +106,17 @@ export function validateV2Module(mod) {
     throw new Error(`generated module does not export the v2 SAM surface { instance, init, actions, getState, setState }${hint}`);
   }
   const accessor = mod.instance({});
-  if (typeof accessor.validate === 'function') accessor.validate(); // throws in strict mode when obligations are missing
+  if (typeof accessor.validate === 'function') {
+    // In strict mode validate() THROWS on missing obligations; in non-strict
+    // mode it RETURNS the problems array instead. The gate exists because
+    // model output can't be trusted to obey the prompt's `strict: true` — so
+    // a returned non-empty array (the non-strict tell) must fail just as
+    // loudly, or the whole gate is vacuous for a disobedient module.
+    const problems = accessor.validate();
+    if (Array.isArray(problems) && problems.length) {
+      throw new Error(`generated module fails strict validate() (and was built NON-STRICT — the profile requires strict: true): ${problems.join('; ')}`);
+    }
+  }
   return mod;
 }
 
@@ -160,11 +178,18 @@ export async function polygen(opts) {
     legacyBareNext = false,
   } = opts;
   if (!intent) throw new Error('intent is required');
-  if (!model) throw new Error('--model is required (no default — see models.mjs)');
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+  // callImpl is the injectable model transport (tests); the API path needs
+  // credentials, an injected stub does not — same seam as generate.mjs's
+  // fetchImpl.
+  if (!opts.callImpl) {
+    if (!model) throw new Error('--model is required (no default — see models.mjs)');
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+  }
   const mode = legacyBareNext ? 'legacy' : 'sam';
   mkdirSync(out, { recursive: true });
-  const call = (stage, prompt) => callOrThrow(stage, { prompt, model, maxTokens, apiKey });
+  const call = opts.callImpl
+    ? (stage, prompt) => Promise.resolve(opts.callImpl(stage, prompt))
+    : (stage, prompt) => callOrThrow(stage, { prompt, model, maxTokens, apiKey });
   // Stage-boundary loader: v2 modules must load AND pass the strict
   // validate() gate; legacy modules only need to load.
   const gatedLoad = mode === 'sam' ? (p) => validateV2Module(loadSpec(p)) : (p) => loadSpec(p);
@@ -207,7 +232,14 @@ export async function polygen(opts) {
     label: 'invariants', source: extractSpec(invText), path: invPath,
     loadFn: (p) => import(pathToFileURL(p).href + `?t=${Date.now()}`), call, lang,
   });
-  const invariants = { stateInvariants: invMod.stateInvariants || [], transitionInvariants: invMod.transitionInvariants || [] };
+  // Unwrap a default export (check.mjs's own CLI does the same) and REFUSE an
+  // empty invariant set: zero predicates would make the model check below
+  // trivially "clean" — a vacuous run misreported as verified.
+  const invExports = invMod.default || invMod;
+  const invariants = { stateInvariants: invExports.stateInvariants || [], transitionInvariants: invExports.transitionInvariants || [] };
+  if (invariants.stateInvariants.length + invariants.transitionInvariants.length === 0) {
+    throw new Error('[polygen] the invariants module exports NO stateInvariants/transitionInvariants — the model check would pass vacuously (check the export names/shape in invariants.mjs)');
+  }
 
   // ── Stage 3: self-repair loop ───────────────────────────────────────────────
   // Two DIFFERENT classes of defect, checked in order every round:
@@ -227,6 +259,13 @@ export async function polygen(opts) {
   const repairHistory = [];
   let lastResult = null;
   let lastGaps = [];
+  // Exploration-coverage notes from the checker (an intent with no usable
+  // manifest domain, a domain generator that threw, a contract action absent
+  // from the manifest) mean part of the machine was never explored. They are
+  // (a) REPAIRABLE — the fix is a module edit, same as a domain-ref gap, so
+  // they spend repair budget through the same domain-gap prompt — and
+  // (b) convergence-blocking: a coverage collapse must never present as clean.
+  const coverageNotes = () => (lastResult && lastResult.domainNotes) || [];
   for (let i = 0; i <= repairMax; i++) {
     const specModule = gatedLoad(codePath); // already gate-validated by obtainModule above/below
     lastGaps = findDataDomainRefGaps(contract, code);
@@ -238,21 +277,23 @@ export async function polygen(opts) {
       capHit: lastResult.capHit,
       nondeterministic: !!lastResult.nondeterministic,
       domainGaps: lastGaps,
+      coverageNotes: coverageNotes(),
       violationCount: lastResult.violations.length,
       violations: lastResult.violations.map((v) => v.invariant),
     });
-    if (lastGaps.length === 0 && lastResult.violations.length === 0) break;
+    const gapsAndNotes = [...lastGaps, ...coverageNotes()];
+    if (gapsAndNotes.length === 0 && lastResult.violations.length === 0) break;
     if (i === repairMax) break; // out of budget — do not call the model again
     const triage = mode === 'sam' ? { nondeterministic: !!lastResult.nondeterministic } : null;
-    const repairPrompt = lastGaps.length
-      ? buildDomainGapRepairPrompt(contract, code, lastGaps, { lang, mode })
+    const repairPrompt = gapsAndNotes.length
+      ? buildDomainGapRepairPrompt(contract, code, gapsAndNotes, { lang, mode })
       : buildRepairPrompt(contract, code, lastResult.violations[0], { lang, mode, triage });
     ({ source: code } = await obtainModule({
-      label: lastGaps.length ? `repair-${i}-domain-gap` : `repair-${i}-violation`,
+      label: gapsAndNotes.length ? `repair-${i}-domain-gap` : `repair-${i}-violation`,
       prompt: repairPrompt, path: codePath,
     }));
   }
-  const converged = lastGaps.length === 0 && lastResult.violations.length === 0;
+  let converged = lastGaps.length === 0 && lastResult.violations.length === 0 && coverageNotes().length === 0;
 
   // ── Stage 4: synthesize a demo/regression trace corpus from the FINAL code ─
   // The model proposes scenarios (action sequences); polygen drives them
@@ -311,6 +352,25 @@ export async function polygen(opts) {
       prompt: buildRepairPrompt(contract, code, violation, { lang, mode, triage }),
       path: codePath,
     }));
+    // The rewrite produced NEW code — the stage-3 verdict no longer applies
+    // to it. Re-run the model check and the domain-ref cross-check on the
+    // rewritten module and recompute convergence: a conformance repair that
+    // reintroduces a violation or a domain gap must flip the run to NOT
+    // converged, never ship under the pre-rewrite verdict.
+    const recheckModule = gatedLoad(codePath);
+    lastGaps = findDataDomainRefGaps(contract, code);
+    lastResult = check({ specModule: recheckModule, contract, invariants, windows: [], maxStates, legacyBareNext: mode === 'legacy' });
+    if (lastResult.error) throw new Error(`[polygen] checker could not run the conformance-repaired module: ${lastResult.error}`);
+    repairHistory.push({
+      iteration: 'conformance-recheck',
+      statesExplored: lastResult.statesExplored,
+      capHit: lastResult.capHit,
+      nondeterministic: !!lastResult.nondeterministic,
+      domainGaps: lastGaps,
+      violationCount: lastResult.violations.length,
+      violations: lastResult.violations.map((v) => v.invariant),
+    });
+    converged = lastGaps.length === 0 && lastResult.violations.length === 0 && coverageNotes().length === 0;
     corpusReport = await synthesizeCorpus({ contract, code, codePath, tracesDir, call, lang, mode, loadFn: gatedLoad });
     windows = loadWindows(tracesDir);
     const after = windows.length
@@ -325,6 +385,7 @@ export async function polygen(opts) {
     code, codePath,
     invariants: invSource, invPath,
     repairHistory, converged, finalCheck: lastResult, finalDomainGaps: lastGaps,
+    coverageNotes: coverageNotes(),
     corpus: corpusReport,
     replay: { windows: windows.length, fails: replaySummary.fails, unhandled: replaySummary.unhandled, error: replaySummary.error },
     conformanceRepair,
@@ -356,7 +417,15 @@ async function synthesizeCorpus({ contract, code, codePath, tracesDir, call, lan
         return specModule.getState();
       }
     : (pre, action, data) => specModule.next(JSON.parse(JSON.stringify(pre)), action, data);
+  // Start from a CLEAN directory: stale .ndjson from a previous synthesis
+  // round (or a previous run into the same --out) encodes a different
+  // machine's behavior and would be validated and replayed as if it were this
+  // code's corpus.
+  try {
+    for (const f of readdirSync(tracesDir)) if (f.endsWith('.ndjson')) rmSync(join(tracesDir, f));
+  } catch { /* tracesDir is created by the caller; nothing to clean */ }
   const runProblems = [];
+  const usedNames = new Set();
   for (const [name, steps] of Object.entries(scenarios)) {
     let state = mode === 'sam' ? (specModule.init(), specModule.getState()) : specModule.init();
     const lines = [];
@@ -368,7 +437,13 @@ async function synthesizeCorpus({ contract, code, codePath, tracesDir, call, lan
       lines.push(JSON.stringify({ pre, action, data: data || {}, post }));
       state = post;
     }
-    writeFileSync(join(tracesDir, `${name}.ndjson`), lines.join('\n') + (lines.length ? '\n' : ''), 'utf-8');
+    // Model-chosen scenario names are used as file names: sanitize (a path
+    // separator would write OUTSIDE tracesDir, or produce a file loadWindows
+    // never reads back) and de-collide.
+    let safe = name.replace(/[^A-Za-z0-9._-]/g, '_') || 'scenario';
+    for (let n = 2; usedNames.has(safe); n++) safe = `${safe.replace(/_\d+$/, '')}_${n}`;
+    usedNames.add(safe);
+    writeFileSync(join(tracesDir, `${safe}.ndjson`), lines.join('\n') + (lines.length ? '\n' : ''), 'utf-8');
   }
   const validation = validateCorpus(contract, tracesDir);
   return { scenarios: Object.keys(scenarios).length, windows: validation.total, runProblems, validation };
@@ -424,6 +499,12 @@ function renderReport(r) {
       for (const g of it.domainGaps) L.push(`  - ${g}`);
     }
   }
+  const coverageNotes = r.coverageNotes || [];
+  if (coverageNotes.length) {
+    L.push('\n⚠️ **Exploration-coverage gaps in the FINAL code — these parts of the machine');
+    L.push('were NEVER explored by the checker (the verdict below covers only the rest):**');
+    for (const n of coverageNotes) L.push(`  - ${n}`);
+  }
   if (r.converged) {
     L.push('\n**Converged — no domain-ref gaps and no invariant violations reachable in the');
     L.push('final code**, over the explored (bounded) state space. Not a proof.\n');
@@ -433,6 +514,10 @@ function renderReport(r) {
       L.push(`\nUnresolved domain-ref gaps (the checker\'s exploration may be understating what`);
       L.push(`it actually examined):`);
       for (const g of r.finalDomainGaps) L.push(`  - ${g}`);
+    }
+    if (coverageNotes.length) {
+      L.push('\nExploration-coverage gaps blocked convergence (see the list above): a machine');
+      L.push('whose intents are only partially explorable cannot be presented as checked.');
     }
     if (r.finalCheck.violations.length) {
       L.push(`\nThe final code still reaches: ${r.finalCheck.violations.map((v) => v.invariant).join(', ')}.`);
@@ -450,6 +535,9 @@ function renderReport(r) {
     for (const p of r.corpus.validation.problems) L.push(`  - ${p}`);
   } else {
     L.push('- corpus validated clean: no chaining/terminal problems.');
+  }
+  for (const u of r.corpus.validation.underCovered || []) {
+    L.push(`- ⚠️ special rule '${u.rule}' is exercised by only ${u.windows} window(s) (< 3) — thin regression coverage for that rule`);
   }
 
   L.push('\n## Independent replay sanity check\n');
@@ -480,21 +568,33 @@ function renderReport(r) {
 
 // CLI
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const usage = (msg) => {
+    if (msg) console.error(`[polygen] ${msg}`);
+    console.error('usage: node polygen.mjs --intent "<text>" --model <id> [--contract <c.json>] [--lang javascript] [--out out/] [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]');
+    process.exit(2);
+  };
+  // Only --legacy-bare-next is boolean; every other flag takes a value. A
+  // flag-shaped "value" means the real one was forgotten (`--repair-max
+  // --legacy-bare-next` used to silently mean repair-max=1 via Number(true)).
+  const BOOLEAN_FLAGS = new Set(['legacy-bare-next']);
   const a = {};
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i++) {
-    if (!argv[i].startsWith('--')) continue;
-    // A flag followed by another flag (or by nothing) is boolean, e.g.
-    // --legacy-bare-next; otherwise it consumes the next token as its value.
+    if (!argv[i].startsWith('--')) usage(`unexpected argument '${argv[i]}'`);
     const key = argv[i].slice(2);
+    if (BOOLEAN_FLAGS.has(key)) { a[key] = true; continue; }
     const nxt = argv[i + 1];
-    if (nxt === undefined || nxt.startsWith('--')) a[key] = true;
-    else { a[key] = nxt; i++; }
+    if (nxt === undefined || nxt.startsWith('--')) usage(`missing value for --${key}`);
+    a[key] = nxt;
+    i++;
   }
-  if (!a.intent || !a.model) {
-    console.error('usage: node polygen.mjs --intent "<text>" --model <id> [--contract <c.json>] [--lang javascript] [--out out/] [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]');
-    process.exit(2);
-  }
+  if (!a.intent || !a.model) usage();
+  const intOpt = (v, name, def, min) => {
+    if (v === undefined) return def;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < min) usage(`--${name} must be an integer >= ${min} (got '${v}')`);
+    return n;
+  };
   const { id, resolved } = resolveModel(a.model);
   console.error(`[polygen] model=${a.model}${resolved ? ` -> ${id}` : ' (verbatim)'}${a['legacy-bare-next'] ? ' artifact=legacy bare-next' : ' artifact=sam-v2'}`);
   polygen({
@@ -504,12 +604,25 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     model: a.model,
     apiKey: process.env.ANTHROPIC_API_KEY,
     out: a.out || 'out',
-    repairMax: a['repair-max'] ? Number(a['repair-max']) : 3,
-    maxTokens: a['max-tokens'] ? Number(a['max-tokens']) : undefined,
+    repairMax: intOpt(a['repair-max'], 'repair-max', 3, 0),
+    maxTokens: intOpt(a['max-tokens'], 'max-tokens', undefined, 1),
     legacyBareNext: a['legacy-bare-next'] === true,
   }).then((r) => {
     console.log(`\nconverged: ${r.converged} · states explored: ${r.finalCheck.statesExplored} · corpus windows: ${r.corpus.windows} · replay fails: ${r.replay.fails}`);
     console.log(`report: ${join(r.out, 'polygen-report.md')}`);
-    if (!r.converged) process.exitCode = 1;
+    // The exit code is the machine-readable outcome — EVERY unclean signal
+    // must fail it, not just non-convergence: surviving replay failures, a
+    // replayer protocol error (nothing was independently verified), corpus
+    // drive problems, and validation problems all mean "do not ship as-is".
+    const unclean = [];
+    if (!r.converged) unclean.push('did not converge');
+    if (r.replay.fails > 0) unclean.push(`${r.replay.fails} replay failure(s)`);
+    if (r.replay.error) unclean.push(`replay error: ${r.replay.error}`);
+    if (r.corpus.runProblems.length) unclean.push(`${r.corpus.runProblems.length} corpus drive problem(s)`);
+    if (r.corpus.validation.problems.length) unclean.push(`${r.corpus.validation.problems.length} corpus validation problem(s)`);
+    if (unclean.length) {
+      console.error(`[polygen] NOT CLEAN: ${unclean.join(' · ')}`);
+      process.exitCode = 1;
+    }
   }).catch((e) => { console.error('[polygen] ' + e.message); process.exit(1); });
 }

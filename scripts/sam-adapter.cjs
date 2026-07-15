@@ -14,18 +14,24 @@
 //
 // Semantics:
 //   init()               -> spec.init(); return sanitized spec.getState()
-//   next(state, a, data) -> clear error slot; spec.setState(state);
+//   next(state, a, data) -> spec.init() (reset); clear error slot; spec.setState(state);
 //                           spec.actions[a](data); a REJECTED step returns the
 //                           INPUT state (a rejection is a legal, observable
 //                           no-op, not a fault); any other model-error content
 //                           or strict-profile throw propagates, so the checker
 //                           records it as a violation.
 //
-// Purity: the checker treats next() as pure and passes a fresh clone; the SAM
-// contract's setState re-initializes the instance from a deep clone, so
-// shared-state aliasing is not a hazard. Snapshots are re-serialized with the
-// __-key/function-stripping replacer so internal keys never leak into the
-// visited-state set. Async acceptors: generated specs declare
+// Purity: the checker treats next() as pure, so the model must be a function
+// of the INPUT SNAPSHOT alone. The library's setState is MERGE-ONLY (it
+// assigns keys present in the snapshot and never resets the rest) and
+// getState OMITS undefined-valued and `internal` modelShape keys — so a bare
+// setState(state) would leave residue from whatever transition ran last, and
+// BFS node identity would depend on traversal order. next() therefore resets
+// the instance via spec.init() FIRST and merges the snapshot on top: any key
+// outside the snapshot canonically holds its initial value (the same
+// semantics sam-tv.mjs gives each replay window). Snapshots are re-serialized
+// with the __-key/function-stripping replacer so internal keys never leak
+// into the visited-state set. Async acceptors: generated specs declare
 // hasAsyncActions: false (acceptor throws land synchronously); a truly async
 // acceptor's rejection would not be observable mid-BFS — same caveat as the
 // SysMoBench original.
@@ -103,15 +109,38 @@ function makeSamAdapter(spec) {
   };
 
   const next = (state, action, data) => {
+    // Reset-then-merge: without init(), setState's merge-only semantics let
+    // hidden state leak between transitions and node identity becomes
+    // traversal-order-dependent (states wrongly merged or missed).
+    spec.init();
     clearError();
     spec.setState(state);
+    // Entry snapshot: the observable state the model actually holds at the
+    // start of this transition (init values merged with `state`). Used below
+    // to detect an OBSERVABLE mutate-then-reject.
+    const entry = snapshot();
     const handler = spec.actions[action];
     if (typeof handler !== 'function') {
       throw new Error(`action '${action}' is not exported by the spec`);
     }
     handler(data);
     const step = lastStepOf(action);
-    if (step && step.classification === 'rejected') return state; // legal, observable no-op
+    if (step && step.classification === 'rejected') {
+      // lastStep() classifies 'rejected' whenever reject() was called — even
+      // if the acceptor mutated the model FIRST. Treating that as a pure
+      // no-op would explore an identity transition the replayer (which reads
+      // getState() and sees the mutation) would fail: the two halves of the
+      // pipeline would contradict each other on the same spec. A rejection
+      // that OBSERVABLY mutated is therefore a spec defect — but mutations of
+      // `internal` keys (e.g. logging a rejection reason before reject()) are
+      // invisible to getState() and to the replayer alike, so the test is a
+      // snapshot comparison, not the raw step.mutations list.
+      if (Array.isArray(step.mutations) && step.mutations.length > 0
+          && JSON.stringify(snapshot()) !== JSON.stringify(entry)) {
+        throw new Error(`acceptor for '${action}' mutated the observable model (${step.mutations.join(', ')}) and then rejected — a rejection must be an observable no-op`);
+      }
+      return state; // legal, observable no-op
+    }
     const modelError = readModelError();
     if (modelError) {
       clearError();
@@ -139,6 +168,7 @@ function makeSamAdapter(spec) {
 function domainFromManifest(spec) {
   const manifest = spec.instance({}).manifest();
   const intents = (manifest && manifest.intents) || {};
+  const intentNames = Object.keys(intents);
   const steps = [];
   const notes = [];
   for (const [action, decl] of Object.entries(intents)) {
@@ -159,7 +189,7 @@ function domainFromManifest(spec) {
       }
     }
   }
-  return { steps, notes };
+  return { steps, notes, intentNames };
 }
 
 module.exports = { isSamV2Module, makeSamAdapter, domainFromManifest };

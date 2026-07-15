@@ -60,12 +60,18 @@ if (missing.length) {
  * profile throw the last COMPLETED step may be a previous window's, and stale
  * triage metadata is worse than none.
  */
-function readLastStep(action) {
+function readLastStep(action, staleJson = null) {
   try {
     const acc = mod.instance({});
-    if (!acc || typeof acc.lastStep !== 'function') return null;
+    if (typeof acc?.lastStep !== 'function') return null;
     const step = acc.lastStep();
     if (!step || (step.intent !== undefined && step.intent !== action)) return null;
+    // Staleness guard (error path only): a strict-profile throw BEFORE the
+    // framework's beginStep leaves the PREVIOUS window's step recorded; if
+    // that previous window dispatched the same action, the intent filter
+    // above cannot tell. The caller passes the pre-dispatch step serialization
+    // — an identical post-dispatch step means no new step ran.
+    if (staleJson !== null && JSON.stringify(step) === staleJson) return null;
     const rejection = Array.isArray(step.rejections) && step.rejections.length ? step.rejections[0] : null;
     return {
       classification: step.classification,
@@ -85,6 +91,17 @@ const results = [];
 for (const w of req.windows) {
   const post = w.postState;
   const entry = { action: w.action };
+  // Empty/missing postState would pass vacuously ([].every() is true) —
+  // unscoreable-with-reason, same rule as tv.mjs.
+  if (!post || typeof post !== 'object' || Array.isArray(post) || Object.keys(post).length === 0) {
+    entry.status = 'unscoreable';
+    entry.error = 'empty, missing, or non-object postState — nothing to compare (corpus defect; run validate_corpus)';
+    results.push(entry);
+    continue;
+  }
+  // Pre-dispatch step serialization for the error path's staleness guard.
+  let stepBefore = null;
+  try { stepBefore = JSON.stringify(mod.instance({}).lastStep()); } catch { /* best-effort */ }
   try {
     mod.init();
     // structuredClone: a spec that aliases the snapshot cannot corrupt later windows.
@@ -104,7 +121,7 @@ for (const w of req.windows) {
     // throws are window failures carrying the error name for triage.
     entry.status = 'fail';
     entry.error = `${(e && e.name) || 'Error'}: ${(e && e.message) || String(e)}`;
-    const step = readLastStep(w.action);
+    const step = readLastStep(w.action, stepBefore);
     if (step && entry.classification === undefined) Object.assign(entry, step);
   }
   results.push(entry);

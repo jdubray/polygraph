@@ -266,6 +266,10 @@ const http500 = await callMessages({ prompt: 'x', model: 'sonnet-5', apiKey: 't'
 ok('callMessages: HTTP error -> ok:false', http500.ok === false && /500/.test(http500.error));
 const emptyResp = await callMessages({ prompt: 'x', model: 'sonnet-5', apiKey: 't', fetchImpl: async () => ({ ok: true, json: async () => ({ content: [{ type: 'thinking', thinking: '…' }], stop_reason: 'max_tokens' }) }) });
 ok('callMessages: empty/all-thinking response -> ok:false with hint', emptyResp.ok === false && /max_tokens/.test(emptyResp.error));
+// PARTIAL text + stop_reason max_tokens is a truncated spec — it can be
+// loadable-but-incomplete, so it must fail here, not replay as a live spec.
+const partialResp = await callMessages({ prompt: 'x', model: 'sonnet-5', apiKey: 't', fetchImpl: async () => ({ ok: true, json: async () => ({ content: [{ text: '```javascript\nmodule.exports = { init: () => ({}) ' }], stop_reason: 'max_tokens' }) }) });
+ok('callMessages: TRUNCATED response (partial text + max_tokens) -> ok:false', partialResp.ok === false && /truncated/.test(partialResp.error));
 
 // (8j) canonical verdict vocabulary: classify is exported and zero specs is
 // never 'consistent'.
@@ -273,6 +277,114 @@ const { classify: canonicalClassify } = await import('../scripts/verify.mjs');
 ok('classify is exported (single verdict vocabulary)', typeof canonicalClassify === 'function');
 ok('classify([]) is unscoreable-all, never consistent', canonicalClassify([]) === 'unscoreable-all');
 ok('classify all-fail is code-finding-or-contract', canonicalClassify(['fail', 'fail']) === 'code-finding-or-contract');
+ok('classify fail+unscoreable mix does NOT claim "all specs disagree" (weaker spec-error verdict)',
+  canonicalClassify(['fail', 'unscoreable', 'unscoreable']) === 'spec-error');
+
+// (8l is below 8k chronologically; kept adjacent to the SAM emitter tests' theme)
+// Structured-state projection through withSamTracing: acceptors mutate the
+// model IN PLACE, so a projection returning object/array values must be
+// deep-snapshotted at capture time or every window silently reads pre == post.
+{
+  const SAMPattern = (await import('@cognitive-fab/sam-pattern')).default;
+  const { withSamTracing } = await import('../scripts/instrument/sam-emitter.mjs');
+  const structDir = join(TMP, 'struct-traces');
+  mkdirSync(structDir, { recursive: true });
+  const structFile = join(structDir, 's1.ndjson');
+  const instance = SAMPattern.createInstance({ instanceName: 'cart', hasAsyncActions: false });
+  const project = (m) => ({ items: m.items }); // OBJECT-VALUED observable key
+  const component = {
+    actions: [() => ({ __name: 'ADD' })],
+    acceptors: [(model) => (proposal) => {
+      if (proposal.__name === 'ADD') model.items.push('x'); // in-place mutation
+    }],
+    reactors: [],
+  };
+  const { intents: [add] } = instance({
+    initialState: { items: [] },
+    component: withSamTracing(component, project, structFile),
+  });
+  await add();
+  const w = loadWindows(structDir)[0];
+  ok('object-valued projection: pre is the PRE-mutation snapshot (not post aliased)',
+    JSON.stringify(w.pre) === JSON.stringify({ items: [] })
+    && JSON.stringify(w.post) === JSON.stringify({ items: ['x'] }));
+}
+
+// (8k) zero-window corpus: verify must throw, validateCorpus must report a
+// problem — a run that examined nothing must never report a clean bill.
+const emptyTraces = join(TMP, 'empty-traces');
+mkdirSync(emptyTraces, { recursive: true });
+let noWindowsThrew = false;
+try { await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: emptyTraces, specs: mixDir, out: join(TMP, 'out-nowin') }); }
+catch (e) { noWindowsThrew = /no trace windows/.test(e.message); }
+ok('verify with zero trace windows throws (no false clean)', noWindowsThrew);
+const emptyRep = validateCorpus(contract, emptyTraces);
+ok('validateCorpus flags a traces dir with no .ndjson files', emptyRep.problems.some((p) => /no \.ndjson files/.test(p)));
+writeFileSync(join(emptyTraces, 'blank.ndjson'), '\n\n', 'utf-8');
+const blankRep = validateCorpus(contract, emptyTraces);
+ok('validateCorpus flags an all-blank corpus (zero windows)', blankRep.problems.some((p) => /zero windows/.test(p)));
+
+// (8o) corpus window-shape validation + no vacuous empty-post passes.
+{
+  const shapeDir = join(TMP, 'shape-traces');
+  mkdirSync(shapeDir, { recursive: true });
+  writeFileSync(join(shapeDir, 's1.ndjson'), [
+    JSON.stringify({ pre: { state: 'LOCKED', coins: 0 }, action: 'COIN', data: {}, post: {} }),          // empty post
+    JSON.stringify({ pre: { status: 'LOCKED' }, action: 'COIN', data: {}, post: { state: 'UNLOCKED' } }), // renamed key in pre
+    JSON.stringify({ pre: null, action: 'COIN', data: {}, post: { state: 'UNLOCKED', coins: 1 } }),       // malformed
+  ].join('\n') + '\n', 'utf-8');
+  const shapeRep = validateCorpus(contract, shapeDir);
+  ok('empty post is a corpus problem (would replay vacuously)',
+    shapeRep.problems.some((p) => /post is EMPTY/.test(p)));
+  ok('a missing declared state key is a corpus problem',
+    shapeRep.problems.some((p) => /missing declared state key 'state'/.test(p)));
+  ok('a malformed window is a REPORTED problem, not a crash',
+    shapeRep.problems.some((p) => /malformed window/.test(p)));
+  // ...and the replayer refuses to score an empty-post window as a pass.
+  const emptyPostWindows = [{ scenario: 'x', index: 0, action: 'COIN', data: {}, pre: { state: 'LOCKED', coins: 0 }, post: {} }];
+  ok('replayer scores an empty-post window unscoreable, never pass',
+    replaySpec(join(EX, 'specs', 'reference.js'), emptyPostWindows, 'legacy').every((s) => s === 'unscoreable'));
+  // Key-order-scrambled chaining is NOT a chain break (canonical equality).
+  const orderDir = join(TMP, 'order-traces');
+  mkdirSync(orderDir, { recursive: true });
+  writeFileSync(join(orderDir, 's1.ndjson'), [
+    JSON.stringify({ pre: { state: 'LOCKED', coins: 0 }, action: 'COIN', data: {}, post: { state: 'UNLOCKED', coins: 1 } }),
+    JSON.stringify({ pre: { coins: 1, state: 'UNLOCKED' }, action: 'PUSH', data: {}, post: { coins: 1, state: 'LOCKED' } }),
+  ].join('\n') + '\n', 'utf-8');
+  ok('key-order-scrambled post/pre chaining is not a false chain break',
+    !validateCorpus({ ...contract, terminalStates: [] }, orderDir).problems.some((p) => /chain break/.test(p)));
+}
+
+// (8n) a spec that blocks forever must time out to unscoreable, not hang the
+// pipeline. (Short override; restored right after.)
+{
+  const hangSpec = join(TMP, 'hang.js');
+  writeFileSync(hangSpec, `module.exports = { init: () => ({}), next: () => { for (;;) {} } };`, 'utf-8');
+  process.env.POLYGRAPH_REPLAY_TIMEOUT_MS = '1500';
+  const started = Date.now();
+  const hung = replaySpec(hangSpec, windows.slice(0, 1), 'legacy');
+  delete process.env.POLYGRAPH_REPLAY_TIMEOUT_MS;
+  ok('blocking spec times out to unscoreable (pipeline does not hang)',
+    hung.every((s) => s === 'unscoreable') && Date.now() - started < 30000);
+}
+
+// (8m) generate.mjs CLI contract: bad flags exit 2; a run that writes zero
+// specs exits 1 (never success). The bogus key makes every call fail fast.
+{
+  const { spawnSync } = await import('node:child_process');
+  const promptFile = join(TMP, 'prompt.txt');
+  writeFileSync(promptFile, 'X', 'utf-8');
+  const GEN = join(HERE, '..', 'scripts', 'generate.mjs');
+  const genEnv = { ...process.env, ANTHROPIC_API_KEY: 'bogus-key-for-test' };
+  const badN = spawnSync('node', [GEN, '--prompt', promptFile, '--model', 'sonnet-5', '--n', 'abc'], { encoding: 'utf-8', env: genEnv });
+  ok('generate CLI: non-numeric --n exits 2', badN.status === 2 && /positive integer/.test(badN.stderr));
+  const flagAsValue = spawnSync('node', [GEN, '--prompt', promptFile, '--model', 'sonnet-5', '--n', '--out'], { encoding: 'utf-8', env: genEnv });
+  ok('generate CLI: flag-shaped value exits 2 (no silent --n=1)', flagAsValue.status === 2 && /missing value for --n/.test(flagAsValue.stderr));
+  const zeroOk = spawnSync('node', [GEN, '--prompt', promptFile, '--model', 'sonnet-5', '--n', '1', '--out', join(TMP, 'gen-out')],
+    { encoding: 'utf-8', env: genEnv });
+  ok('generate CLI: zero specs written exits 1 (never a success code)',
+    zeroOk.status === 1 && /no specs were written/.test(zeroOk.stderr));
+}
 
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

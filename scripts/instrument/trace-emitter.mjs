@@ -21,14 +21,26 @@ export function traceStep(pre, action, data, post, file) {
 }
 
 /**
+ * Deep-snapshot a projection AT CAPTURE TIME. A projection that returns
+ * object/array values returns REFERENCES into the live model; code that
+ * mutates in place (the norm in SAM v1 acceptors and impure reducers) would
+ * rewrite the captured `pre` before it is serialized, making every window
+ * read pre == post — a corrupted corpus that validates clean.
+ */
+export const snapshotProjection = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
+
+/**
  * Wrap a dispatch function `dispatch(action, data)` so every call emits a window.
  * `projectState()` must return the observable-state projection at call time.
  */
 export function withTracing(dispatch, projectState, file) {
   return (action, data) => {
-    const pre = projectState();
+    const pre = snapshotProjection(projectState());
     const result = dispatch(action, data);
     // If dispatch is async, chain; otherwise snapshot synchronously.
+    // A REJECTED dispatch promise emits no window by design: the step never
+    // settled, so there is no truthful post-state — and the rejection itself
+    // propagates to the caller, so the failure is not silent.
     if (result && typeof result.then === 'function') {
       return result.then((r) => { traceStep(pre, action, data, projectState(), file); return r; });
     }
@@ -48,7 +60,7 @@ export function tapReducer(reducer, project, file, {
   actionData = (a) => { const { type, ...rest } = a; return rest; },
 } = {}) {
   return (state, action) => {
-    const pre = project(state);
+    const pre = snapshotProjection(project(state));
     const next = reducer(state, action);
     traceStep(pre, actionName(action), actionData(action), project(next), file);
     return next;

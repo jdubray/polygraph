@@ -50,6 +50,14 @@ const deepEq = (a, b) => stable(a) === stable(b);
 const results = [];
 for (const w of req.windows) {
   const post = w.postState;
+  // An empty (or missing) postState would make the projection rule pass
+  // VACUOUSLY — `[].every()` is true — scoring a window that verified
+  // nothing as a pass. That is a corpus defect, and the honest verdict here
+  // is unscoreable-with-reason.
+  if (!post || typeof post !== 'object' || Array.isArray(post) || Object.keys(post).length === 0) {
+    results.push({ action: w.action, status: 'unscoreable', error: 'empty, missing, or non-object postState — nothing to compare (corpus defect; run validate_corpus)' });
+    continue;
+  }
   let status;
   try {
     // Deep-copy the pre-state so a non-pure next() can't corrupt later windows.

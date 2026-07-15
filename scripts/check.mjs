@@ -39,7 +39,9 @@ export function buildDomain(contract, windows = []) {
     const d = w.data || {};
     observed[w.action] = observed[w.action] || {};
     for (const [k, val] of Object.entries(d)) {
-      (observed[w.action][k] = observed[w.action][k] || new Set()).add(JSON.stringify(val));
+      // stable(): key-order-insensitive dedup (trace data is JSON-clean, so
+      // stable output parses back with JSON.parse below).
+      (observed[w.action][k] = observed[w.action][k] || new Set()).add(stable(val));
     }
   }
   const steps = []; // { action, data }
@@ -98,16 +100,45 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   if (!legacyBareNext && isSamV2Module(specModule)) {
     try {
       mod = makeSamAdapter(specModule);
-      ({ steps, notes } = domainFromManifest(specModule));
+      // The library's own obligation check FIRST: a module with no named
+      // intents / schemas / domains would otherwise explore nothing and pass
+      // vacuously. Strict modules throw here; non-strict ones RETURN the
+      // problems array — both must fail loudly.
+      const accessor = specModule.instance({});
+      if (typeof accessor.validate === 'function') {
+        const problems = accessor.validate();
+        if (Array.isArray(problems) && problems.length) {
+          return { ok: false, error: `v2 module fails validate(): ${problems.join('; ')}`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], engine: 'sam-v2' };
+        }
+      }
+      let intentNames;
+      ({ steps, notes, intentNames } = domainFromManifest(specModule));
       engine = 'sam-v2';
+      // The manifest is the exploration domain; a contract action missing
+      // from it is silently unexplored unless we say so here. (Intents that
+      // ARE in the manifest but lack a domain already get their own note.)
+      // intentNames comes from the SAME manifest() read the domain came from,
+      // so note and domain cannot disagree even if the getter is impure.
+      const manifestIntents = new Set(intentNames);
+      for (const a of Object.keys(contract?.actions || {})) {
+        if (!manifestIntents.has(a)) notes.push(`contract action '${a}' is not in the module's manifest() — NOT explored`);
+      }
     } catch (e) {
-      return { ok: false, error: `v2 SAM module rejected by the adapter: ${e && e.message}`, statesExplored: 0, capHit: false, violations: [] };
+      return { ok: false, error: `v2 SAM module rejected by the adapter: ${e && e.message}`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], engine: 'sam-v2' };
     }
   } else {
     if (!mod || typeof mod.next !== 'function' || typeof mod.init !== 'function') {
       return { ok: false, error: 'spec must export init() and next() (or the v2 SAM surface)', statesExplored: 0, capHit: false, violations: [] };
     }
     ({ steps, notes } = buildDomain(contract, windows));
+  }
+  // An empty exploration domain would visit only init() and pass every
+  // invariant vacuously — that is a failed check, never a clean one.
+  if (!steps.length) {
+    const why = engine === 'sam-v2'
+      ? "the module's manifest() yields no explorable (action, data) steps"
+      : 'the contract declares no explorable actions (no dataDomain, none inferable from traces)';
+    return { ok: false, error: `exploration domain is empty — ${why}${notes.length ? ` [${notes.join('; ')}]` : ''}`, statesExplored: 0, capHit: false, violations: [], domainNotes: notes, engine };
   }
   const stateInv = invariants.stateInvariants || [];
   const transInv = invariants.transitionInvariants || [];
@@ -133,7 +164,9 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
       while (k !== null && parent.has(k)) { const n = parent.get(k); chain.push({ action: n.action, data: n.data, state: n.state }); k = n.prev; }
       return chain.reverse();
     };
-    const record = (name, kind, path, detail) => { if (seen.has(name)) return; seen.add(name); violations.push({ invariant: name, kind, path, detail }); };
+    // Dedup by (kind, name): a state invariant and a transition invariant may
+    // legitimately share a name; keying on the name alone would hide one.
+    const record = (name, kind, path, detail) => { const k = `${kind}:${name}`; if (seen.has(k)) return; seen.add(k); violations.push({ invariant: name, kind, path, detail }); };
 
     // invariants on the initial state
     for (const inv of stateInv) {
@@ -141,8 +174,9 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
       if (!ok) record(inv.name, 'state', pathTo(initKey), 'violated in the initial state');
     }
 
-    while (queue.length && parent.size < maxStates) {
-      const s = queue.shift();
+    let head = 0; // index cursor — Array.shift() is O(n) per pop, O(n²) overall
+    while (head < queue.length && parent.size < maxStates) {
+      const s = queue[head++];
       const sKey = stable(s);
       for (const { action, data } of steps) {
         let post;
@@ -167,7 +201,9 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
         }
       }
     }
-    if (parent.size >= maxStates) capHit = true;
+    // CAP HIT means the exploration was truncated: states remained unexpanded.
+    // Completing with parent.size exactly AT the cap is a full exploration.
+    if (head < queue.length) capHit = true;
     return { parent, violations, capHit };
   };
 

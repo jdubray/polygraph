@@ -80,9 +80,14 @@ async function polygraphArm(dir, source, contract, fetchImpl, apiKey) {
 
   const windows = loadWindows(join(dir, 'traces'));
   const matrix = specPaths.map((p) => replaySpec(p, windows, 'legacy')); // A/B arms are bare-next artifacts
+  // Exclude DEAD specs (unscoreable on every window) before classifying —
+  // same partition verify.mjs uses. classify()'s strong verdict requires
+  // every status to be 'fail'; one dead spec's unscoreable would otherwise
+  // mask a unanimous live-spec detection as 'spec-error'.
+  const liveRows = matrix.filter((row) => !row.every((s) => s === 'unscoreable'));
   const primaryKey = (typeof contract.stateKeys[0] === 'string' ? contract.stateKeys[0] : contract.stateKeys[0].name);
   const finding = windows
-    .map((w, wi) => ({ w, verdict: classify(matrix.map((row) => row[wi])) }))
+    .map((w, wi) => ({ w, verdict: classify(liveRows.map((row) => row[wi])) }))
     .find((x) => x.verdict === 'code-finding-or-contract');
   rmSync(specDir, { recursive: true, force: true });
   if (finding) return { buggy: true, action: finding.w.action, state: String(finding.w.pre[primaryKey]) };

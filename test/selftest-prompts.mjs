@@ -193,6 +193,19 @@ ok('the v2 reference spec passes the gate',
   ok('strict validate() failures propagate (stage-blocking)',
     threw !== null && /SamValidationError/.test(threw));
 }
+{
+  // A NON-STRICT module's validate() RETURNS problems instead of throwing —
+  // the gate must fail on the returned array too, or it's vacuous for any
+  // module that disobeyed the prompt's `strict: true`.
+  const nonStrict = {
+    instance: () => ({ validate: () => ['no named intents registered', 'no modelShape declared'] }),
+    init: () => {}, actions: {}, getState: () => ({}), setState: () => {},
+  };
+  let threw = null;
+  try { validateV2Module(nonStrict); } catch (e) { threw = e.message; }
+  ok('non-strict validate() problems (returned, not thrown) fail the gate',
+    threw !== null && /NON-STRICT/.test(threw) && /no named intents/.test(threw));
+}
 
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

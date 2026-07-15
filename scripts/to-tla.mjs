@@ -1524,12 +1524,19 @@ function walkStmts(stmts, ctx, topLevel, branchCond = 'TRUE') {
           const cond = txBool(st.test, ctx);
           const savedLocals = new Map(ctx.env.locals);
           const savedLets = new Set(ctx.env.letNames);
+          const savedAlias = ctx.env.alias;
+          const savedRoAliases = new Map(ctx.env.roAliases);
           const restoreDeclared = (names) => {
             for (const k of names) {
               if (savedLocals.has(k)) ctx.env.locals.set(k, savedLocals.get(k));
               else ctx.env.locals.delete(k);
             }
             ctx.env.letNames = new Set(savedLets);
+            // Alias bindings are block-scoped consts too: letting one leak
+            // out of its branch would translate a JS ReferenceError (crash)
+            // as normal behavior.
+            ctx.env.alias = savedAlias;
+            ctx.env.roAliases = new Map(savedRoAliases);
           };
           const d1 = walkStmts(
             blockBody(st.consequent), ctx, false, andTla(branchCond, cond)
@@ -1596,6 +1603,17 @@ function walkStmts(stmts, ctx, topLevel, branchCond = 'TRUE') {
           }
           const alias = matchAliasBinding(stripModelMapPrefix(d.init, ctx), ctx);
           if (alias) {
+            // A fresh alias bound AFTER a mutation/commit reads the
+            // PRE-state variable in TLA+, but JS would see the committed
+            // value — a well-formed, silently wrong translation. Refuse.
+            if (ctx.hasMutated) {
+              failAt(
+                'node alias bound after a state mutation/commit — the alias ' +
+                  'would read the pre-state in TLA+ but the post-state in JS ' +
+                  '(bind aliases before mutating, or restructure) — outside the subset',
+                d
+              );
+            }
             if (ctx.env.alias) {
               // Extension: further alias bindings are read-only views of
               // other nodes (writes must go through the primary alias).
@@ -1636,10 +1654,13 @@ function walkStmts(stmts, ctx, topLevel, branchCond = 'TRUE') {
             const rhs = e.operator === '=' ? txExpr(e.right, ctx) : txExpr(e.right, ctx);
             let v;
             if (e.operator === '=') v = rhs;
-            else if (e.operator === '+=') {
-              v = { tla: `(${cur.tla} + ${rhs.tla})`, type: 'num' };
-            } else if (e.operator === '-=') {
-              v = { tla: `(${cur.tla} - ${rhs.tla})`, type: 'num' };
+            else if (e.operator === '+=' || e.operator === '-=') {
+              // Same rule as txExpr's BinaryExpression: string arithmetic is
+              // refused at transpile time, not left to error inside TLC.
+              if (cur.type === 'str' || rhs.type === 'str') {
+                failAt('string arithmetic (compound assignment on a string field) is outside the subset', e);
+              }
+              v = { tla: `(${cur.tla} ${e.operator === '+=' ? '+' : '-'} ${rhs.tla})`, type: 'num' };
             } else {
               failAt(`assignment operator '${e.operator}' is outside the subset`, e);
             }
@@ -1667,9 +1688,12 @@ function walkStmts(stmts, ctx, topLevel, branchCond = 'TRUE') {
           const cur = ctx.env.fields.get(f) ?? fieldRead(ctx, f);
           let v;
           if (e.operator === '=') v = rhs.tla;
-          else if (e.operator === '+=') v = `(${cur} + ${rhs.tla})`;
-          else if (e.operator === '-=') v = `(${cur} - ${rhs.tla})`;
-          else failAt(`assignment operator '${e.operator}' is outside the subset`, e);
+          else if (e.operator === '+=' || e.operator === '-=') {
+            if (rhs.type === 'str' || ctx.fieldTypes?.[f] === 'str') {
+              failAt('string arithmetic (compound assignment on a string field) is outside the subset', e);
+            }
+            v = `(${cur} ${e.operator === '+=' ? '+' : '-'} ${rhs.tla})`;
+          } else failAt(`assignment operator '${e.operator}' is outside the subset`, e);
           guardedWrite(ctx, f, v, branchCond);
         } else if (e.type === 'UpdateExpression') {
           const rw = matchRecordField(e.argument, ctx);
@@ -2360,6 +2384,16 @@ function txExpr(node, ctx) {
         );
         if (tof && lit) {
           const arg = txExpr(tof.argument, ctx);
+          const isEq = node.operator === '===' || node.operator === '==';
+          // A conditionally-initialized let has typeof 'undefined' on the
+          // paths where it was never assigned — folding on the static type
+          // alone would turn the guard into a constant and fire guarded
+          // writes on paths where JS wrote nothing.
+          const def = arg.definedIf ?? 'TRUE';
+          if (lit.value === 'undefined') {
+            const undef = notTla(def); // TRUE exactly when the value is not defined
+            return { tla: isEq ? undef : notTla(undef), type: 'bool' };
+          }
           const jsName =
             { num: 'number', str: 'string', bool: 'boolean' }[arg.type] ||
             (arg.type === 'rec' || arg.type === 'staterec' ? 'object' : null);
@@ -2367,8 +2401,11 @@ function txExpr(node, ctx) {
             failAt(`typeof on a value of type '${arg.type}' is outside the subset`, tof);
           }
           const same = jsName === lit.value;
-          const isEq = node.operator === '===' || node.operator === '==';
-          return { tla: same === isEq ? 'TRUE' : 'FALSE', type: 'bool' };
+          // A mismatched type name is false whether or not the value is
+          // defined (typeof undefined is 'undefined', not lit.value); a
+          // matching one holds exactly when the value IS defined.
+          const eqTla = same ? def : 'FALSE';
+          return { tla: isEq ? eqTla : notTla(eqTla), type: 'bool' };
         }
       }
       // Extension: comparisons against `undefined` / `null`. Any expression
@@ -2392,7 +2429,17 @@ function txExpr(node, ctx) {
             );
           }
           const isEq = node.operator === '===' || node.operator === '==';
-          return { tla: isEq ? 'FALSE' : 'TRUE', type: 'bool' };
+          const strict = node.operator === '===' || node.operator === '!==';
+          // A conditionally-initialized let IS undefined on the paths where
+          // it was never assigned — `x === undefined` (and loose `x == null`)
+          // is exactly its not-defined condition, not a constant. Strict
+          // comparison with the null LITERAL can never match undefined (and
+          // the subset tracks no null-valued expressions), so it stays
+          // constant.
+          const def = o.definedIf ?? 'TRUE';
+          const matchesUndefined = !(nullish.type === 'Literal' && strict);
+          const eqTla = matchesUndefined ? notTla(def) : 'FALSE';
+          return { tla: isEq ? eqTla : notTla(eqTla), type: 'bool' };
         }
       }
       const map = {
@@ -2606,7 +2653,13 @@ function notTla(t) {
 
 function tlaValue(v) {
   if (typeof v === 'number') return String(v);
-  if (typeof v === 'string') return `"${v}"`;
+  if (typeof v === 'string') {
+    // TLA+ string literals have no escape mechanism for embedded quotes —
+    // refuse loudly rather than emitting a malformed module. Backslashes are
+    // passed through (TLA+ strings are not backslash-escaped).
+    if (v.includes('"')) die(`cannot emit string ${JSON.stringify(v)} as TLA+ (embedded double quote has no TLA+ escape)`);
+    return `"${v}"`;
+  }
   if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
   die(`cannot emit JS value ${JSON.stringify(v)} as TLA+`);
 }
@@ -2639,7 +2692,28 @@ function emitModule(m) {
   L.push(`  ${m.stateVar} = ( ${initParts.join('\n            @@ ')} )`);
   L.push('');
 
-  // Actions
+  // Actions.
+  //
+  // JS commit semantics vs TLA+: the spread-commit `{ ...sv, [k]: rec }` ADDS
+  // key k when it is absent, but `[sv EXCEPT ![k] = ...]` on a key outside
+  // DOMAIN sv returns sv UNCHANGED — a silent stutter that erases reachable
+  // JS states from the model (a false TLC pass). When every value the commit
+  // key can take is provably in the Init domain the plain EXCEPT is emitted;
+  // otherwise the update is guarded on domain membership, with `(k :> rec)
+  // @@ sv` extending the domain exactly as the JS spread does. (In the ELSE
+  // branch a field falling back to `sv[k].f` is an out-of-domain apply — TLC
+  // errors loudly there, which matches JS reading a field of a node that
+  // does not exist.)
+  const keyProvablyInDomain = (a) => {
+    const lit = a.keyTla.match(/^"(.*)"$/);
+    if (lit) return nodeIds.includes(lit[1]);
+    const pf = a.keyTla.match(/^d\.([A-Za-z_$][A-Za-z0-9_$]*)$/);
+    if (pf) {
+      return a.payloads.length > 0
+        && a.payloads.every((p) => typeof p[pf[1]] === 'string' && nodeIds.includes(p[pf[1]]));
+    }
+    return false; // can't prove — use the guarded (creation-capable) form
+  };
   for (const a of m.actions) {
     const setName = `${a.name}Payloads`;
     L.push(`${setName} == {`);
@@ -2652,8 +2726,17 @@ function emitModule(m) {
     const fieldUpdates = m.fieldNames
       .map((f) => `${f} |-> ${a.fields.get(f) ?? `${m.stateVar}[${a.keyTla}].${f}`}`)
       .join(',\n         ');
-    L.push(`    /\\ ${m.stateVar}' = [${m.stateVar} EXCEPT ![${a.keyTla}] =`);
-    L.push(`        [${fieldUpdates}]]`);
+    if (keyProvablyInDomain(a)) {
+      L.push(`    /\\ ${m.stateVar}' = [${m.stateVar} EXCEPT ![${a.keyTla}] =`);
+      L.push(`        [${fieldUpdates}]]`);
+    } else {
+      L.push(`    \\* commit key may be outside DOMAIN ${m.stateVar}: JS would CREATE the`);
+      L.push(`    \\* entry, EXCEPT would silently stutter — guard on membership.`);
+      L.push(`    /\\ ${m.stateVar}' = IF ${a.keyTla} \\in DOMAIN ${m.stateVar}`);
+      L.push(`        THEN [${m.stateVar} EXCEPT ![${a.keyTla}] =`);
+      L.push(`          [${fieldUpdates}]]`);
+      L.push(`        ELSE (${a.keyTla} :> [${fieldUpdates}]) @@ ${m.stateVar}`);
+    }
     L.push('');
   }
 

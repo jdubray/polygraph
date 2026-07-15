@@ -146,12 +146,7 @@ export function runTlc(tlaPath, opts = {}) {
   const timedOut = r.error && r.error.code === 'ETIMEDOUT';
 
   const parsed = parseTlcOutput(output);
-  let status;
-  if (timedOut) status = 'timeout';
-  else if (parsed.violatedInvariants.length > 0) status = 'invariant-violation';
-  else if (parsed.deadlock) status = 'deadlock';
-  else if (parsed.completedClean && r.status === 0) status = 'pass';
-  else status = 'error';
+  const status = tlcStatus(parsed, timedOut, r.status);
 
   return {
     status,
@@ -170,6 +165,19 @@ export function runTlc(tlaPath, opts = {}) {
 }
 
 /**
+ * Status from a parsed TLC run. A violation already printed before a timeout
+ * is a REAL finding — a 'timeout' status would bury it in the report, so the
+ * violation wins. Exported for tests.
+ */
+export function tlcStatus(parsed, timedOut, exitCode) {
+  if (parsed.violatedInvariants.length > 0) return 'invariant-violation';
+  if (timedOut) return 'timeout';
+  if (parsed.deadlock) return 'deadlock';
+  if (parsed.completedClean && exitCode === 0) return 'pass';
+  return 'error';
+}
+
+/**
  * Parse TLC's textual report: state counts, invariant violations, deadlock,
  * and the counterexample behavior trace ("State N: <Action ...>" blocks).
  * Exported for tests.
@@ -185,13 +193,17 @@ export function parseTlcOutput(output) {
     counterexample: null,
   };
 
+  // TLC groups large counts with commas ("3,001,443 states generated") —
+  // \d+ alone would match only the last group and understate by orders of
+  // magnitude.
   const states = output.match(
-    /(\d+) states generated.*?(\d+) distinct states found.*?(\d+) states left on queue/s
+    /([\d,]+) states generated.*?([\d,]+) distinct states found.*?([\d,]+) states left on queue/s
   );
+  const num = (s) => Number(s.replaceAll(',', ''));
   if (states) {
-    res.statesGenerated = Number(states[1]);
-    res.distinctStates = Number(states[2]);
-    res.queueDepth = Number(states[3]);
+    res.statesGenerated = num(states[1]);
+    res.distinctStates = num(states[2]);
+    res.queueDepth = num(states[3]);
   }
 
   for (const m of output.matchAll(/Error: Invariant (\S+) is violated/g)) {

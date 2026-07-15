@@ -31,6 +31,14 @@ for (const d of dirs) {
 
   const res = check({ specModule, contract, invariants, windows, maxStates: 20000 });
   const cls = gt.outOfScope ? 'out-of-scope' : gt.seeded ? 'seeded' : 'clean';
+  // A checker ERROR (empty domain, failed validate()) means nothing was
+  // explored — that can never score as "clean" OR as a miss; it invalidates
+  // the row outright.
+  if (res.error) {
+    allValid = false;
+    rows.push({ name: d, cls, states: 0, cap: false, found: false, valid: false, detail: `CHECK ERROR (nothing explored): ${res.error}`, res });
+    continue;
+  }
   const found = res.violations.length > 0;
   const expectViolation = cls === 'seeded';
   const valid = found === expectViolation; // seeded must violate; clean & oos must not

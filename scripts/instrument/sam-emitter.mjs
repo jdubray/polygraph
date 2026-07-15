@@ -43,7 +43,7 @@
 // v1 tooling, which ignores unknown window keys) treats it as a plain no-op
 // window; the `rejected` key is extra triage evidence, not a format change.
 import { appendFileSync } from 'node:fs';
-import { traceStep } from './trace-emitter.mjs';
+import { traceStep, snapshotProjection } from './trace-emitter.mjs';
 
 /** Strip SAM-internal keys (those starting with `__`) from a proposal. */
 function extractData(proposal) {
@@ -72,7 +72,11 @@ export function withSamTracing(component, project, file) {
   const captureAcceptor = (model) => (proposal) => {
     const action = proposal.__actionName ?? proposal.__name;
     if (!action) return; // internal __error presentations are not steps
-    pending = { pre: project(model), action, data: extractData(proposal) };
+    // snapshotProjection: acceptors mutate the model IN PLACE, and a
+    // projection with object/array values returns references into it — the
+    // serialized `pre` would otherwise show post-mutation content (pre ==
+    // post on every window, silently).
+    pending = { pre: snapshotProjection(project(model)), action, data: snapshotProjection(extractData(proposal)) };
   };
 
   const emitReactor = (model) => () => {
@@ -150,18 +154,32 @@ export function withSamTracingV2(instance, sink) {
     },
     stepListener: (step) => {
       if (step.intent == null) return; // __error presentations are not steps
+      let window = null;
       try {
         const post = getState();
-        const window = { pre: lastPost, action: step.intent, data: pendingData, post };
-        if (step.classification === 'rejected') {
-          window.rejected = step.rejections.map((r) => r.reason).join('; ');
-        }
-        emit(window);
+        window = { pre: lastPost, action: step.intent, data: pendingData, post };
+        // Advance the chain FIRST — before any optional decoration and before
+        // emitting: a failure past this point must lose (or under-decorate)
+        // only its own window, never desynchronize the NEXT window's pre
+        // (which would silently record a two-step transition as one).
         lastPost = post;
-      } catch {
-        /* tracing must never break the workflow */
+        if (step.classification === 'rejected' && Array.isArray(step.rejections)) {
+          window.rejected = step.rejections.map((r) => r && r.reason).filter((r) => r !== undefined).join('; ');
+        }
+      } catch (e) {
+        // tracing must never break the workflow — but never silently either
+        console.error(`[sam-emitter] window skipped for '${step.intent}' (snapshot failed: ${e && e.message})`);
       } finally {
         pendingData = {};
+      }
+      if (window) {
+        try {
+          emit(window);
+        } catch (e) {
+          // Loud on stderr, never breaking: the window is lost but named, and
+          // the pre/post chain stays consistent for the windows that follow.
+          console.error(`[sam-emitter] dropped window for '${window.action}' (emit failed: ${e && e.message}); pre/post chain remains consistent`);
+        }
       }
     },
   });

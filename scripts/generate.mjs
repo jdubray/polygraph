@@ -80,6 +80,13 @@ export async function callMessages({ prompt, model, maxTokens, apiKey, fetchImpl
         : ` (stop_reason=${data.stop_reason})`;
       return { ok: false, error: `empty response${hint}` };
     }
+    // A max_tokens stop with PARTIAL text is a truncated answer: the tail of
+    // the spec is missing, but what remains can still be a loadable module
+    // that silently lacks its last rules. Scoring it as a normal generation
+    // mis-attributes those missing rules downstream — fail it here.
+    if (data.stop_reason === 'max_tokens') {
+      return { ok: false, error: `response truncated (stop_reason=max_tokens after ${text.length} chars) — the answer was cut off mid-spec; raise --max-tokens` };
+    }
     return { ok: true, text, usage: data.usage };
   } catch (e) {
     return { ok: false, error: String(e && e.message || e) };
@@ -103,16 +110,23 @@ export async function generateSpecs({ prompt, model, n = 5, apiKey, fetchImpl = 
 
 // CLI
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const args = Object.fromEntries(
-    process.argv.slice(2).reduce((acc, a, i, arr) => {
-      if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1]]);
-      return acc;
-    }, [])
-  );
-  if (!args.prompt || !args.model) {
+  const usage = () => {
     console.error('usage: node generate.mjs --prompt <file> --model <id> [--n 5] [--max-tokens 32000] [--out <dir>]');
     process.exit(2);
+  };
+  // Every generate flag takes a value; a flag-shaped "value" means the real
+  // value was forgotten — reject it instead of consuming the next flag.
+  const args = {};
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a.startsWith('--')) { console.error(`unexpected argument '${a}'`); usage(); }
+    const v = argv[i + 1];
+    if (v === undefined || v.startsWith('--')) { console.error(`missing value for ${a}`); usage(); }
+    args[a.slice(2)] = v;
+    i++;
   }
+  if (!args.prompt || !args.model) usage();
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.error('ANTHROPIC_API_KEY is not set.');
@@ -120,6 +134,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   }
   const prompt = readFileSync(args.prompt, 'utf-8');
   const n = Number(args.n || 5);
+  if (!Number.isInteger(n) || n <= 0) {
+    console.error(`--n must be a positive integer (got '${args.n}')`);
+    process.exit(2);
+  }
   const { id, resolved } = resolveModel(args.model);
   console.error(`[generate] model=${args.model}${resolved ? ` -> ${id}` : ' (verbatim)'} n=${n}`);
   const out = args.out || 'specs';
@@ -136,4 +154,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     }
   }
   console.error(`[generate] wrote ${ok}/${n} specs to ${out}/`);
+  // Exit codes are the machine-readable outcome: writing nothing is a
+  // failure, and a partial batch degrades the N-way vote — say so.
+  if (ok === 0) {
+    console.error('[generate] FAILED: no specs were written');
+    // exitCode (not exit()): a hard exit while fetch's keep-alive sockets are
+    // closing trips a libuv assertion on Windows; letting the loop drain sets
+    // the same failure code without the crash.
+    process.exitCode = 1;
+  }
+  if (ok < n) console.error(`[generate] WARNING: only ${ok}/${n} generations succeeded — the N-way vote is weaker than requested`);
 }

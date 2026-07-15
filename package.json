@@ -17,7 +17,9 @@
     "code-generation"
   ],
   "scripts": {
-    "test": "node test/selftest.mjs && node test/selftest-v2.mjs && node test/selftest-prompts.mjs",
+    "test": "node test/selftest.mjs && node test/selftest-v2.mjs && node test/selftest-prompts.mjs && node test/selftest-polygen.mjs && node test/selftest-tla.mjs",
+    "test:tla": "node test/selftest-tla.mjs",
+    "test:polygen": "node test/selftest-polygen.mjs",
     "test:legacy": "node test/selftest.mjs",
     "test:v2": "node test/selftest-v2.mjs",
     "test:prompts": "node test/selftest-prompts.mjs",

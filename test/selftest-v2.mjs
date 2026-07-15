@@ -218,6 +218,108 @@ const forcedLegacy = check({ specModule: loadSpec(V2_SPEC), contract, invariants
 ok('--legacy-bare-next forces the bare-next path even on a v2 module (loud error, no silent clean)',
   forcedLegacy.ok === false && /init\(\) and next\(\)/.test(forcedLegacy.error));
 
+// Empty exploration domains are ERRORS, never vacuous passes.
+const noIntentsSpec = join(TMP, 'no-intents-v2.js');
+writeFileSync(noIntentsSpec, `${V2_HEADER}
+const INITIAL_STATE = { state: 'LOCKED' };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: { modelShape: { state: { type: 'string' } }, actions: {}, acceptors: {}, reactors: [] },
+});
+${V2_FOOTER}`, 'utf-8');
+const noIntents = check({ specModule: loadSpec(noIntentsSpec), contract, invariants, maxStates: 40 });
+ok('v2 module with an empty intent registry is an ERROR, not a vacuous clean',
+  noIntents.ok === false && typeof noIntents.error === 'string' && noIntents.violations.length === 0);
+const emptyLegacy = check({
+  specModule: { init: () => ({ n: 0 }), next: (s) => s },
+  contract: { stateKeys: ['n'], actions: {} }, invariants: {}, maxStates: 5,
+});
+ok('legacy contract with zero explorable actions is an ERROR (empty domain)',
+  emptyLegacy.ok === false && /exploration domain is empty/.test(emptyLegacy.error));
+// A contract action the manifest doesn't know about must be VISIBLE.
+const extraActionContract = { ...contract, actions: { ...contract.actions, MYSTERY: { dataFields: {} } } };
+const diffed = check({ specModule: loadSpec(V2_SPEC), contract: extraActionContract, invariants, maxStates: 40 });
+ok("contract action missing from manifest() surfaces as a NOT-explored note",
+  (diffed.domainNotes || []).some((n) => /'MYSTERY' is not in the module's manifest/.test(n)));
+
+// Adapter purity: next() must be a function of (state, action, data) ALONE.
+// A module whose behavior depends on a hidden `internal` counter (merge-only
+// setState leaves it behind) must NOT give history-dependent answers.
+const hiddenSpec = join(TMP, 'hidden-v2.js');
+writeFileSync(hiddenSpec, `${V2_HEADER}
+const INITIAL_STATE = { state: 'COLD', hits: 0 };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { state: { type: 'string' }, hits: { type: 'number', internal: true } },
+    actions: { BUMP: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
+    acceptors: { BUMP: (model) => () => { model.hits = model.hits + 1; model.state = model.hits >= 2 ? 'HOT' : 'WARM'; } },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+{
+  const samAdapter = (await import('../scripts/sam-adapter.cjs')).default;
+  const adapted = samAdapter.makeSamAdapter(loadSpec(hiddenSpec));
+  adapted.init();
+  const first = adapted.next({ state: 'COLD' }, 'BUMP', {});
+  const second = adapted.next({ state: 'COLD' }, 'BUMP', {});
+  ok('adapter next() is pure: same input state gives the same output regardless of history',
+    JSON.stringify(first) === JSON.stringify(second));
+  ok('hidden internal state is canonically reset (init-value semantics, same as sam-tv per-window)',
+    first.state === 'WARM');
+}
+
+// stable(): a dropped field (undefined) or NaN must never equal a trace null.
+{
+  const { stable } = await import('../scripts/load-spec.mjs');
+  ok('stable: undefined ≠ null (a spec that drops a field must fail a null trace value)',
+    stable(undefined) !== stable(null) && stable({ a: undefined }) !== stable({ a: null }));
+  ok('stable: NaN/Infinity ≠ null', stable(NaN) !== stable(null) && stable(Infinity) !== stable(null) && stable(NaN) !== stable(Infinity));
+  ok('stable: key order is still canonical', stable({ a: 1, b: 2 }) === stable({ b: 2, a: 1 }));
+}
+
+// Mutate-then-reject: a rejection that changed the model is a spec DEFECT —
+// the checker must record it, not explore it as a legal identity no-op (which
+// would contradict the replayer, which sees the mutation in getState()).
+const mutateRejectSpec = join(TMP, 'mutate-reject-v2.js');
+writeFileSync(mutateRejectSpec, `${V2_HEADER}
+const INITIAL_STATE = { state: 'LOCKED', coins: 0 };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { state: { type: 'string' }, coins: { type: 'number' } },
+    actions: { COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
+    acceptors: { COIN: (model) => (p, { reject }) => { model.coins = model.coins + 1; return reject('nope'); } },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+const mutateReject = check({ specModule: loadSpec(mutateRejectSpec), contract, invariants: {}, maxStates: 10 });
+ok('mutate-then-reject is a recorded violation, never a silent identity no-op',
+  mutateReject.ok === false
+  && mutateReject.violations.some((v) => v.kind === 'throw' && /mutated the observable model .* and then rejected/.test(v.detail)));
+
+// ...but mutating only an INTERNAL key before rejecting (reason-logging, a
+// legit v1 idiom) is observably a pure no-op — the replayer passes it, so the
+// checker must too.
+const internalRejectSpec = join(TMP, 'internal-reject-v2.js');
+writeFileSync(internalRejectSpec, `${V2_HEADER}
+const INITIAL_STATE = { state: 'LOCKED', coins: 0, lastReason: '' };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { state: { type: 'string' }, coins: { type: 'number' }, lastReason: { type: 'string', internal: true } },
+    actions: { COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
+    acceptors: { COIN: (model) => (p, { reject }) => { model.lastReason = 'not-now'; return reject('not-now'); } },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+const internalReject = check({ specModule: loadSpec(internalRejectSpec), contract, invariants: {}, maxStates: 10 });
+ok('internal-key mutation before reject stays a LEGAL no-op (no false violation)',
+  !internalReject.violations.some((v) => v.kind === 'throw'));
+
 console.log('4) P4 — determinism double-pass');
 const rand = check({ specModule: loadSpec(randomSpec), contract: {}, invariants: {}, maxStates: 30 });
 ok('Math.random spec flagged nondeterministic', rand.nondeterministic === true);
@@ -238,6 +340,19 @@ const cli = spawnSync('node', [join(ROOT, 'scripts', 'verify.mjs'),
   '--out', join(TMP, 'out-legacy-cli')], { encoding: 'utf-8' });
 ok('CLI --legacy-bare-next replays the legacy example clean (12/12)',
   cli.status === 0 && /12\/12 windows consistent/.test(cli.stdout));
+
+// CLI arg hardening: a value flag followed by another flag must be a loud
+// usage error, not a silent `Number(true) === 1`.
+const cliBadN = spawnSync('node', [join(ROOT, 'scripts', 'verify.mjs'),
+  '--contract', join(EX, 'contract.json'), '--traces', join(EX, 'traces'),
+  '--specs', join(EX, 'specs'), '--n', '--tla'], { encoding: 'utf-8' });
+ok('CLI: value flag with flag-shaped value exits 2 (no silent --n=1)',
+  cliBadN.status === 2 && /missing value for --n/.test(cliBadN.stderr));
+const cliMix = spawnSync('node', [join(ROOT, 'scripts', 'verify.mjs'),
+  '--contract', join(EX, 'contract.json'), '--traces', join(EX, 'traces'),
+  '--specs', join(EX, 'specs'), '--model', 'sonnet-5'], { encoding: 'utf-8' });
+ok('CLI: --specs plus generation flags is a loud error (stale specs cannot masquerade as regenerated)',
+  cliMix.status === 1 && /cannot be combined/.test(cliMix.stderr));
 
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

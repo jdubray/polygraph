@@ -32,19 +32,31 @@ function resolveInvariantsPath(opts, contract) {
   return existsSync(sibling) ? sibling : null;
 }
 
+// The flags that ARE boolean. Every other flag takes a value — inferring
+// "boolean" from the next token being a flag turned `--n --tla` into
+// `n: true` (and `Number(true) === 1`), silently gutting the N-way vote.
+const BOOLEAN_FLAGS = new Set(['legacy-bare-next', 'tla']);
+
 function parseArgs(argv) {
   const a = {};
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith('--')) {
-      // A flag followed by another flag (or by nothing) is boolean, e.g.
-      // --legacy-bare-next; otherwise it consumes the next token as its value.
-      const key = argv[i].slice(2);
-      const nxt = argv[i + 1];
-      if (nxt === undefined || nxt.startsWith('--')) a[key] = true;
-      else { a[key] = nxt; i++; }
-    }
+    if (!argv[i].startsWith('--')) throw new Error(`unexpected argument '${argv[i]}'`);
+    const key = argv[i].slice(2);
+    if (BOOLEAN_FLAGS.has(key)) { a[key] = true; continue; }
+    const nxt = argv[i + 1];
+    if (nxt === undefined || nxt.startsWith('--')) throw new Error(`missing value for --${key}`);
+    a[key] = nxt;
+    i++;
   }
   return a;
+}
+
+/** Positive-integer option, or its default. Rejects anything else loudly. */
+function posInt(v, name, def) {
+  if (v === undefined) return def;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`--${name} must be a positive integer (got '${v}')`);
+  return n;
 }
 
 /**
@@ -59,13 +71,20 @@ export function classify(statuses) {
   const passes = statuses.filter((s) => s === 'pass').length;
   if (passes === n) return 'consistent';
   if (statuses.every((s) => s === 'unscoreable')) return 'unscoreable-all';
-  if (passes === 0) return 'code-finding-or-contract';
+  // The strong class claims "EVERY spec disagrees with the trace here" — it
+  // requires every spec to have actually failed. A fail+unscoreable mix has
+  // less evidence (some specs measured nothing) and classifies as the weaker
+  // investigate-the-spec verdict rather than overstating the finding.
+  if (statuses.every((s) => s === 'fail')) return 'code-finding-or-contract';
   return 'spec-error';
 }
 
 export async function verify(opts) {
   const contract = JSON.parse(readFileSync(opts.contract, 'utf-8'));
   const windows = loadWindows(opts.traces);
+  // A verification that examined nothing must never report a clean bill:
+  // zero windows would make every per-window check vacuously pass.
+  if (!windows.length) throw new Error(`no trace windows found in ${opts.traces} (looked for *.ndjson with at least one window)`);
   const outDir = opts.out || 'out';
   mkdirSync(outDir, { recursive: true });
   // Artifact mode (Option A full switch): the default artifact is a v2 SAM
@@ -75,6 +94,11 @@ export async function verify(opts) {
 
   // Obtain spec file paths.
   let specPaths = [];
+  if (opts.specs && (opts.model || opts.source)) {
+    // Replaying saved specs while silently ignoring --model/--source would
+    // let a user believe they re-generated against new source.
+    throw new Error('--specs replays SAVED specs and cannot be combined with --model/--source (drop --specs to generate, or drop the generation flags to replay)');
+  }
   if (opts.specs) {
     // Accept .js and .cjs (the CJS loader executes both). .mjs is ESM, which
     // the loader cannot execute — skip it LOUDLY rather than silently.
@@ -86,6 +110,7 @@ export async function verify(opts) {
     if (!specPaths.length) throw new Error(`no specs found in ${opts.specs} (looked for *.js / *.cjs)`);
   } else {
     if (!opts.model) throw new Error('--model is required in generation mode (or use --specs)');
+    if (!opts.source) throw new Error('--source is required in generation mode (the file the specs are derived from)');
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set (or use --specs to replay saved specs)');
     const source = readFileSync(opts.source, 'utf-8');
@@ -98,8 +123,8 @@ export async function verify(opts) {
     // (buildPrompt throws otherwise — the domain is also the exploration and
     // transpilation domain, so a gap must block generation loudly).
     const prompt = buildPrompt(contract, source, { filePath: opts.source, lang, mode });
-    const maxTokens = opts['max-tokens'] ? Number(opts['max-tokens']) : undefined;
-    const gens = await generateSpecs({ prompt, model: opts.model, n: Number(opts.n || 5), apiKey, maxTokens });
+    const maxTokens = posInt(opts['max-tokens'], 'max-tokens', undefined);
+    const gens = await generateSpecs({ prompt, model: opts.model, n: posInt(opts.n, 'n', 5), apiKey, maxTokens });
     const specDir = join(outDir, 'specs');
     mkdirSync(specDir, { recursive: true });
     gens.forEach((g) => {
@@ -171,7 +196,7 @@ export async function verify(opts) {
     // must surface as an ERROR, never as a silent zero-violation result: it
     // would otherwise dilute the strength of a violation every live spec
     // reaches, and a clean-looking report would hide that the check never ran.
-    const maxStates = opts['max-states'] ? Number(opts['max-states']) : undefined;
+    const maxStates = posInt(opts['max-states'], 'max-states', undefined);
     const perSpec = specPaths.map((p, i) => {
       const name = p.replace(/^.*[\\/]/, '');
       try {
@@ -252,7 +277,7 @@ async function tlaEscalation({ specPaths, liveIdx, matrix, mode, outDir, invPath
     const { transpile } = await import('./to-tla.mjs');
     transpiled = await transpile(specPath, {
       outPath: join(tlaDir, `${moduleName}.tla`),
-      bound: opts['tla-bound'] ? Number(opts['tla-bound']) : undefined,
+      bound: posInt(opts['tla-bound'], 'tla-bound', undefined),
       invariantsPath: invPath || null,
       contractPath,
     });
@@ -270,7 +295,7 @@ async function tlaEscalation({ specPaths, liveIdx, matrix, mode, outDir, invPath
   try {
     const { runTlc, TlcNotAvailableError } = await import('./tla-check.mjs');
     try {
-      const timeoutMs = opts['tla-timeout'] ? Number(opts['tla-timeout']) * 1000 : undefined;
+      const timeoutMs = opts['tla-timeout'] ? posInt(opts['tla-timeout'], 'tla-timeout', undefined) * 1000 : undefined;
       const r = runTlc(transpiled.tlaPath, { cfgPath: transpiled.cfgPath, ...(timeoutMs ? { timeoutMs } : {}) });
       report.tlc = {
         status: r.status,
@@ -415,7 +440,11 @@ function renderTlaSection(L, tlaReport) {
     L.push(`\n⚠️ TLC failed to run: ${t.error}`);
     return;
   }
-  if (t.status === 'pass') {
+  if (t.status === 'pass' && tlaReport.invariants.length === 0) {
+    // A "PASS" with zero translated invariants would dress a vacuous run as
+    // evidence — TLC only explored and deadlock-checked.
+    L.push(`\n**TLC: EXPLORED ONLY (no invariants translated — nothing was checked)** — ${t.statesGenerated} states generated, ${t.distinctStates} distinct. The run proves reachability only; every invariant was skipped (see the list above).`);
+  } else if (t.status === 'pass') {
     L.push(`\n**TLC: PASS** — ${t.statesGenerated} states generated, ${t.distinctStates} distinct; no translated invariant is violated in the FULL bounded state space (exhaustive within the payload domains and bound, not a proof beyond them).`);
   } else if (t.status === 'invariant-violation') {
     L.push(`\n**TLC: INVARIANT VIOLATION** — ${t.violatedInvariants.map((n) => `\`${n}\``).join(', ')} (${t.statesGenerated} states generated, ${t.distinctStates} distinct).`);
@@ -448,7 +477,9 @@ function renderTlaSection(L, tlaReport) {
 
 // CLI
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const a = parseArgs(process.argv.slice(2));
+  let a;
+  try { a = parseArgs(process.argv.slice(2)); }
+  catch (e) { console.error('[verify] ' + e.message); process.exit(2); }
   if (!a.contract || !a.traces) {
     console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] | --specs <dir>) [--invariants <inv.mjs>] [--max-states N] [--out <dir>] [--legacy-bare-next] [--tla [--tla-bound N] [--tla-timeout <s>]]');
     process.exit(2);
