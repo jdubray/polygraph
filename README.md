@@ -4,282 +4,218 @@
 
 # Polygraph
 
-**A polygraph for your state machine.**
+**Your tests check the paths you thought of. Polygraph checks the ones you didn't.**
 
-A Claude Code plugin for **trace-driven consistency checking of stateful code**.
-You point it at a state machine (a workflow, reducer, protocol, or session
-handler); it has an LLM derive a transition-function spec from the source —
-by default a **SAM v2 strict-profile module** ([sam.js.org](https://sam.js.org),
-`@cognitive-fab/sam-pattern` **2.0.0**, published on npm; a vendored copy keeps the plugin zero-install): named intents with
-per-intent schemas and finite payload domains, acceptors keyed by intent name,
-every ignored action an observable `reject(reason)`, and a sealed model —
-replays real execution traces against it, model-checks it against invariants,
-and reports every place the code's observed behavior disagrees with an
-independent reading of its own source — as a **spec-error**, a
-**code-finding**, or a **contract-error**. The original bare
-`next(state, action, data)` artifact remains available end-to-end behind
-`--legacy-bare-next` for one release, and an optional `--tla` tier escalates
-the winning spec to a mechanical TLA+ transpilation checked by TLC.
+Polygraph is a Claude Code plugin (and standalone CLI) that finds bugs in
+**stateful code** — workflows, reducers, protocol handlers, checkout flows,
+session managers — by exhaustively exploring every state the code can reach
+and flagging the ones that break rules you care about, like *"a customer is
+never charged twice."*
+
+You don't need to know anything about formal verification to use it. You
+write the rules as plain JavaScript predicates. The heavy lifting — deriving a
+formal model of your code, exploring the state space, producing a shortest
+path to each violation — is done for you.
 
 > **Disclosure — read this first.** Polygraph is **experimental, not
-> peer-reviewed, unproven technology.** The method is newly published and highly
-> speculative. It is a **consistency check, not a proof**: a clean run means the
-> code's observable behavior matches an independent transition function derived
-> from its source, and nothing more. Every finding is a *lead to investigate by
-> hand*, not an established result. Do not rely on it as your only safeguard for
-> correctness- or safety-critical code. Approach the output with skepticism.
+> peer-reviewed, unproven technology.** It is a **consistency check, not a
+> proof**: a clean run means the code's observable behavior matches an
+> independent reading of its own source, and nothing more. Every finding is a
+> *lead to investigate by hand*, not an established result. Do not rely on it
+> as your only safeguard for correctness- or safety-critical code.
 
-## What's new in 2.0
+## Why Polygraph
 
-Polygraph 2.0 moves the derived artifact from the bare `next()` contract to
-the **SAM v2 strict profile**, released as `@cognitive-fab/sam-pattern` 2.0.0.
-The change is grounded in a measured study (see Provenance): the strict
-profile eliminated every non-semantic failure class the 1.x artifact could
-produce, and the remaining findings are about the code under audit, which is
-where they belong.
+Unit tests execute the scenarios you wrote. A state machine of even modest
+size has orders of magnitude more reachable states than any test suite
+visits — and the bugs that hurt in production live in the combinations nobody
+wrote a test for: a retry landing after a cancel, a timeout racing a
+confirmation, an event arriving in a state where nobody expected it.
 
-- **Structural failure classes closed by construction:** silent no-op specs
-  (dropped payloads now throw), hidden bookkeeping state (sealed model),
-  vacuous exploration, and dispatch-monolith specs.
-- **Richer triage:** every replay window carries a step classification —
-  `rejected(reason)` and `identity-by-mutation` are the two good no-op
-  classes; `unhandled` is itself a finding.
-- **Model checking without configuration:** exploration domains come from the
-  spec's own manifest; a determinism double-pass runs on every check.
-- **`--tla` escalation:** the winning spec transpiles mechanically to TLA+
-  and is checked by TLC when a Java toolchain is available.
-- **Release gate:** the seeded-bug A/B eval passes at parity or better in
-  both arms and at two model tiers (haiku-4.5, fable-5), with two bugs newly
-  caught at the cheap replay tier and zero dead specs.
-- `--legacy-bare-next` preserves the 1.x pipeline end-to-end for one release.
+Polygraph attacks that gap in two ways:
 
-## How it works (two halves)
+- **Audit existing code** (`/polygraph:verify`). An LLM reads your source and
+  writes an independent, executable specification of it — a second opinion on
+  what the code does. Polygraph then (1) replays real execution traces
+  against that spec to confirm it's faithful, and (2) **model-checks** it:
+  starting from the initial state, it tries every action with every relevant
+  payload, visits every reachable state, and reports any state that violates
+  one of your rules — with the shortest sequence of actions that gets there.
+  That counterexample path is a ready-made repro for the bug.
 
-An LLM derives a transition-function spec (v2 SAM strict module by default)
-from your code. Then Polygraph does **two** things with it — and the second is
-where bugs are found.
+- **Author new code** (`polygen`). Give it a one-sentence feature description
+  and it writes the state machine *and* its rules, model-checks its own
+  output, repairs violations, and hands you code with a passing exhaustive
+  check plus a generated regression trace corpus — verified from the moment
+  it's written.
 
-**Half 1 — conformance (replay).** Check that the derived spec reproduces real
-execution traces.
+Real result: on a production SaaS subscription-billing machine, this method
+independently corroborated a genuine double-charge bug
+([`examples/case-study-subscription.md`](examples/case-study-subscription.md)).
+In the controlled eval, replay alone found 0/5 seeded bugs — model checking
+found 5/5, with counterexamples
+([`eval/FINDING-faithful-reproduction.md`](eval/FINDING-faithful-reproduction.md)).
 
-1. **Define a contract** — the minimal observable state, the action alphabet,
-   terminal states, and the special rules that live outside the main state table.
-2. **Capture traces** — instrument a copy of the code to emit one NDJSON
-   `{pre, action, data, post}` window per step, across scenarios.
-3. **Controls first** — a hand-written reference spec must score 100%; a mutated
-   one must fail only its target windows. This proves the replay discriminates.
-4. **Generate + replay** — generate N independent specs, replay each, triage the
-   disagreements. With the v2 artifact each window also carries a **step
-   classification** — `rejected(reason)` / `identity-by-mutation` (the two good
-   no-op classes) vs `unhandled` (the spec neither acted nor rejected — itself
-   a finding): a failing no-op window now says *why* the spec did nothing.
+### Why not use TLA+ / Alloy / a model checker directly?
 
-**Half 2 — model checking (the bug-finder).** Iterate the spec against
-invariants.
+Those tools work — but you have to hand-translate your code into their
+language and keep the translation current, which is why almost nobody does
+it. Specifying even a small-to-midsize system is a multi-month effort, and
+every code change invalidates the spec. Polygraph's bet is that an LLM can
+produce that formal model *from your source* cheaply enough to rerun on every
+change, and that replaying real traces against the model tells you whether to
+trust it. You stay in JavaScript the whole time. (If you *do* want the real
+thing, an optional `--tla` flag mechanically transpiles the winning spec to
+TLA+ and runs TLC over it.)
 
-5. **Write invariants** — rules encoding what the code *should* do ("a customer
-   is never charged without a confirmed transaction"), as `invariants.mjs`.
-6. **Check** — `scripts/check.mjs` explores every reachable state of the spec
-   from `init()` over a finite action/data domain (v2: read from the module's
-   own `manifest()`, so nothing is silently excluded; every check also runs a
-   determinism double-pass) and reports any state that breaks a rule, with a
-   shortest **counterexample path**.
-7. **Escalate to TLC** (optional, `--tla`) — the winning spec is mechanically
-   transpiled to TLA+ (`out/tla/*.tla` + `.cfg`) and, when Java and
-   `tla2tools.jar` are available (`POLYGRAPH_JAVA`, `POLYGRAPH_TLA_JAR`),
-   checked by TLC: the report's Part 2 gains states-generated counts,
-   per-invariant verdicts, counterexample steps, and the list of invariants
-   that could not be carried (named, with reasons). A missing toolchain is a
-   note, not an error — the artifacts are still written.
+This bet is no longer a fringe position. Emilie Ma's Berlin Buzzwords talk
+[*Scaling formal methods with LLMs*](https://www.youtube.com/watch?v=M2wb2ug2gYg)
+presents the same thesis from the TLA+ side: SysMoBench, a benchmark showing
+frontier LLMs can't yet write conformant specs unaided, and Specula, an
+agentic pipeline (spec generation + model checking + trace validation — the
+same three legs Polygraph stands on) that found 160+ bugs in production
+systems like MongoDB and etcd-raft, over 130 previously unknown, at roughly
+$40 per repository. The convergent finding: the LLM alone is not trustworthy,
+but an LLM *held accountable by a model checker and trace validation* is a
+practical bug-finder.
 
-Why both halves are needed: **replay only catches a bug when the spec
-*disagrees* with the code — and a faithful spec doesn't.** On small, legible
-code a capable model reproduces the code exactly, bug included, so replay goes
-silent. Model checking iterates that *same faithful spec* against your intent and
-**reaches** the bad state anyway. This is measured, not asserted — see
-[`eval/FINDING-faithful-reproduction.md`](eval/FINDING-faithful-reproduction.md)
-(replay found 0/5 seeded bugs; model checking found 5/5, with counterexamples:
-`npm run eval:check`).
+## How it works
 
-Versions before 0.2.0 shipped only Half 1. The method and its failure modes are
-documented in the `polygraph` skill.
+Everything revolves around three artifacts you can read and diff:
 
-## polygen — the other direction: author NEW verifiable code
+1. **A contract** (`contract.json`) — what's observable: the state fields
+   that matter, the actions the machine accepts, the data each action can
+   carry, which states are terminal. This is the scope of the audit.
 
-`/polygraph:verify` **audits** code that already exists. `polygen` **authors**
-new code so it's verifiable from the moment it's written — closing the loop at
-creation time instead of retrofitting it later. Given a one-sentence feature
-description, it:
+2. **A spec** — an executable model of your code, written by an LLM from your
+   source. By default it's a strict, self-describing state-machine module
+   (the [SAM pattern](https://sam.js.org) v2 strict profile): every action it
+   ignores must say *why* (`reject(reason)`), it can't hide bookkeeping
+   state, and it declares its own action/data domains — so the model checker
+   knows exactly what to explore with zero configuration. Several specs are
+   generated independently and vote, so one bad generation doesn't decide the
+   outcome.
 
-1. **Drafts a contract** — observable state, action alphabet, `dataDomain`
-   (concrete enumerable values for every parameterized action field — this is
-   how the model checker knows what to explore), terminal states, special
-   rules.
-2. **Authors the module** against that contract — the v2 SAM strict-profile
-   module by default (it must load strict-clean through the `validate()`
-   gate, so schema/shape errors block at stage boundaries instead of becoming
-   report lines); `init()`/`next(state, action, data)` with
-   `--legacy-bare-next`.
-3. **Proposes `invariants.mjs`** — rules encoding intent, not just behavior.
-4. **Self-repairs** — model-checks the code against its own invariants
-   (exhaustive reachability, the same `check.mjs` engine `verify.mjs` uses)
-   and, on a reachable violation, patches the code and re-checks. Capped
-   (`--repair-max`, default 3); a run that doesn't converge is reported as NOT
-   converged, never silently presented as clean. It also cross-checks that
-   every `dataDomain` value the contract declares is actually referenced in
-   the code — the contract and the code come from **two independent model
-   calls**, so nothing else guarantees they agree on vocabulary, and a
-   mismatch there silently collapses how much of the state space the checker
-   can even reach. See
-   [`examples/case-study-polygen-domain-gap.md`](examples/case-study-polygen-domain-gap.md)
-   for a real run where this happened and how it was fixed — including an
-   honest look at a false positive the fix introduces.
-5. **Synthesizes a demo/regression trace corpus** by driving the final code
-   through model-proposed scenarios, validates it, and independently replays
-   it in a **separate process** as a sanity check (catches nondeterminism the
-   in-process generation wouldn't expose).
+3. **Invariants** (`invariants.mjs`) — your rules, as plain JS functions over
+   a state: *"never charged without a confirmed transaction"*, *"an expired
+   session can't accept input."* These encode your **intent**, which is the
+   one thing no tool can derive from the code — code with a bug is a faithful
+   description of the wrong behavior.
 
-Everything lands in `<out>/`: `contract.json`, `next.cjs` (the module file —
-historical name; in the default mode it holds the v2 SAM module),
-`invariants.mjs`, `traces/*.ndjson`, `polygen-report.md`.
+Then two checks run:
 
-```bash
-node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/
-```
+**Check 1 — replay (is the spec faithful?).** Real execution traces —
+captured by wrapping your dispatch/reducer once, so every step logs a
+`{pre, action, data, post}` window — are replayed against each spec. Before
+any generated spec is trusted, controls run: a hand-written reference spec
+must score 100% and a deliberately mutated one must fail, proving the harness
+can actually tell good from bad. Disagreements are triaged into
+**spec-errors** (the LLM misread the code), **code-findings** (the code
+disagrees with an independent reading of itself — investigate), and
+**contract-errors** (the contract mis-scoped the problem).
 
-**Then the handoff, deliberately not scripted**: review the contract and
-invariants (both are the model's reading of your intent, not ground truth),
-wire `next()` into the real handler/reducer (call it — don't reimplement the
-transition logic inline), then run `/polygraph:verify` against REAL captured
-traces from the integrated code. That last step is what catches drift between
-the pure model and the glue code around it.
+**Check 2 — model check (where the bugs are).** The faithful spec is iterated
+exhaustively from its initial state against your invariants. This is the step
+that finds what tests miss: replay can only flag a bug when spec and code
+*disagree*, and a faithful spec reproduces the bug right along with the code.
+Model checking reaches the bad state anyway and prints the shortest path to
+it. Every check also runs a determinism double-pass for free.
 
-**v1 is JS/TS only.** The generated module is directly usable only in a
-JS/TS codebase; porting a verified model to another language is a real,
-separate problem (the port itself would need its own differential check
-against the JS original) and is out of scope here.
+**polygen** runs the same machinery in reverse: draft contract → author
+module → propose invariants → model-check → self-repair on violations (capped
+at `--repair-max` rounds; a non-converging run is reported as NOT converged,
+never silently presented as clean) → synthesize and independently replay a
+trace corpus. It also cross-checks that contract and code agree on their
+action/data vocabulary, because the two come from independent model calls —
+[`examples/case-study-polygen-domain-gap.md`](examples/case-study-polygen-domain-gap.md)
+shows a real run where a silent enum-spelling mismatch collapsed the
+explorable state space, and how the check caught it.
 
-## What it needs from you (read before you start)
+polygen output is JS/TS only: the generated module is directly usable in a
+JS/TS codebase; porting a verified model to another language would need its
+own differential check and is out of scope.
 
-Polygraph replays **real execution traces** — it cannot verify code from source
-alone. Its power comes from the traces being ground truth captured from the code
-actually running. So the first question is: **can you run the isolated code?**
+## Effort and prerequisites
 
-| your situation | what to do | can it find code bugs? |
+| step | who does it | how long |
 |---|---|---|
-| the module has a clean step boundary you can call (a dispatch, reducer, or handler) | instrument it and drive it (below) | yes |
-| it only runs with its environment (DB, network, a device) | stand up test doubles / an emulator so it runs in isolation first | yes — once it runs |
-| it can't be run at all (a fragment) | you can hand-write windows, but then you're testing against your *expectations*, not the code's behavior | no — only spec-errors vs your hand-written traces |
+| Define the contract (observable fields, actions, terminals) | you, or Claude drafts it for your review | minutes |
+| Capture traces (instrument a copy, drive scenarios) | **the agent, in Claude Code** — it builds test doubles/emulators if needed; standalone, you wrap your dispatch once (snippet below) | the bulk of the work standalone; delegated in Claude Code |
+| Write invariants (your rules as JS predicates) | you — this is your intent; the tool can propose, only you can confirm | minutes per rule |
+| Generate specs, replay, model-check | automatic | minutes |
+| Triage findings | you — every finding is a lead, not a verdict | depends on what it finds |
 
-**Where the effort goes.** Building the contract and running generate/replay are
-cheap (minutes). **Capturing traces is the bulk of the work** — it means
-instrumenting a copy of the code and driving it through scenarios. If you
-already have tests, wrap the step boundary once and every test emits windows for
-free:
+Trace capture is historically what made this kind of verification expensive,
+and it's the step the agent now carries: in the origin study, a Claude agent
+built a payment-terminal emulator and a fault-injection proxy, instrumented a
+production payment workflow, drove 17 scenarios, and produced a 75-window
+corpus autonomously. What stays with you is judgment: confirming the contract
+covers the right state, and sanity-checking any doubles the agent built
+against reality.
+
+One hard prerequisite: **the code must be runnable in isolation**, because
+traces are ground truth captured from the code actually executing. If it has
+a clean step boundary (a dispatch, reducer, or handler), you're set. If it
+only runs against a DB/network/device, stand up doubles first (or let the
+agent do it). If it can't run at all, replay degenerates to checking specs
+against your *expectations*, which can't find code bugs.
+
+Wrapping the boundary standalone is one line per scenario:
 
 ```js
 import { withTracing } from '<plugin>/scripts/instrument/trace-emitter.mjs';
 
-// project ONLY your contract's observable keys — exclude everything else:
-const project = () => ({ txState: m.txState, orderId: m.orderId /* ...your keys */ });
-
-// wrap a dispatch(action, data) so every call appends a {pre,action,data,post} window:
+// project ONLY the contract's observable keys:
+const project = () => ({ txState: m.txState, orderId: m.orderId });
 const dispatch = withTracing(rawDispatch, project, 'traces/s1_normal.ndjson');
-
-// Redux-style reducer? use tapReducer(rawReducer, project, file,
-//   { actionName: a => a.type, actionData: a => a.payload })
+// Redux-style reducer: tapReducer(...)  ·  SAM component: withSamTracing(...) — see scripts/instrument/
 ```
 
-Code built on the **SAM pattern** (`@cognitive-fab/sam-pattern`, optionally with
-`sam-fsm`)? Wrap the `component` config — every dispatch emits a window,
-no-ops included:
+## When an API key is required
 
-```js
-import { withSamTracing } from '<plugin>/scripts/instrument/sam-emitter.mjs';
+Only spec **generation** and code **authoring** call the Anthropic API.
+Everything that checks, replays, or explores runs locally on Node ≥ 20.
 
-const project = (m) => ({ txState: m.txState /* ...your observable keys */ });
-const traced  = withSamTracing(component, project, 'traces/s1_normal.ndjson');
-const { intents } = instance({ initialState, component: traced, render });
-// then drive `intents` through your scenarios (sam-pattern intents are async — await them)
-```
+| task | command | API key? | why |
+|---|---|---|---|
+| Try the quickstart / run the test suite | `npm test` | **no** | replays bundled specs against bundled traces |
+| Validate a trace corpus | `validate_corpus.mjs` | **no** | local schema/shape checks |
+| Replay saved specs against traces | `verify.mjs --specs …` | **no** | pure local execution |
+| Model-check a spec against invariants | `check.mjs` | **no** | exhaustive local exploration |
+| Escalate to TLA+/TLC | `verify.mjs --tla` | **no** | mechanical transpile + local TLC (needs Java + `tla2tools.jar` via `POLYGRAPH_JAVA` / `POLYGRAPH_TLA_JAR`) |
+| **Generate specs from source** | `verify.mjs --source … --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM writes the specs |
+| **Author new code (polygen)** | `polygen.mjs --intent … --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM drafts contract, code, and invariants |
 
-See `examples/turnstile-sam/` for a runnable SAM instance.
+This applies inside Claude Code too: the skills and subagents shell out to
+these same scripts, so the generate and polygen steps need
+`ANTHROPIC_API_KEY` set in your environment — your Claude Code session
+credentials are not used for them.
 
-Then drive scenarios (normal path, each failure class, races, and deliberate
-no-ops — an action sent into a terminal state), one `.ndjson` file per scenario,
-and validate the corpus before generating.
+## Install
 
-### The point: in Claude Code, the agent does Step 2 for you
-
-Trace capture is the heavy step — and inside Claude Code, the agent does it, not
-you. Point it at the isolated code and it will instrument a copy, **build
-whatever test doubles or emulators are needed to run it in isolation**, drive the
-scenarios, and produce (and validate) the corpus.
-
-Existence proof: in the study that introduced the method, a Claude agent built a
-payment-terminal emulator and a fault-injection proxy, instrumented a production
-SAM payment workflow, drove 17 scenarios, and produced a 75-window corpus — all
-of Step 2 — autonomously. That is the differentiator: the step that historically
-made this kind of verification expensive is the step the agent now carries.
-
-What stays with you is judgment, not labor: confirming the contract captures the
-right observable state, and validating that any doubles the agent built match
-reality (the correlated-oracle check — e.g. probe one assumption against a real
-sandbox). The manual snippets above are for using the scripts standalone; in a
-Claude Code session you can just say *"verify this state machine"* and let the
-agent run Step 2.
-
-## Install (Claude Code plugin)
-
-Install from the marketplace (this repo is its own marketplace):
+As a Claude Code plugin (this repo is its own marketplace):
 
 ```
 /plugin marketplace add jdubray/polygraph
 /plugin install polygraph@polygraph
 ```
 
-Or clone directly into your Claude Code plugins directory:
+Or clone directly: `git clone https://github.com/jdubray/polygraph ~/.claude/plugins/polygraph`.
+Update later with `/plugin marketplace update polygraph`. Requires **Node ≥ 20**.
 
-```bash
-git clone https://github.com/jdubray/polygraph \
-  ~/.claude/plugins/polygraph
-```
-
-Update later with `/plugin marketplace update polygraph`.
-
-Then in a session, six entry points — three for auditing existing code, three
-for authoring new code:
+Then just ask in plain language — *"verify this state machine"*, *"does this
+code do what I think it does?"*, *"write a verifiable checkout flow"* — or use
+the entry points directly:
 
 | you type | what it is | when to use it |
 |---|---|---|
-| `/polygraph:polygraph` | audit **skill** (guided method) | full end-to-end audit walk-through — Claude designs the contract, captures traces, runs controls, generates, and triages with you |
-| `/polygraph:verify` | audit **command** (script runner) | you already have a contract + traces and just want to run generate + replay (`--contract … --traces … --model …`) |
-| `polygraph-verifier` | audit **subagent** | hand off the whole audit loop for an autonomous, unsupervised run |
-| `/polygraph:polygen` | author **skill** (guided method) | write a NEW state machine from a feature description, self-repaired before it ships |
-| `/polygraph:polygen` | author **command** (script runner) | you know exactly what you want and just want to run it (`--intent "…" --model …`) |
-| `polygen` | author **subagent** | hand off the whole author loop for an autonomous, unsupervised run |
-
-(The `verify` command's fully-qualified form is `/polygraph:verify`; the
-`polygraph` skill's is `/polygraph:polygraph` — the plugin and the skill share
-the name, hence the doubled form. `polygen`'s skill and command share the
-`polygen` name directly.)
-
-**Or just ask in plain language** — each skill triggers on phrases like:
-
-- Audit: *"verify this state machine"* / *"polygraph this workflow"* /
-  *"check my reducer / workflow"* / *"does this code do what I think it
-  does?"* / *"audit the payment / order / session flow"* / *"bare next /
-  trace validation"*
-- Author: *"polygen"* / *"write a verifiable state machine"* / *"author
-  verifiable code"* / *"build me a X flow that's already checked"* /
-  *"generate a reducer/workflow and verify it"*
-
-Requirements: **Node ≥ 20**. Generation calls the Anthropic API and needs
-`ANTHROPIC_API_KEY` plus a model; replay and the controls need neither.
+| `/polygraph:polygraph` | audit **skill** | guided end-to-end audit — Claude designs the contract, captures traces, runs controls, triages with you |
+| `/polygraph:verify` | audit **command** | you already have contract + traces; just run generate + replay |
+| `polygraph-verifier` | audit **subagent** | hand off the whole audit for an autonomous run |
+| `/polygraph:polygen` | author **skill / command** | write a NEW verified state machine from a feature description |
+| `polygen` | author **subagent** | hand off the whole authoring loop |
 
 ## Use it as a plain CLI (no Claude Code)
-
-The scripts are standalone:
 
 ```bash
 # replay saved specs (no API key)
@@ -289,16 +225,24 @@ node scripts/verify.mjs --contract contract.json --traces traces/ --specs specs/
 node scripts/verify.mjs --contract contract.json --source src/machine.ts \
   --traces traces/ --model sonnet-5 --n 5 --out out/
 
-# validate a corpus
+# validate a corpus (no API key)
 node scripts/validate_corpus.mjs contract.json traces/
 
-# escalate the winning spec to TLC (optional tier; toolchain via env)
+# escalate the winning spec to TLC (no API key; needs Java toolchain)
 POLYGRAPH_JAVA=/path/to/java POLYGRAPH_TLA_JAR=/path/to/tla2tools.jar \
   node scripts/verify.mjs --contract contract.json --traces traces/ --specs specs/ --tla --out out/
 
-# author NEW verifiable code from a feature description (needs ANTHROPIC_API_KEY)
+# author NEW verifiable code (needs ANTHROPIC_API_KEY)
 node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/
 ```
+
+polygen writes everything to `<out>/`: `contract.json`, `next.cjs` (the
+module), `invariants.mjs`, `traces/*.ndjson`, and `polygen-report.md`. The
+handoff after a polygen run is deliberately manual: review the contract and
+invariants (they're the model's reading of your intent, not ground truth),
+wire the module into your real handler — call it, don't reimplement it — then
+run `/polygraph:verify` against traces captured from the *integrated* code.
+That last step catches drift between the pure model and the glue around it.
 
 ## Models
 
@@ -309,46 +253,31 @@ There is **no default model** — pass `--model`. Recommended:
 | `sonnet-5` | `claude-sonnet-5` | balanced choice (speed / intelligence) |
 | `fable-5` | `claude-fable-5` | strongest in the origin study |
 
-Any value not in the alias table (`scripts/models.mjs`) is passed to the API
-**verbatim**, so you can always give the exact Anthropic model id. Verify ids
-against the current Anthropic model list before relying on an alias.
-
-**Reasoning models** (e.g. `claude-sonnet-5`) emit a thinking block that draws
-from the same token budget *before* the answer. The default output ceiling
-(32000) leaves room for both; if you lower it and see empty specs
-(`stop_reason: max_tokens`, everything `unscoreable-all`), the budget was spent
-on thinking — raise it with `--max-tokens`:
-
-```bash
-node scripts/verify.mjs --contract c.json --source src.ts --traces traces/ \
-  --model claude-sonnet-5 --n 5 --max-tokens 32000 --out out/
-```
+Anything not in the alias table (`scripts/models.mjs`) is passed to the API
+verbatim, so an exact Anthropic model id always works. Reasoning models spend
+output tokens on thinking before the answer; if you lower `--max-tokens` from
+the default 32000 and see empty specs (`stop_reason: max_tokens`), raise it
+back.
 
 ## Examples
 
-- **Quickstart — the turnstile.** Runs the full controls path with **no API
-  key**: `npm test` validates the corpus and runs the positive/negative
-  controls. Step through it manually via `examples/turnstile/README.md`, and see
-  `examples/turnstile-sam/` for the same machine as a real SAM instance and
-  `examples/turnstile-v2/` for its v2 strict-profile spec + traces
-  (`npm run verify:turnstile-v2`).
-- **A full-loop run on a production system** — `examples/case-study-subscription.md`
-  walks a real end-to-end run on a closed-source SaaS subscription-billing state
-  machine: five independent LLM-derived specs, replayed against a real trace
-  corpus, that independently corroborated a genuine double-charge bug — plus an
-  honest look at the risks the method *can't* see (the ones at the external-
-  service boundary).
-- **polygen — OTP verification flow** (`examples/polygen-otp/`) — a state
-  machine authored from a one-sentence description, self-repaired against a
-  domain-ref gap in one round, converged clean: 8 states, 0 violations, a
-  134-window synthesized corpus, 0 independent-replay failures.
+- **Quickstart — the turnstile** (`examples/turnstile-v2/`, no API key):
+  `npm test` validates the corpus and runs the positive/negative controls;
+  `npm run verify:turnstile-v2` replays the bundled specs.
+- **Production case study** (`examples/case-study-subscription.md`): a real
+  end-to-end run on a closed-source SaaS billing machine that corroborated a
+  genuine double-charge bug — plus an honest look at the risks the method
+  *can't* see (external-service boundaries).
+- **polygen — OTP flow** (`examples/polygen-otp/`): authored from one
+  sentence; 8 states, 0 violations, a 134-window synthesized corpus, 0
+  independent-replay failures.
 - **polygen — cart checkout, and a bug polygen found in itself**
   (`examples/polygen-cart-checkout/`, narrated in
-  `examples/case-study-polygen-domain-gap.md`) — the run that motivated the
-  domain-ref cross-check: the drafted contract and the authored code
-  disagreed on enum spelling, silently collapsing the reachable state space
-  to 2 states behind a "converged: true." Includes an honest look at a false
-  positive the fix itself introduces.
+  `examples/case-study-polygen-domain-gap.md`): the contract/code vocabulary
+  mismatch that motivated the domain cross-check, including a false positive
+  the fix introduces.
+- **TLC tier reference** (`examples/etcd-raft-v2/`): a v2 spec + invariants
+  exercising the TLA+ escalation.
 
 ## Layout
 
@@ -356,27 +285,16 @@ node scripts/verify.mjs --contract c.json --source src.ts --traces traces/ \
 .claude-plugin/plugin.json   plugin manifest
 skills/polygraph/            the audit method, as instructions Claude follows
 skills/polygen/              the author method, as instructions Claude follows
-commands/verify.md           the /polygraph:verify slash command (audit)
-commands/polygen.md          the /polygraph:polygen slash command (author)
-agents/verifier.md           the polygraph-verifier subagent (audit)
-agents/polygen.md            the polygen subagent (author)
-scripts/                     sam-tv.mjs (v2 replayer) + tv.mjs (legacy),
-                             check.mjs (model checker), to-tla.mjs +
-                             tla-check.mjs (TLC escalation tier), generate,
-                             verify, build_prompt, polygen, polygen_prompts,
-                             contract_render, validate_corpus, models,
-                             vendor/sam-pattern.cjs (sam-lib v2 bundle),
-                             instrument/*
+commands/                    /polygraph:verify and /polygraph:polygen
+agents/                      polygraph-verifier and polygen subagents
+scripts/                     sam-tv.mjs (replayer), check.mjs (model checker),
+                             to-tla.mjs + tla-check.mjs (TLC tier), verify,
+                             generate, polygen, validate_corpus, models,
+                             vendor/sam-pattern.cjs, instrument/*
 templates/                   contract.schema.json + contract.example.json
-examples/turnstile/          a tiny worked example + its controls (audit)
-examples/polygen-otp/        a from-scratch worked example (author)
-examples/polygen-cart-checkout/  a from-scratch worked example with a real
-                             self-repair round (author)
-examples/turnstile-v2/       the same machine as a v2 SAM strict-profile spec
-examples/etcd-raft-v2/       a v2 reference spec + invariants for the TLC tier
-test/                        npm test — selftest (legacy), selftest-v2 (v2
-                             pipeline), selftest-prompts; no API needed
-assets/                      brand art
+examples/                    worked examples and case studies (see above)
+eval/                        the seeded-bug A/B eval and findings
+test/                        npm test — no API key needed
 ```
 
 ## Origin
@@ -386,37 +304,35 @@ The method is introduced in:
 > Jean-Jacques Dubray. **Can Code Specify a System Precisely Enough to Formally
 > Verify It?** arXiv:2607.05076, July 2026. <https://arxiv.org/abs/2607.05076>
 
-Across seven models from two vendors, a bare `next()` contract was the most
-reliable spec target, and the approach found real defects in a production
-payment workflow. The `scripts/tv.mjs` replayer is that study's task-agnostic
-transition-validation runner, bundled here. Reference implementation and the
-full case study: <https://github.com/jdubray/SysMoBench-1>.
+The 2.0 release gate: a seeded-bug A/B eval passing at parity or better at two
+model tiers, with two bugs newly caught at the cheap replay tier and zero dead
+specs. Reference implementation and full case study:
+<https://github.com/jdubray/SysMoBench-1>.
 
-**Why v2 is now the default artifact.** The paper's data (and its v2
-postscript) split Polygraph's two roles: as a **replay oracle**, bare-next
-plus one discipline sentence was the best performer for pure trace
-conformance — the control showed it was the *sentence*, not the structure,
-that carried the robustness, so it is kept **verbatim** in the v2 prompts:
-"Acceptors must guard against invalid proposals (an action that the
-implementation does not act on in the current state must be a no-op via
-`reject(reason)`, NOT a throw)". As a **checkable substrate**, the v2 strict
-module is strictly stronger: schema-enforced wiring (no silent dead specs),
-sealed model (no hidden state), observable rejection, manifest-declared
-domains, determinism checking, and a mechanical 20/20 path to TLC. One
-artifact ships for both roles because the N-spec voting layer absorbs exactly
-what v2 gives up (occasional individual conformance misses) while v2
-eliminates what voting cannot absorb (dead specs, hidden state, vacuous
-exploration).
-
-House rule (from sam-lib #29, fixed structurally in 2.0.0-alpha.2): never
-call `instance({}).state()` — on machines whose model declares a key named
-`state` it returns data, not the method. The pipeline and the generated
-specs use `getState()`/`setState()` exclusively.
-
-(Lineage note: the repo's disk name, `bare-next-verify`, records the original
-bare-next artifact this project started from; the repo is not being renamed.)
+Related work: Emilie Ma,
+[*Scaling formal methods with LLMs*](https://www.youtube.com/watch?v=M2wb2ug2gYg)
+(Berlin Buzzwords) — SysMoBench (benchmarking LLM spec generation on
+production systems) and Specula (an agentic TLA+ spec-generation and
+bug-discovery pipeline), reaching the same conclusion from the formal-methods
+side: model checking plus trace validation is what makes LLM-generated specs
+trustworthy.
 
 If you use Polygraph in your work, please cite the paper (see `CITATION.cff`).
+
+<details>
+<summary>Legacy 1.x artifact (<code>--legacy-bare-next</code>)</summary>
+
+Polygraph 1.x derived a bare `next(state, action, data)` function instead of
+the strict SAM v2 module. That pipeline remains available end-to-end behind
+`--legacy-bare-next` for one release (`npm run test:legacy`,
+`npm run verify:turnstile`). The v2 strict profile replaced it because it
+closes whole failure classes by construction — silent no-op specs, hidden
+bookkeeping state, vacuous exploration — while the N-spec voting layer absorbs
+what v2 gives up. The one discipline sentence the study showed carried
+bare-next's replay robustness is kept verbatim in the v2 prompts. (The repo's
+historical disk name, `bare-next-verify`, records this lineage.)
+
+</details>
 
 ## License
 
