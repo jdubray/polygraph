@@ -3,7 +3,7 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
-## Unreleased — polyrun (2026-07-16..17)
+## 2.1.0 — 2026-07-17
 
 New component: **polyrun**, a durable execution harness for polygen-verified
 SAM v2 strict-profile machines — spec in `docs/polyrun-spec.md`, code under
