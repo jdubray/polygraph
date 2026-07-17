@@ -22,6 +22,7 @@ examples/polyrun-oms/demo/.demo-state/
 
 # Personal drafts — not part of the project
 docs/linkedin-*.md
+docs/draft-*.md
 
 # Eval — traces, generated specs, and results are regenerated on demand
 eval/machines/*/traces/
