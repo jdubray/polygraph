@@ -84,7 +84,9 @@ practical bug-finder.
 > one artifact family; [`docs/SDLC.md`](docs/SDLC.md) — a team lifecycle for
 > integrating them into agentic workflows, with the human gates spelled out;
 > [`docs/polyrun-spec.md`](docs/polyrun-spec.md) — the durable-execution
-> harness specification.
+> harness specification; [`docs/VERSIONING.md`](docs/VERSIONING.md) — an
+> essay on why versioning state machines is hard and how the gates here
+> make compatibility a checked property instead of a review vibe.
 
 ## How it works
 
