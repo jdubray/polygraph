@@ -103,10 +103,23 @@ export class Workers {
     let result;
     try {
       if (typeof handler !== 'function') throw new Error(`no handler registered for effect '${row.kind}'`);
+      // FR-3.6: request/callback is the recommended pattern for long
+      // effects; extendLease is the deliberately second-class escape hatch
+      // for providers with no callback mechanism. Extending the lease also
+      // extends this attempt's timeout budget.
+      let extraMs = 0;
+      const ctx = {
+        instanceId: row.instance_id, seq: row.seq, attempt: attempts,
+        extendLease: async (ms) => {
+          extraMs += ms;
+          await this.rt.store.extendLease(row.intent_id, this.rt.now() + this.leaseMs + extraMs);
+        },
+      };
       result = await withTimeout(
-        Promise.resolve(handler(row.payload, row.intent_id, { instanceId: row.instance_id, seq: row.seq, attempt: attempts })),
+        Promise.resolve(handler(row.payload, row.intent_id, ctx)),
         retry.timeoutMs,
-        `effect '${row.kind}' timed out after ${retry.timeoutMs}ms`
+        `effect '${row.kind}' timed out after ${retry.timeoutMs}ms`,
+        () => extraMs
       );
     } catch (err) {
       const message = String((err && err.message) || err);
@@ -204,8 +217,17 @@ function resolvePath(context, path) {
   return v;
 }
 
-function withTimeout(promise, ms, message) {
+function withTimeout(promise, ms, message, extraMs = () => 0) {
   let handle;
-  const timeout = new Promise((_, reject) => { handle = setTimeout(() => reject(new Error(message)), ms); });
+  const timeout = new Promise((_, reject) => {
+    let consumed = 0;
+    const fire = () => {
+      // lease extensions granted while running extend the timeout budget
+      const banked = extraMs() - consumed;
+      if (banked > 0) { consumed += banked; handle = setTimeout(fire, banked); return; }
+      reject(new Error(message));
+    };
+    handle = setTimeout(fire, ms);
+  });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(handle));
 }

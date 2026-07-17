@@ -5,9 +5,15 @@
 body: polygen drafts the effect mapper (§4.3), child machines are first-class
 in M2 (FR-8), request/callback is the recommended long-handler pattern
 (FR-3.6), journal fan-out lands in M2 (FR-7.5), and the name is `polyrun`.
-**M0 is implemented** — kernel, workers, SQLite store, kill-9 demo and
-fault-injection tests live under [`polyrun/`](../polyrun/README.md)
-(`npm run test:polyrun`, `npm run demo:polyrun`).
+**All milestones (M0–M3) are implemented** under
+[`polyrun/`](../polyrun/README.md): kernel + workers + SQLite/Postgres
+stores, standalone worker, HTTP facade + read-only UI, CLI (deploy gate,
+check-effects, audit, migrate, archive, DLQ), child machines, journal
+fan-out, soak + benchmarks (`npm run test:polyrun`, `npm run demo:polyrun`,
+`npm run bench:polyrun`). Each milestone shipped with an adversarial
+multi-agent review; all confirmed findings are fixed. See the polyrun README
+for the two recorded scope notes (in-loop polygen integration; parent∘child
+product checking).
 **Audience:** contributors to Polygraph/polygen; developers evaluating polyrun
 against workflow engines (Temporal, Step Functions, Restate).
 

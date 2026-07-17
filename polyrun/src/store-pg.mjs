@@ -352,6 +352,39 @@ export class PgStore {
     await this._q(`UPDATE pr_outbox SET status = 'done', last_error = 'dlq-discarded' WHERE intent_id = $1 AND status = 'dead'`, [intentId]);
   }
 
+
+  // ---- archival (M3, FR-1.2) ------------------------------------------------
+
+  async archivableInstances(beforeMs, limit = 100) {
+    const { rows } = await this._q(
+      `SELECT * FROM pr_instance WHERE status = 'terminal' AND updated_at < $1 ORDER BY updated_at LIMIT $2`,
+      [beforeMs, limit]);
+    return rows.map((r) => this._instanceRow(r));
+  }
+
+  async purgeInstance(instanceId) {
+    return this.txn(async () => {
+      const { rows } = await this._q(
+        `SELECT COUNT(*)::int AS n FROM pr_outbox WHERE instance_id = $1 AND status IN ('pending','inflight')`, [instanceId]);
+      if (rows[0].n > 0) throw new Error(`instance '${instanceId}' still has ${rows[0].n} unsettled effect(s)`);
+      await this._q(`DELETE FROM pr_journal WHERE instance_id = $1`, [instanceId]);
+      await this._q(`DELETE FROM pr_outbox WHERE instance_id = $1`, [instanceId]);
+      await this._q(`DELETE FROM pr_timer WHERE instance_id = $1`, [instanceId]);
+      await this._q(`DELETE FROM pr_instance WHERE instance_id = $1`, [instanceId]);
+    });
+  }
+
+  /** FR-3.6 escape hatch: extend an inflight effect's lease. */
+  async extendLease(intentId, untilMs) {
+    await this._q(`UPDATE pr_outbox SET claimed_until = $2 WHERE intent_id = $1 AND status = 'inflight'`, [intentId, untilMs]);
+  }
+
+  /** Rewrite an instance's snapshot + version (migration tooling). */
+  async rewriteSnapshot(instanceId, state, machineVersion, now) {
+    await this._q(`UPDATE pr_instance SET state = $2, machine_version = $3, updated_at = $4 WHERE instance_id = $1`,
+      [instanceId, JSON.stringify(state), machineVersion, now]);
+  }
+
   // ---- timers ---------------------------------------------------------------
 
   async dueTimers(now, limit) {

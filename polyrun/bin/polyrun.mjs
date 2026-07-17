@@ -2,7 +2,9 @@
 // polyrun CLI (M1): deploy gate, trace export, DLQ operations.
 //
 //   polyrun deploy        --config <cfg>            FR-6.2 gate over live snapshots
-//   polyrun check-effects --config <cfg> [--machine <id>] [--depth N] [--max-paths N]
+//   polyrun migrate       --config <cfg> [--machine <id>] [--apply]   pure migrate.cjs over live snapshots
+//   polyrun archive       --config <cfg> --before <ms|ISO date> --out <dir> [--apply]
+//   polyrun check-effects --config <cfg> [--machine <id>] [--depth N] [--max-paths N] [--allow-bounded]
 //   polyrun audit         --config <cfg> [--machine <id>] [--instance <id>] [--since <ms-epoch>]
 //   polyrun export-traces --config <cfg> --instance <id> [--out <file>]
 //   polyrun dlq ls        --config <cfg>
@@ -170,6 +172,77 @@ try {
       console.log(renderAudit(machineId, result));
       if (result.mismatches.length > 0) exitCode = 1;
     }
+  } else if (command === 'migrate') {
+    // FR-6.2 step 4: a pure migrate.cjs (module.exports.migrate(oldState) ->
+    // newState) is gated over live snapshots — round-trip through the NEW
+    // module and (when configured) state invariants over migrated states —
+    // and applied only with --apply.
+    const only = flag('machine');
+    const apply = args.includes('--apply');
+    let migrated = 0, failed = 0;
+    for (const m of config.machines ?? []) {
+      if (only && m.machineId !== only) continue;
+      if (!m.migrate) continue;
+      const { createRequire } = await import('node:module');
+      const migrateMod = createRequire(import.meta.url)(m.migrate);
+      if (typeof migrateMod.migrate !== 'function') { console.error(`${m.machineId}: ${m.migrate} does not export migrate()`); exitCode = 1; continue; }
+      const machine = rt.machines.get(m.machineId);
+      let preds = [];
+      if (m.invariants) {
+        try { preds = (await import(pathToFileURL(m.invariants).href)).stateInvariants ?? []; } catch { /* gate reported by deploy */ }
+      }
+      for (const inst of await rt.list(m.machineId)) {
+        if (inst.status === 'poisoned') continue;
+        let next;
+        try {
+          next = migrateMod.migrate(inst.state);
+          machine.mod.init();
+          machine.mod.setState(next); // the NEW module must accept the migrated snapshot
+          for (const inv of preds) {
+            if (!inv.pred(next)) throw new Error(`migrated state violates '${inv.name}'`);
+          }
+        } catch (err) {
+          failed += 1;
+          console.error(`  migrate FAIL: ${m.machineId}/${inst.instance_id} — ${err.message}`);
+          continue;
+        }
+        migrated += 1;
+        if (apply) await rt.store.rewriteSnapshot(inst.instance_id, next, machine.version, rt.now());
+      }
+    }
+    console.log(`migrate: ${migrated} snapshot(s) ${apply ? 'MIGRATED' : 'validated (dry run — use --apply)'}, ${failed} failed`);
+    if (failed) exitCode = 1;
+  } else if (command === 'archive') {
+    // FR-1.2 retention: export each eligible terminal instance (journal +
+    // final state, ndjson) then purge its rows — only with --apply.
+    const beforeRaw = flag('before');
+    const before = /^\d+$/.test(beforeRaw ?? '') ? Number(beforeRaw) : Date.parse(beforeRaw ?? '');
+    if (!Number.isFinite(before)) { console.error(`invalid --before '${beforeRaw}' (ms epoch or ISO date)`); process.exit(2); }
+    const outDir = flag('out');
+    const apply = args.includes('--apply');
+    if (apply && !outDir) { console.error('--apply requires --out <dir> (never purge without an export)'); process.exit(2); }
+    const { mkdirSync } = await import('node:fs');
+    if (outDir) mkdirSync(outDir, { recursive: true });
+    let archived = 0, skipped = 0;
+    const seen = new Set();
+    for (;;) {
+      const fresh = (await rt.store.archivableInstances(before, 100)).filter((i) => !seen.has(i.instance_id));
+      if (fresh.length === 0) break;
+      for (const inst of fresh) {
+        seen.add(inst.instance_id);
+        const journal = await rt.getJournal(inst.instance_id);
+        if (outDir) {
+          const lines = journal.map((r) => JSON.stringify(r)).join('\n');
+          writeFileSync(`${outDir}/${inst.instance_id}.ndjson`, `${JSON.stringify({ archived: inst })}\n${lines}\n`);
+        }
+        if (apply) {
+          try { await rt.store.purgeInstance(inst.instance_id); archived += 1; }
+          catch (err) { skipped += 1; console.error(`  skip ${inst.instance_id}: ${err.message}`); }
+        } else archived += 1;
+      }
+      if (!apply) break; // dry run: one batch is enough to report
+    }
+    console.log(`archive: ${archived} instance(s) ${apply ? 'exported+purged' : 'eligible (dry run — use --apply with --out)'}${skipped ? `, ${skipped} skipped (unsettled effects)` : ''}`);
   } else if (command === 'export-traces') {
     const instance = flag('instance');
     if (!instance) usage();

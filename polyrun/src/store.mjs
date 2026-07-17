@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS pr_instance (
 );
 CREATE INDEX IF NOT EXISTS pr_instance_parent ON pr_instance (parent_instance_id, child_key);
 CREATE TABLE IF NOT EXISTS pr_journal (
+  global_seq      INTEGER,
   instance_id     TEXT NOT NULL,
   machine_version TEXT NOT NULL,
   seq             INTEGER NOT NULL,
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS pr_journal (
   PRIMARY KEY (instance_id, seq),
   UNIQUE (instance_id, action_id)
 );
+CREATE TABLE IF NOT EXISTS pr_meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pr_outbox (
   intent_id       TEXT PRIMARY KEY,
   instance_id     TEXT NOT NULL,
@@ -114,6 +116,16 @@ export class Store {
     ensure('pr_instance', 'on_complete', 'TEXT');
     ensure('pr_instance', 'on_parent_terminal', 'TEXT');
     ensure('pr_instance', 'child_of_seq', 'INTEGER');
+    ensure('pr_journal', 'global_seq', 'INTEGER');
+    // The index must be created AFTER the column exists on migrated files.
+    this.db.exec('CREATE INDEX IF NOT EXISTS pr_journal_global ON pr_journal (global_seq)');
+    // Backfill pre-M3 rows from rowid and seed the monotonic counter.
+    // rowid itself is NOT a safe fan-out cursor once archival deletes rows
+    // (deleting the max rowid lets SQLite reuse it, silently skipping the
+    // reused row for any poller already past it).
+    this.db.exec(`UPDATE pr_journal SET global_seq = rowid WHERE global_seq IS NULL`);
+    const max = this.db.prepare(`SELECT COALESCE(MAX(global_seq), 0) AS m FROM pr_journal`).get().m;
+    this.db.prepare(`INSERT INTO pr_meta (k, v) VALUES ('journal_global_seq', ?) ON CONFLICT(k) DO UPDATE SET v = MAX(v, excluded.v)`).run(max);
     return this;
   }
 
@@ -235,11 +247,16 @@ export class Store {
   // ---- journal -------------------------------------------------------------
 
   async insertJournal({ instanceId, machineVersion, seq, action, data, pre, post, stepKind, rejectReason, actionId, now }) {
-    return this._run(() => this.db.prepare(
-      `INSERT INTO pr_journal (instance_id, machine_version, seq, action, data, pre, post, step_kind, reject_reason, action_id, at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(instanceId, machineVersion, seq, action, JSON.stringify(data), JSON.stringify(pre),
-      JSON.stringify(post), stepKind, rejectReason ?? null, actionId, now));
+    return this._run(() => {
+      const g = this.db.prepare(
+        `UPDATE pr_meta SET v = v + 1 WHERE k = 'journal_global_seq' RETURNING v`
+      ).get().v;
+      return this.db.prepare(
+        `INSERT INTO pr_journal (global_seq, instance_id, machine_version, seq, action, data, pre, post, step_kind, reject_reason, action_id, at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(g, instanceId, machineVersion, seq, action, JSON.stringify(data), JSON.stringify(pre),
+        JSON.stringify(post), stepKind, rejectReason ?? null, actionId, now);
+    });
   }
 
   async getJournalByActionId(instanceId, actionId) {
@@ -280,12 +297,51 @@ export class Store {
     return { ...r, data: JSON.parse(r.data), pre: JSON.parse(r.pre), post: JSON.parse(r.post) };
   }
 
-  /** FR-7.5: global journal reader for cross-process consumers. The cursor
-   *  is the SQLite rowid; hand back the max cursor you processed. */
+  /** FR-7.5: global journal reader for cross-process consumers; the cursor
+   *  is the explicit monotonic global_seq (rowid is unsafe under archival). */
   async journalSince(cursor, limit = 100) {
     return this._run(() => this.db.prepare(
-      'SELECT rowid AS global_seq, * FROM pr_journal WHERE rowid > ? ORDER BY rowid LIMIT ?'
+      'SELECT * FROM pr_journal WHERE global_seq > ? ORDER BY global_seq LIMIT ?'
     ).all(cursor, limit).map((r) => this._journalRow(r)));
+  }
+
+  // ---- archival (M3, FR-1.2) ------------------------------------------------
+
+  /** Terminal instances not updated since `beforeMs`, ready for archival. */
+  async archivableInstances(beforeMs, limit = 100) {
+    return this._run(() => this.db.prepare(
+      `SELECT * FROM pr_instance WHERE status = 'terminal' AND updated_at < ? ORDER BY updated_at LIMIT ?`
+    ).all(beforeMs, limit).map((r) => ({ ...r, state: JSON.parse(r.state) })));
+  }
+
+  /** Delete one archived instance's rows. The caller has already exported
+   *  them; this only removes settled data (scheduled timers were cancelled
+   *  at terminal; pending/inflight outbox rows block archival). */
+  async purgeInstance(instanceId) {
+    return this.txn(() => {
+      const busy = this.db.prepare(
+        `SELECT COUNT(*) AS n FROM pr_outbox WHERE instance_id = ? AND status IN ('pending','inflight')`
+      ).get(instanceId).n;
+      if (busy > 0) throw new Error(`instance '${instanceId}' still has ${busy} unsettled effect(s)`);
+      this.db.prepare(`DELETE FROM pr_journal WHERE instance_id = ?`).run(instanceId);
+      this.db.prepare(`DELETE FROM pr_outbox WHERE instance_id = ?`).run(instanceId);
+      this.db.prepare(`DELETE FROM pr_timer WHERE instance_id = ?`).run(instanceId);
+      this.db.prepare(`DELETE FROM pr_instance WHERE instance_id = ?`).run(instanceId);
+    });
+  }
+
+  /** FR-3.6 escape hatch: extend an inflight effect's lease. */
+  async extendLease(intentId, untilMs) {
+    return this._run(() => this.db.prepare(
+      `UPDATE pr_outbox SET claimed_until = ? WHERE intent_id = ? AND status = 'inflight'`
+    ).run(untilMs, intentId));
+  }
+
+  /** Rewrite an instance's snapshot + version (migration tooling). */
+  async rewriteSnapshot(instanceId, state, machineVersion, now) {
+    return this._run(() => this.db.prepare(
+      `UPDATE pr_instance SET state = ?, machine_version = ?, updated_at = ? WHERE instance_id = ?`
+    ).run(JSON.stringify(state), machineVersion, now, instanceId));
   }
 
   // ---- the one write path (FR-2.2) ----------------------------------------

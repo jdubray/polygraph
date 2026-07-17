@@ -9,9 +9,31 @@ no workflow-versioning patches.
 
 Full functional/technical spec: [`docs/polyrun-spec.md`](../docs/polyrun-spec.md).
 
-## Status: M2 (verification flywheel + composition)
+## Status: M3 (hardened) — all spec milestones implemented
 
-M2 adds, on top of M1:
+M3 adds, on top of M2:
+
+- **Concurrency soak** (`test/soak.test.mjs`) — instances × rounds of racing
+  dispatchers (duplicate actionIds, stale actions, a flaky provider) with
+  workers live, then a full durable-state invariant check: journals dense
+  and chaining, snapshots equal to the last accepted post, exactly one
+  charge intent per completed order, nothing poisoned.
+- **Benchmarks** (`bench/bench.mjs`, `npm run bench:polyrun`) — NFR-1:
+  ~1200 accepted steps/s SQLite, ~990 steps/s local-Docker Postgres
+  (target ≥500), p99 ~20 ms.
+- **Archival/retention** (`polyrun archive --before <t> --out <dir>
+  [--apply]`, FR-1.2) — exports each settled terminal instance (journal +
+  final state, ndjson) then purges; unsettled effects block the purge;
+  `--apply` requires an export. SQLite's fan-out cursor moved to an explicit
+  monotonic `global_seq` (rowid is unsafe under deletion).
+- **Migration tooling** (`polyrun migrate [--apply]`, FR-6.2 step 4) — a
+  pure `migrate.cjs` validated over every live snapshot (new module must
+  accept the result; state invariants must hold) before `--apply` rewrites.
+- **Lease extension** (FR-3.6 escape hatch) — `ctx.extendLease(ms)` in
+  handlers extends both the lease and the attempt's timeout budget;
+  request/callback remains the recommended pattern.
+
+M2 (verification flywheel + composition) provides:
 
 - **Effect-emission checker** (`src/check-effects.mjs`, `polyrun
   check-effects`) — explores the machine ∘ effect-mapper composition
@@ -87,15 +109,15 @@ restarts it. The lease expires, the charge retries with the same idempotency
 key, the provider dedupes, the order completes. The journal it prints is also
 a Polygraph trace corpus (`rt.exportTraces()`).
 
-## Not yet here (see spec milestones)
+## Scope notes
 
-M3: concurrency soak, archival/retention, migration tooling over large
-snapshot sets, lease extension for long handlers, published benchmarks.
-
-Scope note: the spec's M2 named "effect invariants in polygen's self-repair
-loop"; the implemented shape keeps polygen untouched and runs the same check
-as a post-authoring gate (`polyrun check-effects`) — the polygen pipeline can
-adopt it in-loop later without changes to the checker.
+- The spec's M2 named "effect invariants in polygen's self-repair loop"; the
+  implemented shape keeps polygen untouched and runs the same check as a
+  post-authoring gate (`polyrun check-effects`) — the polygen pipeline can
+  adopt it in-loop later without changes to the checker.
+- Compositional model checking of the parent∘child product (cross-machine
+  invariants) remains future work beyond the spec's M2/M3; the domain gate,
+  per-machine checks, and the continuous audit cover that surface today.
 
 The demo machine is hand-authored in the exact shape polygen emits; the M0
 follow-up is to re-author it with polygen and diff.
