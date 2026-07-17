@@ -2,6 +2,8 @@
 // polyrun CLI (M1): deploy gate, trace export, DLQ operations.
 //
 //   polyrun deploy        --config <cfg>            FR-6.2 gate over live snapshots
+//   polyrun check-effects --config <cfg> [--machine <id>] [--depth N] [--max-paths N]
+//   polyrun audit         --config <cfg> [--machine <id>] [--instance <id>] [--since <ms-epoch>]
 //   polyrun export-traces --config <cfg> --instance <id> [--out <file>]
 //   polyrun dlq ls        --config <cfg>
 //   polyrun dlq retry     --config <cfg> --intent <intentId>
@@ -14,6 +16,8 @@ import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { createRuntime } from '../src/index.mjs';
 import { loadConfig } from '../src/config.mjs';
+import { checkEffects, renderReport } from '../src/check-effects.mjs';
+import { auditMachine, renderAudit } from '../src/audit.mjs';
 import { stable } from '../../scripts/load-spec.mjs';
 
 const args = process.argv.slice(2);
@@ -113,6 +117,41 @@ try {
     if (invFailed) exitCode = 1;
 
     console.log(exitCode ? 'DEPLOY GATE: FAIL' : 'DEPLOY GATE: PASS');
+  } else if (command === 'check-effects') {
+    // §6.2: explore the machine ∘ mapper composition against effect-emission
+    // invariants (machine config key: effectInvariants).
+    const only = flag('machine');
+    let ran = 0;
+    for (const m of config.machines ?? []) {
+      if (only && m.machineId !== only) continue;
+      if (!m.effects || !m.effectInvariants) {
+        console.log(`${m.machineId}: skipped (needs effects mapper + effectInvariants in the config)`);
+        continue;
+      }
+      ran += 1;
+      const result = await checkEffects({
+        module: m.module,
+        mapper: m.effects.mapper,
+        contract: m.contract,
+        invariants: m.effectInvariants,
+        maxDepth: flag('depth') ? Number(flag('depth')) : undefined,
+        maxPaths: flag('max-paths') ? Number(flag('max-paths')) : undefined,
+      });
+      console.log(`== ${m.machineId} ==`);
+      console.log(renderReport(result));
+      if (result.violations.length > 0) exitCode = 1;
+    }
+    if (ran === 0) { console.error('check-effects: nothing to check'); exitCode = 1; }
+  } else if (command === 'audit') {
+    // FR-7.2: replay the production journal through the module — drift report.
+    const only = flag('machine');
+    const sinceMs = flag('since') ? Number(flag('since')) : 0;
+    for (const [machineId] of rt.machines) {
+      if (only && machineId !== only) continue;
+      const result = await auditMachine({ runtime: rt, machineId, sinceMs, instanceId: flag('instance') });
+      console.log(renderAudit(machineId, result));
+      if (result.mismatches.length > 0) exitCode = 1;
+    }
   } else if (command === 'export-traces') {
     const instance = flag('instance');
     if (!instance) usage();

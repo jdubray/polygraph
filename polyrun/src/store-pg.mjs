@@ -20,12 +20,17 @@ CREATE TABLE IF NOT EXISTS pr_instance (
   seq             bigint NOT NULL DEFAULT 0,
   status          text NOT NULL CHECK (status IN ('active','terminal','poisoned')),
   state           jsonb NOT NULL,
+  parent_instance_id text,
+  child_key       text,
+  on_complete     text,
   created_at      bigint NOT NULL,
   updated_at      bigint NOT NULL
 );
+CREATE INDEX IF NOT EXISTS pr_instance_parent ON pr_instance (parent_instance_id, child_key);
 CREATE INDEX IF NOT EXISTS pr_instance_machine ON pr_instance (machine_id, status);
 CREATE INDEX IF NOT EXISTS pr_instance_state ON pr_instance USING gin (state jsonb_path_ops);
 CREATE TABLE IF NOT EXISTS pr_journal (
+  global_seq      bigint GENERATED ALWAYS AS IDENTITY,
   instance_id     text NOT NULL,
   machine_version text NOT NULL,
   seq             bigint NOT NULL,
@@ -40,6 +45,7 @@ CREATE TABLE IF NOT EXISTS pr_journal (
   PRIMARY KEY (instance_id, seq),
   UNIQUE (instance_id, action_id)
 );
+CREATE INDEX IF NOT EXISTS pr_journal_global ON pr_journal (global_seq);
 CREATE TABLE IF NOT EXISTS pr_outbox (
   intent_id       text PRIMARY KEY,
   instance_id     text NOT NULL,
@@ -88,6 +94,15 @@ export class PgStore {
       await this.pool.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
     }
     await this.pool.query(SCHEMA);
+    // Additive column migration for pre-M2 databases (IF NOT EXISTS keeps
+    // this idempotent and cheap on every boot).
+    await this.pool.query(`
+      ALTER TABLE pr_journal  ADD COLUMN IF NOT EXISTS machine_version text NOT NULL DEFAULT '';
+      ALTER TABLE pr_journal  ADD COLUMN IF NOT EXISTS global_seq bigint GENERATED ALWAYS AS IDENTITY;
+      ALTER TABLE pr_instance ADD COLUMN IF NOT EXISTS parent_instance_id text;
+      ALTER TABLE pr_instance ADD COLUMN IF NOT EXISTS child_key text;
+      ALTER TABLE pr_instance ADD COLUMN IF NOT EXISTS on_complete text;
+    `);
     return this;
   }
 
@@ -120,11 +135,19 @@ export class PgStore {
 
   // ---- instances -----------------------------------------------------------
 
-  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now }) {
+  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now, parentInstanceId = null, childKey = null, onComplete = null }) {
     await this._q(
-      `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, created_at, updated_at)
-       VALUES ($1, $2, $3, 0, $4, $5, $6, $6)`,
-      [instanceId, machineId, machineVersion, status, JSON.stringify(state), now]);
+      `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, parent_instance_id, child_key, on_complete, created_at, updated_at)
+       VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $8, $9, $9)`,
+      [instanceId, machineId, machineVersion, status, JSON.stringify(state), parentInstanceId, childKey, onComplete, now]);
+  }
+
+  /** FR-8: newest child of a parent for a given key. */
+  async findChild(parentInstanceId, childKey) {
+    const { rows } = await this._q(
+      `SELECT * FROM pr_instance WHERE parent_instance_id = $1 AND child_key = $2 ORDER BY created_at DESC, instance_id DESC LIMIT 1`,
+      [parentInstanceId, childKey]);
+    return this._instanceRow(rows[0] ?? null);
   }
 
   _instanceRow(r) {
@@ -172,7 +195,14 @@ export class PgStore {
         JSON.stringify(post), stepKind, rejectReason ?? null, actionId, now]);
   }
 
-  _journalRow(r) { return r ? { ...r, seq: num(r.seq), at: num(r.at) } : null; }
+  _journalRow(r) { return r ? { ...r, seq: num(r.seq), at: num(r.at), ...(r.global_seq !== undefined ? { global_seq: num(r.global_seq) } : {}) } : null; }
+
+  /** FR-7.5: global journal reader; the cursor is the bigserial global_seq. */
+  async journalSince(cursor, limit = 100) {
+    const { rows } = await this._q(
+      'SELECT * FROM pr_journal WHERE global_seq > $1 ORDER BY global_seq LIMIT $2', [cursor, limit]);
+    return rows.map((r) => this._journalRow(r));
+  }
 
   async getJournalByActionId(instanceId, actionId) {
     const { rows } = await this._q('SELECT * FROM pr_journal WHERE instance_id = $1 AND action_id = $2', [instanceId, actionId]);

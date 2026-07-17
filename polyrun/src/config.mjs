@@ -24,6 +24,7 @@ export async function loadConfig(configPath) {
       m.effects = { mapper: rel(m.effects.mapper), manifest: rel(m.effects.manifest) };
     }
     if (m.invariants) m.invariants = rel(m.invariants);
+    if (m.effectInvariants) m.effectInvariants = rel(m.effectInvariants);
   }
   if (config.store && config.store.sqlite && config.store.sqlite !== ':memory:') {
     config.store = { ...config.store, sqlite: rel(config.store.sqlite) };

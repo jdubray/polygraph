@@ -20,6 +20,7 @@
 'use strict';
 
 import { createHash, randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadSpec, stable } from '../../scripts/load-spec.mjs';
@@ -27,6 +28,9 @@ import { Store } from './store.mjs';
 import { resolveFireAt } from './duration.mjs';
 
 const CREATE_ACTION = '$create';
+// FR-8: dispatch cascades (parent → child signal → grandchild …) are capped;
+// a deeper chain is a wiring cycle, which is a mapper defect.
+const MAX_CASCADE_DEPTH = 8;
 
 const sanitizeReplacer = (key, value) => {
   if (typeof key === 'string' && key.startsWith('__')) return undefined;
@@ -67,7 +71,11 @@ export class Runtime {
     this.handlers = handlers;
     this.now = now;
     this.machines = new Map();
-    this.metrics = { dispatches: 0, accepted: 0, rejected: 0, unhandled: 0, deduped: 0, poisoned: 0, effectsEmitted: 0, timersScheduled: 0 };
+    this.metrics = { dispatches: 0, accepted: 0, rejected: 0, unhandled: 0, deduped: 0, poisoned: 0, effectsEmitted: 0, timersScheduled: 0, childrenSpawned: 0 };
+    // FR-7.5 fan-out: 'step' events emitted AFTER the owning transaction
+    // commits — never for rolled-back steps. In-process consumers subscribe
+    // here; cross-process consumers poll store.journalSince(cursor).
+    this.events = new EventEmitter();
     for (const m of machines) this.registerMachine(m);
   }
 
@@ -213,9 +221,9 @@ export class Runtime {
 
   /**
    * FR-1.1. Atomically persists the initial snapshot + journal row 0
-   * ('$create'); optionally dispatches a creation action (its effects flow
-   * through the ordinary mapper path). Same-parameters recreate is
-   * idempotent; different parameters is a ConflictError.
+   * ('$create') + the optional creation action and its effects — one
+   * transaction. Same-parameters recreate is idempotent; different
+   * parameters is a ConflictError.
    */
   async create(machineId, instanceId, creation) {
     const machine = this.machines.get(machineId);
@@ -225,50 +233,60 @@ export class Runtime {
     }
     const id = instanceId ?? randomUUID();
     const now = this.now();
-    const creationData = creation ? { action: creation.action, data: creation.data ?? {} } : {};
-
-    let made;
+    const events = [];
     try {
-      made = await this.store.txn(async () => {
-      const existing = await this.store.getInstanceForUpdate(id);
-      if (existing) {
-        if (existing.machine_id !== machineId) {
-          throw new ConflictError(`instance '${id}' already exists for machine '${existing.machine_id}'`);
-        }
-        // stable(): key-order-insensitive — Postgres jsonb does not preserve
-        // object key order, so JSON.stringify equality would false-conflict.
-        const row0 = await this.store.getJournalRow(id, 0);
-        if (row0 && stable(row0.data) !== stable(creationData)) {
-          throw new ConflictError(`instance '${id}' was created with different parameters`);
-        }
-        return { created: false, state: existing.state };
-      }
-      machine.mod.init();
-      const state = this._snapshot(machine);
-      const terminal = machine.isTerminal(state);
-      await this.store.insertInstance({
-        instanceId: id, machineId, machineVersion: machine.version, state,
-        status: terminal ? 'terminal' : 'active', now,
-      });
-      await this.store.insertJournal({
-        instanceId: id, machineVersion: machine.version, seq: 0,
-        action: CREATE_ACTION, data: creationData, pre: state, post: state,
-        stepKind: 'accepted', rejectReason: null, actionId: CREATE_ACTION, now,
-      });
-      return { created: true, state };
-      });
+      const made = await this.store.txn(() => this._createInTxn(machineId, id, creation, null, now, 0, events));
+      for (const e of events) this.events.emit('step', e);
+      return { instanceId: id, ...made };
     } catch (err) {
+      if (err instanceof PoisonRequest) {
+        this.metrics.poisoned += 1;
+        throw await this._poison(id, err.message);
+      }
       // Cross-process create race: the loser converts the unique violation
       // into the idempotent path by re-entering (it now finds the row).
       if (this.store.isUniqueViolation(err)) return this.create(machineId, id, creation);
       throw err;
     }
+  }
 
-    if (made.created && creation) {
-      const res = await this.dispatch(id, creation.action, creation.data ?? {}, `${CREATE_ACTION}:action`);
-      return { instanceId: id, created: true, state: res.state };
+  async _createInTxn(machineId, id, creation, parentInfo, now, depth, events) {
+    const machine = this.machines.get(machineId);
+    const creationData = creation ? { action: creation.action, data: creation.data ?? {} } : {};
+    const existing = await this.store.getInstanceForUpdate(id);
+    if (existing) {
+      if (existing.machine_id !== machineId) {
+        throw new ConflictError(`instance '${id}' already exists for machine '${existing.machine_id}'`);
+      }
+      // stable(): key-order-insensitive — Postgres jsonb does not preserve
+      // object key order, so JSON.stringify equality would false-conflict.
+      const row0 = await this.store.getJournalRow(id, 0);
+      if (row0 && stable(row0.data) !== stable(creationData)) {
+        throw new ConflictError(`instance '${id}' was created with different parameters`);
+      }
+      return { created: false, state: existing.state };
     }
-    return { instanceId: id, created: made.created, state: made.state };
+    machine.mod.init();
+    const state = this._snapshot(machine);
+    const terminal = machine.isTerminal(state);
+    await this.store.insertInstance({
+      instanceId: id, machineId, machineVersion: machine.version, state,
+      status: terminal ? 'terminal' : 'active', now,
+      parentInstanceId: parentInfo?.parentInstanceId ?? null,
+      childKey: parentInfo?.childKey ?? null,
+      onComplete: parentInfo?.onComplete ?? null,
+    });
+    await this.store.insertJournal({
+      instanceId: id, machineVersion: machine.version, seq: 0,
+      action: CREATE_ACTION, data: creationData, pre: state, post: state,
+      stepKind: 'accepted', rejectReason: null, actionId: CREATE_ACTION, now,
+    });
+    events.push({ instanceId: id, machineId, seq: 0, action: CREATE_ACTION, data: creationData, stepKind: 'accepted', pre: state, post: state, at: now });
+    if (creation) {
+      const res = await this._dispatchInTxn(id, creation.action, creation.data ?? {}, `${CREATE_ACTION}:action`, now, depth + 1, events);
+      return { created: true, state: res.state };
+    }
+    return { created: true, state };
   }
 
   async getState(instanceId) {
@@ -303,20 +321,33 @@ export class Runtime {
     const aid = actionId ?? `${action}:${randomUUID()}`;
     const now = this.now();
     this.metrics.dispatches += 1;
-    try {
-      return await this.store.txn(() => this._dispatchInTxn(instanceId, action, data, aid, now));
-    } catch (err) {
-      if (err instanceof PoisonRequest) {
-        // The step's transaction has rolled back; the poison mark gets its
-        // own durable transaction so it cannot be lost with the step.
-        this.metrics.poisoned += 1;
-        throw await this._poison(instanceId, err.message);
+    const events = [];
+    // Parent↔child lock ordering can invert on Postgres (parent txn signals
+    // child while a child txn notifies parent) — PG aborts one side with a
+    // deadlock error; retry it, the surviving side has committed.
+    for (let attempt = 0; ; attempt++) {
+      events.length = 0;
+      try {
+        const result = await this.store.txn(() => this._dispatchInTxn(instanceId, action, data, aid, now, 0, events));
+        for (const e of events) this.events.emit('step', e);
+        return result;
+      } catch (err) {
+        if (err instanceof PoisonRequest) {
+          // The step's transaction has rolled back; the poison mark gets its
+          // own durable transaction so it cannot be lost with the step.
+          this.metrics.poisoned += 1;
+          throw await this._poison(instanceId, err.message);
+        }
+        if (err && err.code === '40P01' && attempt < 3) continue; // PG deadlock: retry
+        throw err;
       }
-      throw err;
     }
   }
 
-  async _dispatchInTxn(instanceId, action, data, aid, now) {
+  async _dispatchInTxn(instanceId, action, data, aid, now, depth = 0, events = []) {
+    if (depth > MAX_CASCADE_DEPTH) {
+      throw new PoisonRequest(`dispatch cascade exceeded depth ${MAX_CASCADE_DEPTH} (parent/child wiring cycle?)`);
+    }
     const inst = await this.store.getInstanceForUpdate(instanceId);
     if (!inst) throw new Error(`unknown instance '${instanceId}'`);
     const machine = this.machines.get(inst.machine_id);
@@ -405,12 +436,38 @@ export class Runtime {
     const outboxRows = [];
     const timerRows = [];
     const cancelTimerKeys = [];
+    const spawns = [];
+    const signals = [];
     if (stepKind === 'accepted' && machine.mapper) {
       const intents = machine.mapper(pre, action, data, post, stepKind) || [];
       let ordinal = 0;
       const timerKeysThisStep = new Set();
       for (const intent of intents) {
-        if (intent.kind === 'timer') {
+        if (intent.kind === 'spawnChild') {
+          // FR-8.1: validated here, created atomically with the step below.
+          const childMachine = this.machines.get(intent.machineId);
+          if (!childMachine) throw new PoisonRequest(`spawnChild: machine '${intent.machineId}' is not registered`);
+          if (typeof intent.childKey !== 'string' || !intent.childKey) throw new PoisonRequest('spawnChild: childKey is required');
+          if (intent.onComplete && typeof machine.mod.actions[intent.onComplete] !== 'function') {
+            throw new PoisonRequest(`spawnChild: onComplete action '${intent.onComplete}' is not in the parent's action surface`);
+          }
+          if (intent.creation && typeof childMachine.mod.actions[intent.creation.action] !== 'function') {
+            throw new PoisonRequest(`spawnChild: creation action '${intent.creation.action}' is not in machine '${intent.machineId}'`);
+          }
+          spawns.push({
+            machineId: intent.machineId,
+            childId: sha('child', instanceId, intent.childKey, String(seq)),
+            childKey: intent.childKey,
+            onComplete: intent.onComplete ?? null,
+            creation: intent.creation ?? null,
+          });
+        } else if (intent.kind === 'signalChild') {
+          // FR-8.2: the parent may dispatch declared actions into a child; a
+          // child that rejects it is journaled, not forced.
+          if (typeof intent.childKey !== 'string' || !intent.childKey) throw new PoisonRequest('signalChild: childKey is required');
+          if (typeof intent.action !== 'string' || !intent.action) throw new PoisonRequest('signalChild: action is required');
+          signals.push({ childKey: intent.childKey, action: intent.action, data: intent.data ?? {} });
+        } else if (intent.kind === 'timer') {
           if (typeof intent.key !== 'string' || !intent.key) {
             throw new PoisonRequest(`effect mapper emitted a timer without a key`);
           }
@@ -452,6 +509,30 @@ export class Runtime {
       cancelAllTimers: terminal, // FR-1.2: terminal instances cancel their timers
       now,
     });
+    events.push({ instanceId, machineId: inst.machine_id, seq, action, data, stepKind, rejectReason: rejectReason ?? undefined, pre, post, at: now });
+
+    // ---- FR-8: children, atomic with the parent's step ----
+    for (const spawn of spawns) {
+      // Idempotent by id: a redelivered parent step dedupes before reaching
+      // here, so a spawn executes at most once per (parent, childKey, seq).
+      await this._createInTxn(spawn.machineId, spawn.childId, spawn.creation ?? undefined, {
+        parentInstanceId: instanceId, childKey: spawn.childKey, onComplete: spawn.onComplete,
+      }, now, depth, events);
+      this.metrics.childrenSpawned += 1;
+    }
+    for (const signal of signals) {
+      const child = await this.store.findChild(instanceId, signal.childKey);
+      if (!child) throw new PoisonRequest(`signalChild: no child with key '${signal.childKey}'`);
+      await this._dispatchInTxn(child.instance_id, signal.action, signal.data,
+        `signal:${sha(instanceId, signal.childKey, signal.action, String(seq))}`, now, depth + 1, events);
+    }
+    // FR-8.2: a child reaching terminal notifies its parent — in the SAME
+    // transaction as the terminal step, deduped by the child's id.
+    if (terminal && inst.parent_instance_id && inst.on_complete) {
+      await this._dispatchInTxn(inst.parent_instance_id, inst.on_complete,
+        { childKey: inst.child_key, childState: post },
+        `child:${instanceId}:complete`, now, depth + 1, events);
+    }
 
     this.metrics[stepKind === 'accepted' ? 'accepted' : stepKind === 'rejected' ? 'rejected' : 'unhandled'] += 1;
     this.metrics.effectsEmitted += outboxRows.length;

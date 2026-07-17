@@ -9,9 +9,34 @@ no workflow-versioning patches.
 
 Full functional/technical spec: [`docs/polyrun-spec.md`](../docs/polyrun-spec.md).
 
-## Status: M1 (production shape)
+## Status: M2 (verification flywheel + composition)
 
-M1 adds, on top of the M0 kernel:
+M2 adds, on top of M1:
+
+- **Effect-emission checker** (`src/check-effects.mjs`, `polyrun
+  check-effects`) — explores the machine ∘ effect-mapper composition
+  exhaustively (paths from init over the declared domains) and evaluates
+  invariants over per-path EMISSIONS: "chargeCard emitted at most once on any
+  reachable path", "no charge after cancel". Bounded runs are reported,
+  never silent; an empty invariant set refuses to run (a vacuous pass is not
+  a pass). Demo invariants: `demo/effect-invariants.mjs`.
+- **Continuous audit** (`src/audit.mjs`, `polyrun audit`) — replays the
+  production journal (which IS a Polygraph trace corpus) through the module:
+  post-state mismatches and journaled-rejections-the-module-now-accepts
+  surface as drift.
+- **First-class child machines (FR-8)** — `spawnChild` (atomic with the
+  parent's step, creation action included), `signalChild` (a rejecting child
+  is journaled, not forced), and terminal children notifying parents in the
+  same transaction, deduped by child id. Cascade depth capped; PG deadlock
+  (parent↔child lock inversion) retried.
+- **Journal fan-out (FR-7.5)** — `rt.events` emits 'step' post-commit only;
+  cross-process consumers page `store.journalSince(cursor)` (SQLite rowid /
+  PG bigserial).
+- **Read-only UI** (`GET /` on polyrun-api) — instance search, state,
+  journal timeline with reject classifications. Self-contained, no external
+  assets.
+
+M1 (production shape) provides:
 
 - **Postgres adapter** (`src/store-pg.mjs`) — pool + `FOR UPDATE` row locks
   (multi-writer FR-2.4), `SKIP LOCKED` claims, jsonb state with GIN index.
@@ -64,9 +89,13 @@ a Polygraph trace corpus (`rt.exportTraces()`).
 
 ## Not yet here (see spec milestones)
 
-M2: effect-emission invariants over the machine ∘ mapper composition,
-first-class child machines, journal fan-out, continuous audit, read-only UI.
-M3: soak, archival/retention, migration tooling, benchmarks.
+M3: concurrency soak, archival/retention, migration tooling over large
+snapshot sets, lease extension for long handlers, published benchmarks.
+
+Scope note: the spec's M2 named "effect invariants in polygen's self-repair
+loop"; the implemented shape keeps polygen untouched and runs the same check
+as a post-authoring gate (`polyrun check-effects`) — the polygen pipeline can
+adopt it in-loop later without changes to the checker.
 
 The demo machine is hand-authored in the exact shape polygen emits; the M0
 follow-up is to re-author it with polygen and diff.

@@ -20,6 +20,7 @@ export default {
     contract: 'contract.json',
     effects: { mapper: 'effects.cjs', manifest: 'effects.manifest.json' },
     invariants: 'polygen-out/invariants.mjs',
+    effectInvariants: 'effect-invariants.mjs',
   }],
   handlers: {
     fraudCheck: async () => { await sleep(200); return { itemsAvailable: true }; },

@@ -29,9 +29,13 @@ CREATE TABLE IF NOT EXISTS pr_instance (
   seq             INTEGER NOT NULL DEFAULT 0,
   status          TEXT NOT NULL CHECK (status IN ('active','terminal','poisoned')),
   state           TEXT NOT NULL,
+  parent_instance_id TEXT,
+  child_key       TEXT,
+  on_complete     TEXT,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS pr_instance_parent ON pr_instance (parent_instance_id, child_key);
 CREATE TABLE IF NOT EXISTS pr_journal (
   instance_id     TEXT NOT NULL,
   machine_version TEXT NOT NULL,
@@ -94,7 +98,19 @@ export class Store {
     this._als = new AsyncLocalStorage();
   }
 
-  async init() { return this; }
+  async init() {
+    // Additive column migration: CREATE TABLE IF NOT EXISTS never alters an
+    // existing database, so bring pre-M2 files up to the current shape.
+    const ensure = (table, column, decl) => {
+      const cols = this.db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+      if (!cols.includes(column)) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+    };
+    ensure('pr_journal', 'machine_version', `TEXT NOT NULL DEFAULT ''`);
+    ensure('pr_instance', 'parent_instance_id', 'TEXT');
+    ensure('pr_instance', 'child_key', 'TEXT');
+    ensure('pr_instance', 'on_complete', 'TEXT');
+    return this;
+  }
   async close() { this.db.close(); }
 
   _fault(point) { if (this.fault) this.fault(point); }
@@ -151,11 +167,21 @@ export class Store {
 
   // ---- instances -----------------------------------------------------------
 
-  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now }) {
+  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now, parentInstanceId = null, childKey = null, onComplete = null }) {
     return this._run(() => this.db.prepare(
-      `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, created_at, updated_at)
-       VALUES (?, ?, ?, 0, ?, ?, ?, ?)`
-    ).run(instanceId, machineId, machineVersion, status, JSON.stringify(state), now, now));
+      `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, parent_instance_id, child_key, on_complete, created_at, updated_at)
+       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(instanceId, machineId, machineVersion, status, JSON.stringify(state), parentInstanceId, childKey, onComplete, now, now));
+  }
+
+  /** FR-8: newest child of a parent for a given key. */
+  async findChild(parentInstanceId, childKey) {
+    return this._run(() => {
+      const row = this.db.prepare(
+        `SELECT * FROM pr_instance WHERE parent_instance_id = ? AND child_key = ? ORDER BY created_at DESC, instance_id DESC LIMIT 1`
+      ).get(parentInstanceId, childKey);
+      return row ? { ...row, state: JSON.parse(row.state) } : null;
+    });
   }
 
   async getInstance(instanceId) {
@@ -236,6 +262,14 @@ export class Store {
 
   _journalRow(r) {
     return { ...r, data: JSON.parse(r.data), pre: JSON.parse(r.pre), post: JSON.parse(r.post) };
+  }
+
+  /** FR-7.5: global journal reader for cross-process consumers. The cursor
+   *  is the SQLite rowid; hand back the max cursor you processed. */
+  async journalSince(cursor, limit = 100) {
+    return this._run(() => this.db.prepare(
+      'SELECT rowid AS global_seq, * FROM pr_journal WHERE rowid > ? ORDER BY rowid LIMIT ?'
+    ).all(cursor, limit).map((r) => this._journalRow(r)));
   }
 
   // ---- the one write path (FR-2.2) ----------------------------------------

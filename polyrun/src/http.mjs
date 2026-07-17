@@ -10,6 +10,7 @@
 
 import http from 'node:http';
 import { PoisonedError, ConflictError } from './kernel.mjs';
+import { UI_HTML } from './ui.mjs';
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -55,8 +56,13 @@ export function createHttpServer(rt, { log = console.error } = {}) {
       const url = new URL(req.url, 'http://localhost');
       const parts = url.pathname.split('/').filter(Boolean);
 
+      if (req.method === 'GET' && url.pathname === '/') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end(UI_HTML);
+      }
       if (req.method === 'GET' && url.pathname === '/healthz') return json(res, 200, { ok: true });
       if (req.method === 'GET' && url.pathname === '/metrics') return json(res, 200, rt.metrics);
+      if (req.method === 'GET' && url.pathname === '/machines') return json(res, 200, [...rt.machines.keys()]);
 
       if (parts[0] === 'machines' && parts[2] === 'instances' && parts.length === 3) {
         const machineId = decodeId(parts[1]);
