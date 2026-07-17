@@ -68,8 +68,30 @@ export async function auditMachine({ runtime, machineId, sinceMs = 0, instanceId
               detail: `journaled as rejected('${row.reject_reason}') but module now transitions to ${JSON.stringify(replayed)}`,
             });
           }
-        } catch { /* schema-invalid payloads throw under replay — the journaled
-                     rejection classification already covers them */ }
+        } catch (err) {
+          // ONLY a schema throw is expected here (the kernel journals
+          // SamSchemaError payloads as clean rejections; replay re-fires the
+          // intent and the schema throw recurs). Anything else — action
+          // removed from the surface, acceptor now throwing where it used to
+          // reject, mutate-then-reject defects — is drift.
+          if (!err || err.name !== 'SamSchemaError') {
+            mismatches.push({ instanceId: inst.instance_id, seq: row.seq, action: row.action, kind: 'replay-threw', detail: String(err && err.message) });
+          }
+        }
+      } else if (row.step_kind === 'unhandled') {
+        // An action journaled as unhandled must still be unhandled: a module
+        // that now transitions on it has drifted.
+        windowsReplayed += 1;
+        try {
+          const replayed = adapter.next(row.pre, row.action, row.data);
+          if (stable(replayed) !== stable(row.pre)) {
+            mismatches.push({
+              instanceId: inst.instance_id, seq: row.seq, action: row.action,
+              kind: 'unhandled-now-transitions',
+              detail: `journaled as unhandled but module now transitions to ${JSON.stringify(replayed)}`,
+            });
+          }
+        } catch { /* still not in the surface / still unhandled — consistent */ }
       }
     }
   }

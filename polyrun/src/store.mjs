@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS pr_instance (
   parent_instance_id TEXT,
   child_key       TEXT,
   on_complete     TEXT,
+  on_parent_terminal TEXT,
+  child_of_seq    INTEGER,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL
 );
@@ -98,9 +100,10 @@ export class Store {
     this._als = new AsyncLocalStorage();
   }
 
-  async init() {
-    // Additive column migration: CREATE TABLE IF NOT EXISTS never alters an
-    // existing database, so bring pre-M2 files up to the current shape.
+  /** Additive column migration: CREATE TABLE IF NOT EXISTS never alters an
+   *  existing database. Sync so the Runtime constructor's own-store path can
+   *  run it too — a store must NEVER serve a pre-migration schema. */
+  initSync() {
     const ensure = (table, column, decl) => {
       const cols = this.db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
       if (!cols.includes(column)) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
@@ -109,8 +112,12 @@ export class Store {
     ensure('pr_instance', 'parent_instance_id', 'TEXT');
     ensure('pr_instance', 'child_key', 'TEXT');
     ensure('pr_instance', 'on_complete', 'TEXT');
+    ensure('pr_instance', 'on_parent_terminal', 'TEXT');
+    ensure('pr_instance', 'child_of_seq', 'INTEGER');
     return this;
   }
+
+  async init() { return this.initSync(); }
   async close() { this.db.close(); }
 
   _fault(point) { if (this.fault) this.fault(point); }
@@ -167,21 +174,30 @@ export class Store {
 
   // ---- instances -----------------------------------------------------------
 
-  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now, parentInstanceId = null, childKey = null, onComplete = null }) {
+  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now, parentInstanceId = null, childKey = null, onComplete = null, onParentTerminal = null, childOfSeq = null }) {
     return this._run(() => this.db.prepare(
-      `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, parent_instance_id, child_key, on_complete, created_at, updated_at)
-       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(instanceId, machineId, machineVersion, status, JSON.stringify(state), parentInstanceId, childKey, onComplete, now, now));
+      `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, parent_instance_id, child_key, on_complete, on_parent_terminal, child_of_seq, created_at, updated_at)
+       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(instanceId, machineId, machineVersion, status, JSON.stringify(state), parentInstanceId, childKey, onComplete, onParentTerminal, childOfSeq, now, now));
   }
 
-  /** FR-8: newest child of a parent for a given key. */
+  /** FR-8: newest child of a parent for a given key — "newest" is the
+   *  parent's spawn seq (strictly monotonic per parent), never wall-clock,
+   *  which is shared by every step of a same-transaction cascade. */
   async findChild(parentInstanceId, childKey) {
     return this._run(() => {
       const row = this.db.prepare(
-        `SELECT * FROM pr_instance WHERE parent_instance_id = ? AND child_key = ? ORDER BY created_at DESC, instance_id DESC LIMIT 1`
+        `SELECT * FROM pr_instance WHERE parent_instance_id = ? AND child_key = ? ORDER BY child_of_seq DESC LIMIT 1`
       ).get(parentInstanceId, childKey);
       return row ? { ...row, state: JSON.parse(row.state) } : null;
     });
+  }
+
+  /** FR-8.4: all children of a parent (for terminal cascade). */
+  async listChildren(parentInstanceId) {
+    return this._run(() => this.db.prepare(
+      `SELECT * FROM pr_instance WHERE parent_instance_id = ? ORDER BY child_of_seq`
+    ).all(parentInstanceId).map((r) => ({ ...r, state: JSON.parse(r.state) })));
   }
 
   async getInstance(instanceId) {

@@ -62,12 +62,17 @@ export class ConflictError extends Error {
 
 /** Internal sentinel: thrown inside the dispatch transaction to request
  *  poisoning; converted OUTSIDE the transaction (so the rollback of the step
- *  cannot roll back the poison mark) into a durable status + PoisonedError. */
-class PoisonRequest extends Error {}
+ *  cannot roll back the poison mark) into a durable status + PoisonedError.
+ *  Carries the FAULTY instanceId: in a parent/child cascade the defect may
+ *  be frames away from the dispatch root, and the wrong-instance poison
+ *  would brick a healthy machine while the defective one stays active. */
+class PoisonRequest extends Error {
+  constructor(message, instanceId) { super(message); this.instanceId = instanceId; }
+}
 
 export class Runtime {
   constructor({ store, dbPath, machines = [], handlers = {}, now = Date.now }) {
-    this.store = store ?? new Store(dbPath ?? ':memory:');
+    this.store = store ?? new Store(dbPath ?? ':memory:').initSync();
     this.handlers = handlers;
     this.now = now;
     this.machines = new Map();
@@ -197,23 +202,33 @@ export class Runtime {
     machine.mod.setState(state);
   }
 
-  _lastStep(machine, action) {
+  _lastStep(machine, action, instanceId) {
     const acc = machine.mod.instance({});
     if (typeof acc.lastStep !== 'function') {
-      throw new PoisonRequest(`module exposes no lastStep() — step classification unreadable`);
+      throw new PoisonRequest(`module exposes no lastStep() — step classification unreadable`, instanceId);
     }
     const step = acc.lastStep();
     if (!step || (step.intent !== undefined && step.intent !== null && step.intent !== action)) {
       // An unreadable classification on a strict module must NEVER default to
       // 'accepted' — that would run the effect mapper for a step the module
       // may have refused.
-      throw new PoisonRequest(`lastStep() did not classify action '${action}' (got ${step ? `intent '${step.intent}'` : 'nothing'})`);
+      throw new PoisonRequest(`lastStep() did not classify action '${action}' (got ${step ? `intent '${step.intent}'` : 'nothing'})`, instanceId);
     }
     return step;
   }
 
   async _poison(instanceId, message) {
-    await this.store.markPoisoned(instanceId, this.now());
+    try {
+      await this.store.markPoisoned(instanceId, this.now());
+    } catch (err) {
+      try {
+        await this.store.markPoisoned(instanceId, this.now()); // one retry (e.g. pg deadlock)
+      } catch (err2) {
+        // The durable mark failed; the defect is deterministic, so the next
+        // dispatch re-attempts it — but say so LOUDLY now (FR-1.3).
+        console.error(`[polyrun] FAILED to durably poison ${instanceId}: ${err2 && err2.message} (original: ${err && err.message})`);
+      }
+    }
     return new PoisonedError(instanceId, message);
   }
 
@@ -240,8 +255,18 @@ export class Runtime {
       return { instanceId: id, ...made };
     } catch (err) {
       if (err instanceof PoisonRequest) {
-        this.metrics.poisoned += 1;
-        throw await this._poison(id, err.message);
+        // The insert rolled back with the transaction: if the faulty instance
+        // EXISTS (a cascade defect on an established machine), poison it
+        // durably; if it is the never-created instance itself, a PoisonedError
+        // would be a lie — nothing durable records it, and a retried create()
+        // would loop through the deterministic defect while claiming
+        // poisoning each time. Fail as what it is: a creation failure.
+        const target = err.instanceId ?? id;
+        if (await this.store.getInstance(target)) {
+          this.metrics.poisoned += 1;
+          throw await this._poison(target, err.message);
+        }
+        throw new Error(`create '${id}' failed (machine/mapper defect — nothing was persisted): ${err.message}`);
       }
       // Cross-process create race: the loser converts the unique violation
       // into the idempotent path by re-entering (it now finds the row).
@@ -275,6 +300,8 @@ export class Runtime {
       parentInstanceId: parentInfo?.parentInstanceId ?? null,
       childKey: parentInfo?.childKey ?? null,
       onComplete: parentInfo?.onComplete ?? null,
+      onParentTerminal: parentInfo?.onParentTerminal ?? null,
+      childOfSeq: parentInfo?.childOfSeq ?? null,
     });
     await this.store.insertJournal({
       instanceId: id, machineVersion: machine.version, seq: 0,
@@ -334,9 +361,11 @@ export class Runtime {
       } catch (err) {
         if (err instanceof PoisonRequest) {
           // The step's transaction has rolled back; the poison mark gets its
-          // own durable transaction so it cannot be lost with the step.
+          // own durable transaction so it cannot be lost with the step. The
+          // mark goes on the FAULTY instance (a cascade can surface a child's
+          // or parent's defect from another frame), never blindly on the root.
           this.metrics.poisoned += 1;
-          throw await this._poison(instanceId, err.message);
+          throw await this._poison(err.instanceId ?? instanceId, err.message);
         }
         if (err && err.code === '40P01' && attempt < 3) continue; // PG deadlock: retry
         throw err;
@@ -346,7 +375,7 @@ export class Runtime {
 
   async _dispatchInTxn(instanceId, action, data, aid, now, depth = 0, events = []) {
     if (depth > MAX_CASCADE_DEPTH) {
-      throw new PoisonRequest(`dispatch cascade exceeded depth ${MAX_CASCADE_DEPTH} (parent/child wiring cycle?)`);
+      throw new PoisonRequest(`dispatch cascade exceeded depth ${MAX_CASCADE_DEPTH} (parent/child wiring cycle?)`, instanceId);
     }
     const inst = await this.store.getInstanceForUpdate(instanceId);
     if (!inst) throw new Error(`unknown instance '${instanceId}'`);
@@ -374,6 +403,9 @@ export class Runtime {
       // FR-1.2: terminal (and poisoned) instances reject observably, never error.
       const journal = { action, data, pre: inst.state, post: inst.state, stepKind: 'rejected', rejectReason: inst.status, actionId: aid };
       await this.store.commitStep({ instanceId, machineVersion: machine.version, seq: inst.seq + 1, journal, outboxRows: [], timerRows: [], cancelTimerKeys: [], cancelAllTimers: false, now });
+      // Every journaled row emits exactly one event — this path included, or
+      // event consumers and journal pollers would see different histories.
+      events.push({ instanceId, machineId: inst.machine_id, seq: inst.seq + 1, action, data, stepKind: 'rejected', rejectReason: inst.status, pre: inst.state, post: inst.state, at: now });
       return { seq: inst.seq + 1, stepKind: 'rejected', rejectReason: inst.status, state: inst.state, terminal: false };
     }
 
@@ -385,7 +417,7 @@ export class Runtime {
     } catch (err) {
       // The module rejecting its own persisted snapshot (SamShapeError from
       // an incompatible deploy) is exactly the "cannot happen" class.
-      throw new PoisonRequest(`module rejected persisted snapshot: ${err && err.message}`);
+      throw new PoisonRequest(`module rejected persisted snapshot: ${err && err.message}`, instanceId);
     }
     const handler = machine.mod.actions[action];
 
@@ -408,17 +440,17 @@ export class Runtime {
           rejectReason = err.message;
           classified = true;
         } else {
-          throw new PoisonRequest(`action '${action}' threw: ${err && err.message}`);
+          throw new PoisonRequest(`action '${action}' threw: ${err && err.message}`, instanceId);
         }
       }
       if (!classified) {
-        const step = this._lastStep(machine, action); // throws PoisonRequest if unreadable
+        const step = this._lastStep(machine, action, instanceId); // throws PoisonRequest if unreadable
         if (step.classification === 'rejected') {
           stepKind = 'rejected';
           rejectReason = (step.rejections && step.rejections[0] && step.rejections[0].reason) || 'rejected';
           const after = this._snapshot(machine);
           if (JSON.stringify(after) !== JSON.stringify(pre)) {
-            throw new PoisonRequest(`acceptor for '${action}' mutated the observable model and then rejected`);
+            throw new PoisonRequest(`acceptor for '${action}' mutated the observable model and then rejected`, instanceId);
           }
         } else if (step.classification === 'unhandled') {
           stepKind = 'unhandled';
@@ -442,46 +474,63 @@ export class Runtime {
       const intents = machine.mapper(pre, action, data, post, stepKind) || [];
       let ordinal = 0;
       const timerKeysThisStep = new Set();
+      const childKeysThisStep = new Set();
+      const signalsThisStep = new Set();
       for (const intent of intents) {
         if (intent.kind === 'spawnChild') {
           // FR-8.1: validated here, created atomically with the step below.
           const childMachine = this.machines.get(intent.machineId);
-          if (!childMachine) throw new PoisonRequest(`spawnChild: machine '${intent.machineId}' is not registered`);
-          if (typeof intent.childKey !== 'string' || !intent.childKey) throw new PoisonRequest('spawnChild: childKey is required');
+          if (!childMachine) throw new PoisonRequest(`spawnChild: machine '${intent.machineId}' is not registered`, instanceId);
+          if (typeof intent.childKey !== 'string' || !intent.childKey) throw new PoisonRequest('spawnChild: childKey is required', instanceId);
           if (intent.onComplete && typeof machine.mod.actions[intent.onComplete] !== 'function') {
-            throw new PoisonRequest(`spawnChild: onComplete action '${intent.onComplete}' is not in the parent's action surface`);
+            throw new PoisonRequest(`spawnChild: onComplete action '${intent.onComplete}' is not in the parent's action surface`, instanceId);
           }
           if (intent.creation && typeof childMachine.mod.actions[intent.creation.action] !== 'function') {
-            throw new PoisonRequest(`spawnChild: creation action '${intent.creation.action}' is not in machine '${intent.machineId}'`);
+            throw new PoisonRequest(`spawnChild: creation action '${intent.creation.action}' is not in machine '${intent.machineId}'`, instanceId);
           }
+          if (intent.onParentTerminal && typeof childMachine.mod.actions[intent.onParentTerminal] !== 'function') {
+            throw new PoisonRequest(`spawnChild: onParentTerminal action '${intent.onParentTerminal}' is not in machine '${intent.machineId}'`, instanceId);
+          }
+          if (childKeysThisStep.has(intent.childKey)) {
+            // Same doctrine as duplicate timer keys: a deterministic mapper
+            // defect must poison, not silently dedupe or retry-storm.
+            throw new PoisonRequest(`effect mapper emitted duplicate spawnChild key '${intent.childKey}' in one step`, instanceId);
+          }
+          childKeysThisStep.add(intent.childKey);
           spawns.push({
             machineId: intent.machineId,
             childId: sha('child', instanceId, intent.childKey, String(seq)),
             childKey: intent.childKey,
             onComplete: intent.onComplete ?? null,
+            onParentTerminal: intent.onParentTerminal ?? null,
             creation: intent.creation ?? null,
           });
         } else if (intent.kind === 'signalChild') {
           // FR-8.2: the parent may dispatch declared actions into a child; a
           // child that rejects it is journaled, not forced.
-          if (typeof intent.childKey !== 'string' || !intent.childKey) throw new PoisonRequest('signalChild: childKey is required');
-          if (typeof intent.action !== 'string' || !intent.action) throw new PoisonRequest('signalChild: action is required');
+          if (typeof intent.childKey !== 'string' || !intent.childKey) throw new PoisonRequest('signalChild: childKey is required', instanceId);
+          if (typeof intent.action !== 'string' || !intent.action) throw new PoisonRequest('signalChild: action is required', instanceId);
+          const sig = `${intent.childKey}\u0000${intent.action}`;
+          if (signalsThisStep.has(sig)) {
+            throw new PoisonRequest(`effect mapper emitted duplicate signalChild '${intent.action}' for key '${intent.childKey}' in one step`, instanceId);
+          }
+          signalsThisStep.add(sig);
           signals.push({ childKey: intent.childKey, action: intent.action, data: intent.data ?? {} });
         } else if (intent.kind === 'timer') {
           if (typeof intent.key !== 'string' || !intent.key) {
-            throw new PoisonRequest(`effect mapper emitted a timer without a key`);
+            throw new PoisonRequest(`effect mapper emitted a timer without a key`, instanceId);
           }
           if (timerKeysThisStep.has(intent.key)) {
             // Deterministic mapper defect: the second identical timerId would
             // fail the PK on every retry forever — poison instead.
-            throw new PoisonRequest(`effect mapper emitted duplicate timer key '${intent.key}' in one step`);
+            throw new PoisonRequest(`effect mapper emitted duplicate timer key '${intent.key}' in one step`, instanceId);
           }
           timerKeysThisStep.add(intent.key);
           let fireAt;
           try {
             fireAt = resolveFireAt(intent, now);
           } catch (err) {
-            throw new PoisonRequest(`effect mapper: ${err.message}`);
+            throw new PoisonRequest(`effect mapper: ${err.message}`, instanceId);
           }
           timerRows.push({ timerId: sha(instanceId, intent.key, String(seq)), key: intent.key, fireAt, action: intent.action, data: intent.data ?? {} });
         } else if (intent.kind === 'cancelTimer') {
@@ -489,7 +538,7 @@ export class Runtime {
         } else if (machine.manifest && machine.manifest.effects && machine.manifest.effects[intent.kind]) {
           outboxRows.push({ intentId: sha(instanceId, String(seq), intent.kind, String(ordinal++)), kind: intent.kind, payload: intent.payload ?? {} });
         } else {
-          throw new PoisonRequest(`effect mapper emitted undeclared kind '${intent.kind}'`);
+          throw new PoisonRequest(`effect mapper emitted undeclared kind '${intent.kind}'`, instanceId);
         }
       }
     }
@@ -517,12 +566,13 @@ export class Runtime {
       // here, so a spawn executes at most once per (parent, childKey, seq).
       await this._createInTxn(spawn.machineId, spawn.childId, spawn.creation ?? undefined, {
         parentInstanceId: instanceId, childKey: spawn.childKey, onComplete: spawn.onComplete,
+        onParentTerminal: spawn.onParentTerminal, childOfSeq: seq,
       }, now, depth, events);
       this.metrics.childrenSpawned += 1;
     }
     for (const signal of signals) {
       const child = await this.store.findChild(instanceId, signal.childKey);
-      if (!child) throw new PoisonRequest(`signalChild: no child with key '${signal.childKey}'`);
+      if (!child) throw new PoisonRequest(`signalChild: no child with key '${signal.childKey}'`, instanceId);
       await this._dispatchInTxn(child.instance_id, signal.action, signal.data,
         `signal:${sha(instanceId, signal.childKey, signal.action, String(seq))}`, now, depth + 1, events);
     }
@@ -532,6 +582,17 @@ export class Runtime {
       await this._dispatchInTxn(inst.parent_instance_id, inst.on_complete,
         { childKey: inst.child_key, childState: post },
         `child:${instanceId}:complete`, now, depth + 1, events);
+    }
+    // FR-8.4: a terminal PARENT dispatches the declared cancel action into
+    // each non-terminal child (never deletes state); a child that rejects it
+    // is journaled and surfaced, not forced.
+    if (terminal) {
+      for (const child of await this.store.listChildren(instanceId)) {
+        if (child.status !== 'active' || !child.on_parent_terminal) continue;
+        await this._dispatchInTxn(child.instance_id, child.on_parent_terminal,
+          { reason: 'parent-terminal' },
+          `parent:${instanceId}:terminal:${child.instance_id}`, now, depth + 1, events);
+      }
     }
 
     this.metrics[stepKind === 'accepted' ? 'accepted' : stepKind === 'rejected' ? 'rejected' : 'unhandled'] += 1;

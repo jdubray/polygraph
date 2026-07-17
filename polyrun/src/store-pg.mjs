@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS pr_instance (
   parent_instance_id text,
   child_key       text,
   on_complete     text,
+  on_parent_terminal text,
+  child_of_seq    bigint,
   created_at      bigint NOT NULL,
   updated_at      bigint NOT NULL
 );
@@ -102,6 +104,8 @@ export class PgStore {
       ALTER TABLE pr_instance ADD COLUMN IF NOT EXISTS parent_instance_id text;
       ALTER TABLE pr_instance ADD COLUMN IF NOT EXISTS child_key text;
       ALTER TABLE pr_instance ADD COLUMN IF NOT EXISTS on_complete text;
+      ALTER TABLE pr_instance ADD COLUMN IF NOT EXISTS on_parent_terminal text;
+      ALTER TABLE pr_instance ADD COLUMN IF NOT EXISTS child_of_seq bigint;
     `);
     return this;
   }
@@ -135,19 +139,27 @@ export class PgStore {
 
   // ---- instances -----------------------------------------------------------
 
-  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now, parentInstanceId = null, childKey = null, onComplete = null }) {
+  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now, parentInstanceId = null, childKey = null, onComplete = null, onParentTerminal = null, childOfSeq = null }) {
     await this._q(
-      `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, parent_instance_id, child_key, on_complete, created_at, updated_at)
-       VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $8, $9, $9)`,
-      [instanceId, machineId, machineVersion, status, JSON.stringify(state), parentInstanceId, childKey, onComplete, now]);
+      `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, parent_instance_id, child_key, on_complete, on_parent_terminal, child_of_seq, created_at, updated_at)
+       VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
+      [instanceId, machineId, machineVersion, status, JSON.stringify(state), parentInstanceId, childKey, onComplete, onParentTerminal, childOfSeq, now]);
   }
 
-  /** FR-8: newest child of a parent for a given key. */
+  /** FR-8: newest child of a parent for a given key — "newest" is the
+   *  parent's spawn seq (strictly monotonic per parent), never wall-clock. */
   async findChild(parentInstanceId, childKey) {
     const { rows } = await this._q(
-      `SELECT * FROM pr_instance WHERE parent_instance_id = $1 AND child_key = $2 ORDER BY created_at DESC, instance_id DESC LIMIT 1`,
+      `SELECT * FROM pr_instance WHERE parent_instance_id = $1 AND child_key = $2 ORDER BY child_of_seq DESC LIMIT 1`,
       [parentInstanceId, childKey]);
     return this._instanceRow(rows[0] ?? null);
+  }
+
+  /** FR-8.4: all children of a parent (for terminal cascade). */
+  async listChildren(parentInstanceId) {
+    const { rows } = await this._q(
+      `SELECT * FROM pr_instance WHERE parent_instance_id = $1 ORDER BY child_of_seq`, [parentInstanceId]);
+    return rows.map((r) => this._instanceRow(r));
   }
 
   _instanceRow(r) {
@@ -197,10 +209,24 @@ export class PgStore {
 
   _journalRow(r) { return r ? { ...r, seq: num(r.seq), at: num(r.at), ...(r.global_seq !== undefined ? { global_seq: num(r.global_seq) } : {}) } : null; }
 
-  /** FR-7.5: global journal reader; the cursor is the bigserial global_seq. */
+  /** FR-7.5: global journal reader; the cursor is the identity global_seq.
+   *  Identity values are assigned at INSERT but transactions commit out of
+   *  order: without a guard, a poller could advance its cursor past a row a
+   *  still-open transaction commits later — skipping it FOREVER. The xmin
+   *  horizon guard delivers only rows whose inserting transaction is older
+   *  than every active transaction, so no undelivered lower global_seq can
+   *  materialize behind the cursor. (age() is wraparound-safe; the xid8
+   *  horizon is folded to a 32-bit xid for it.) */
   async journalSince(cursor, limit = 100) {
+    // xmin-older-than-horizon via wraparound-aware 32-bit modular distance:
+    // horizon (xid8 folded to 32 bits) minus the row's xmin, mod 2^32, lands
+    // in (0, 2^31) iff xmin is older. (No age(xid,xid) exists in PG; xid8
+    // ordering operators can't compare against the xid-typed xmin column.)
     const { rows } = await this._q(
-      'SELECT * FROM pr_journal WHERE global_seq > $1 ORDER BY global_seq LIMIT $2', [cursor, limit]);
+      `SELECT * FROM pr_journal
+       WHERE global_seq > $1
+         AND mod((pg_snapshot_xmin(pg_current_snapshot())::text::bigint % 4294967296) - (xmin::text::bigint) + 4294967296, 4294967296) BETWEEN 1 AND 2147483647
+       ORDER BY global_seq LIMIT $2`, [cursor, limit]);
     return rows.map((r) => this._journalRow(r));
   }
 

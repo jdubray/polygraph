@@ -121,6 +121,15 @@ try {
     // §6.2: explore the machine ∘ mapper composition against effect-emission
     // invariants (machine config key: effectInvariants).
     const only = flag('machine');
+    const numFlag = (name, dflt) => {
+      const raw = flag(name);
+      if (raw === undefined) return dflt;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 1) { console.error(`invalid --${name} '${raw}'`); process.exit(2); }
+      return n;
+    };
+    const maxDepth = numFlag('depth', undefined);
+    const maxPaths = numFlag('max-paths', undefined);
     let ran = 0;
     for (const m of config.machines ?? []) {
       if (only && m.machineId !== only) continue;
@@ -132,20 +141,29 @@ try {
       const result = await checkEffects({
         module: m.module,
         mapper: m.effects.mapper,
+        manifest: m.effects.manifest,
         contract: m.contract,
         invariants: m.effectInvariants,
-        maxDepth: flag('depth') ? Number(flag('depth')) : undefined,
-        maxPaths: flag('max-paths') ? Number(flag('max-paths')) : undefined,
+        maxDepth,
+        maxPaths,
       });
       console.log(`== ${m.machineId} ==`);
       console.log(renderReport(result));
       if (result.violations.length > 0) exitCode = 1;
+      // A bounded run is NOT a pass for CI gating — "0 violations over almost
+      // nothing" must not exit 0 (unless the operator explicitly accepts it).
+      if (result.bounded && !args.includes('--allow-bounded')) {
+        console.error(`${m.machineId}: BOUNDED exploration is not a full pass (use --allow-bounded to accept)`);
+        exitCode = exitCode || 1;
+      }
     }
     if (ran === 0) { console.error('check-effects: nothing to check'); exitCode = 1; }
   } else if (command === 'audit') {
     // FR-7.2: replay the production journal through the module — drift report.
     const only = flag('machine');
-    const sinceMs = flag('since') ? Number(flag('since')) : 0;
+    const sinceRaw = flag('since');
+    const sinceMs = sinceRaw === undefined ? 0 : Number(sinceRaw);
+    if (!Number.isFinite(sinceMs) || sinceMs < 0) { console.error(`invalid --since '${sinceRaw}'`); process.exit(2); }
     for (const [machineId] of rt.machines) {
       if (only && machineId !== only) continue;
       const result = await auditMachine({ runtime: rt, machineId, sinceMs, instanceId: flag('instance') });
