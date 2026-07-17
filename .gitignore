@@ -17,6 +17,10 @@ test/.tmp-v2/
 # polyrun demo — regenerated on every run
 polyrun/demo/.demo-state/
 
+# Personal drafts — not part of the project
+docs/linkedin-the-original-question.md
+docs/linkedin-teaser-post.md
+
 # Eval — traces, generated specs, and results are regenerated on demand
 eval/machines/*/traces/
 eval/machines/*/.ab-specs/
