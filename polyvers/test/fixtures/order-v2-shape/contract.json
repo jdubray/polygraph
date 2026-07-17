@@ -1,0 +1,36 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "orderState", "type": "enum: 'pending' | 'charging' | 'fulfilling' | 'completed' | 'cancelled'" },
+    { "name": "totalCents", "type": "integer >= 0, order total in cents" },
+    { "name": "txId", "type": "string, payment transaction id ('' until charged)" },
+    { "name": "trackingId", "type": "string, carrier tracking id ('' until shipped)" }
+  ],
+  "initState": { "orderState": "pending", "totalCents": 0, "txId": "", "trackingId": "" },
+  "actions": {
+    "SUBMIT": { "dataFields": { "totalCents": "integer > 0" } },
+    "CHARGE_OK": { "dataFields": { "txId": "string" } },
+    "SHIP": { "dataFields": {} },
+    "CANCEL": { "dataFields": {} }
+  },
+  "dataDomain": {
+    "SUBMIT": { "totalCents": [2500] },
+    "CHARGE_OK": { "txId": ["tx-1"] }
+  },
+  "terminalStates": ["completed", "cancelled"],
+  "specialRules": [
+    {
+      "name": "stale-completion-rejects",
+      "note": "CHARGE_OK arriving in any state other than 'charging' is an observable rejection (post == pre).",
+      "whenState": "orderState != 'charging'",
+      "whenAction": "CHARGE_OK"
+    },
+    {
+      "name": "not-cancellable",
+      "note": "CANCEL applies in 'pending' and 'charging'; anywhere else it is an observable rejection.",
+      "whenState": "orderState not in ('pending', 'charging')",
+      "whenAction": "CANCEL"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre, never a throw and never a silent mutation."
+}

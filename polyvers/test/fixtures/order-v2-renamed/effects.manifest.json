@@ -1,0 +1,9 @@
+{
+  "effects": {
+    "chargeCard": {
+      "payloadSchema": { "amountCents": "number" },
+      "onSuccess": { "action": "CHARGE_OK" },
+      "retry": { "maxAttempts": 3, "baseMs": 200, "timeoutMs": 5000 }
+    }
+  }
+}

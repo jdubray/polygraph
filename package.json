@@ -24,6 +24,8 @@
     "test:v2": "node test/selftest-v2.mjs",
     "test:prompts": "node test/selftest-prompts.mjs",
     "test:polyrun": "node --no-warnings --test polyrun/test/kernel.test.mjs polyrun/test/m1.test.mjs polyrun/test/m2.test.mjs polyrun/test/m3.test.mjs polyrun/test/soak.test.mjs",
+    "test:polyvers": "node --no-warnings --test polyvers/test/m0.test.mjs",
+    "polyvers": "node polyvers/bin/polyvers.mjs",
     "bench:polyrun": "node --no-warnings polyrun/bench/bench.mjs",
     "demo:polyrun": "node --no-warnings polyrun/demo/run-demo.mjs",
     "test:oms": "node --no-warnings --test examples/polyrun-oms/test/oms.test.mjs",
