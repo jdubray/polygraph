@@ -87,6 +87,34 @@ demo/                           the kill -9 crash demo
 test/oms.test.mjs               the suite (SQLite default; POLYRUN_PG_URL for Postgres)
 ```
 
+## How this differs from Temporal's version — the part that matters
+
+The Go reference app and this folder implement the same business process.
+The difference is **where correctness comes from**:
+
+| | Temporal reference app | this folder |
+|---|---|---|
+| workflow logic written by | engineers, in Go | **polygen** (an LLM), from a pinned contract |
+| correctness argument | the tests someone wrote | **exhaustive model check** of every reachable state, before first run |
+| "never charged twice" | convention: an idempotency key, hoped to be used right | a checked **emission invariant**: no reachable path emits `chargeCard` twice |
+| "one shipment per fulfillment" | code review | a checked invariant: every path **spawns exactly `fulfillments` children**, never before a successful charge |
+| stale signal / duplicate webhook | whatever the workflow code happens to do | a **verified `reject(reason)`** — an observable no-op by construction |
+| deploying changed logic | replay determinism + `patch()` versioning, forever | snapshot compatibility, **mechanically gated** (`polyrun deploy`) over live state |
+| production vs model drift | unknowable | the journal **is** a trace corpus; `polyrun audit` replays it on demand |
+| regression corpus | hand-maintained tests | **synthesized** by the pipeline (`machines/*/traces/`, replayed independently) |
+
+Put differently: Temporal's version demonstrates that a durable engine can
+reliably execute order logic. This version demonstrates that the order logic
+itself can be **generated, proven against its stated invariants, and then
+executed durably** — the engine-hard guarantees are table stakes here (crash
+recovery, idempotent payment, timers, signals: see the demo), and the
+correctness guarantees on top have no counterpart in the original.
+
+The provenance is deliberately warts-and-all: one of the two machines needed
+a recorded one-line hand-repair (see the note above), and that episode
+hardened the generator itself. That is the intended loop — defects surface
+as gate failures and become pipeline fixes, not folklore.
+
 ## Honest deltas vs the reference app
 
 Same as the harness's own scope notes, plus: the product catalog is a
