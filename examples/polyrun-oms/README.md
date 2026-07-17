@@ -14,7 +14,12 @@ model-checked before it ever ran.**
   unavailable; cancellation rules (`cancel-blocked-while-charging`,
   `fulfillment-in-progress`); a completion **rollup** — the order completes
   only when every shipment delivered, or lands in `partiallyDelivered` when
-  any child was cancelled.
+  any child was cancelled. *Provenance note:* this machine's polygen run did
+  NOT converge and received one recorded hand-repair — read
+  [`machines/order/REPAIR-NOTE.md`](machines/order/REPAIR-NOTE.md) before
+  trusting `polygen-report.md`; the post-repair model check is 33 states,
+  0 violations, and both defects that caused the episode are now gated in
+  the polygen pipeline itself.
 - **Shipment** (`machines/shipment/`, polygen-authored): preparing →
   inTransit → delivered, courier-signalled, cancellable only while
   preparing; notifies the order on its terminal state and accepts the
@@ -32,20 +37,38 @@ children**, and never spawns before a successful charge
 
 ## Run it
 
+All from the repo root; Node ≥ 20, no API key needed for any of it (polygen
+authoring already happened — its artifacts are committed).
+
 ```bash
 # tests (composition check incl. spawn-count negative control, rollup paths,
-# amend, cancel rules, at-least-once safety, deploy gate + audit)
-node --test examples/polyrun-oms/test/oms.test.mjs
+# amend, cancel rules, at-least-once safety, deploy gate + audit) — 8 tests,
+# SQLite by default; set POLYRUN_PG_URL=postgres://... to run on Postgres
+npm run test:oms
 
-# the crash demo: kill -9 mid-charge, recover, courier delivers both
-# shipments, rollup completes — exactly one charge on the provider ledger
-node --no-warnings examples/polyrun-oms/demo/run-demo.mjs
+# the crash demo: kill -9 mid-charge, recover, charge dedupes at the
+# provider, two shipment children spawn, courier delivers both, rollup
+# completes — exactly one charge on the ledger
+npm run demo:oms
 
 # the storefront (User places/amends orders, Courier ships/delivers) +
-# the polyrun ops console + the JSON facade
-node --no-warnings examples/polyrun-oms/bin/oms-server.mjs
-#   → http://127.0.0.1:7080/shop
+# the polyrun ops console + the JSON facade, one process
+npm run oms
+#   → http://127.0.0.1:7080/shop   (storefront)
+#   → http://127.0.0.1:7080/       (ops console: instances, journals, rejects)
+
+# the verification tooling, straight from the CLI
+node polyrun/bin/polyrun.mjs check-effects --config examples/polyrun-oms/polyrun.config.mjs
+node polyrun/bin/polyrun.mjs deploy        --config examples/polyrun-oms/polyrun.config.mjs
+node polyrun/bin/polyrun.mjs audit         --config examples/polyrun-oms/polyrun.config.mjs
 ```
+
+Storefront walkthrough: as **User**, tick products (each maps to warehouse A
+or B — distinct warehouses become separate shipments), place the order, and
+watch it ride fraud check → charge → fulfilling. As **Courier**, Ship and
+Deliver each shipment; when the last one lands, the rollup completes the
+order. Try cancelling at different stages to see the verified rejection
+reasons surface in the UI.
 
 ## Layout
 
