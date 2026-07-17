@@ -1,0 +1,1 @@
+{"pre":{"shipState":"preparing"},"action":"CANCEL_SHIPMENT","data":{},"post":{"shipState":"cancelledShipment"}}

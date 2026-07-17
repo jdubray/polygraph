@@ -1,0 +1,3 @@
+{"pre":{"shipState":"preparing"},"action":"SHIP","data":{},"post":{"shipState":"inTransit"}}
+{"pre":{"shipState":"inTransit"},"action":"DELIVER","data":{},"post":{"shipState":"delivered"}}
+{"pre":{"shipState":"delivered"},"action":"SHIP","data":{},"post":{"shipState":"delivered"}}

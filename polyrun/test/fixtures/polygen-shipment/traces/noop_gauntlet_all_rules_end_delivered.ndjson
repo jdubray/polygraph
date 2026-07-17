@@ -1,0 +1,8 @@
+{"pre":{"shipState":"preparing"},"action":"DELIVER","data":{},"post":{"shipState":"preparing"}}
+{"pre":{"shipState":"preparing"},"action":"SHIP","data":{},"post":{"shipState":"inTransit"}}
+{"pre":{"shipState":"inTransit"},"action":"SHIP","data":{},"post":{"shipState":"inTransit"}}
+{"pre":{"shipState":"inTransit"},"action":"CANCEL_SHIPMENT","data":{},"post":{"shipState":"inTransit"}}
+{"pre":{"shipState":"inTransit"},"action":"DELIVER","data":{},"post":{"shipState":"delivered"}}
+{"pre":{"shipState":"delivered"},"action":"DELIVER","data":{},"post":{"shipState":"delivered"}}
+{"pre":{"shipState":"delivered"},"action":"SHIP","data":{},"post":{"shipState":"delivered"}}
+{"pre":{"shipState":"delivered"},"action":"CANCEL_SHIPMENT","data":{},"post":{"shipState":"delivered"}}

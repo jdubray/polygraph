@@ -184,7 +184,11 @@ test('purge guards: active children and active parents block archival', async (t
     store: { sqlite: ':memory:' },
     machines: [
       machineDef,
-      { machineId: 'shipment', module: join(here, 'fixtures', 'shipment-machine.cjs'),
+      { machineId: 'shipment', // POLYRUN_SHIPMENT_MACHINE swaps in an alternative shipment module
+        // authored to fixtures/shipment-contract.json (e.g. the polygen one).
+        module: process.env.POLYRUN_SHIPMENT_MACHINE
+          ? join(process.cwd(), process.env.POLYRUN_SHIPMENT_MACHINE)
+          : join(here, 'fixtures', 'shipment-machine.cjs'),
         isTerminal: (s) => ['delivered', 'cancelledShipment'].includes(s.shipState) },
     ],
     handlers: {},

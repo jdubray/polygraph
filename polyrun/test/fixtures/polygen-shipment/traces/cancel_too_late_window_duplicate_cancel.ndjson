@@ -1,0 +1,2 @@
+{"pre":{"shipState":"preparing"},"action":"CANCEL_SHIPMENT","data":{},"post":{"shipState":"cancelledShipment"}}
+{"pre":{"shipState":"cancelledShipment"},"action":"CANCEL_SHIPMENT","data":{},"post":{"shipState":"cancelledShipment"}}

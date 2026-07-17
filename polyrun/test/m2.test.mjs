@@ -192,7 +192,11 @@ async function familyRuntime() {
       },
       {
         machineId: 'shipment',
-        module: join(here, 'fixtures', 'shipment-machine.cjs'),
+        // POLYRUN_SHIPMENT_MACHINE swaps in an alternative shipment module
+        // authored to fixtures/shipment-contract.json (e.g. the polygen one).
+        module: process.env.POLYRUN_SHIPMENT_MACHINE
+          ? join(process.cwd(), process.env.POLYRUN_SHIPMENT_MACHINE)
+          : join(here, 'fixtures', 'shipment-machine.cjs'),
         isTerminal: (s) => ['delivered', 'cancelledShipment'].includes(s.shipState),
       },
     ],
