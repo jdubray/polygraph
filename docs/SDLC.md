@@ -156,6 +156,49 @@ invariants → machine (regenerate or repair) → check-effects → deploy gate
 editing the machine to change behavior the invariants don't describe, you
 are reintroducing the gap this whole lifecycle exists to close.
 
+## Versioning best practices
+
+The long-form argument is [`docs/VERSIONING.md`](VERSIONING.md); this is
+the operating checklist. The premise: state outlives code, so every deploy
+is a compatibility event against your live fleet — and each kind of change
+has a lane with mechanical gates.
+
+1. **Classify the change first** (see the decision table in the essay):
+   semantics-only → plain deploy gate; shape change → the `migrate.cjs`
+   lane; vocabulary change → contract revision with cross-checks; rule
+   change → invariants move **first**, then everything else.
+2. **Run `polyrun deploy` against a copy of live state, not an empty
+   database.** The gate's value is precisely that production snapshots are
+   its test inputs — round-trip, pointwise invariants, and the model check
+   from live states as initial states (the v1-reachable/v3-unreachable
+   landmine hunt).
+3. **Migrations: always dry-run first, and let the fences work.**
+   `migrate` validates everything before applying anything; an instance
+   that moves during the apply is skipped and reported — re-run rather
+   than force. Never bypass the `$migrate` journal row: it is what keeps
+   history auditable across the boundary.
+4. **Treat reject-reason names as public API.** They come from the
+   contract's `specialRules` and surface in journals, logs, and client
+   responses — renaming one is a vocabulary change, not a refactor.
+5. **Deprecate actions; don't delete them in the same release** while any
+   instance, timer, or effect completion from the old version can still
+   arrive. Verified stale-action rejection makes the overlap window safe —
+   use it, then remove the action once the fleet and outbox have drained.
+6. **Archive before large migrations** (`polyrun archive`) — a smaller
+   live fleet is a smaller gate surface and a smaller blast radius.
+7. **Audit right after every deploy** (`polyrun audit`, version-aware):
+   pre-deploy windows report as older-version (not replayed), so any drift
+   it *does* flag is real.
+8. **Strengthening an invariant is a fleet event.** Expect the gate to
+   name the live instances that already violate the stronger rule; decide
+   what they mean *before* the deploy, not after.
+9. **Cross-machine deploys (parent/child): registration cross-checks catch
+   wiring breaks, but deploy parents and children in an order where every
+   completion action both sides emit still exists on the receiver.** The
+   product of versions is not yet model-checked (recorded scope note) —
+   this is the one lane where sequencing discipline still substitutes for
+   a gate.
+
 ---
 
 ## CI wiring (all no-API-key unless noted)
