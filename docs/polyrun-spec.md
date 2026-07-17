@@ -171,7 +171,9 @@ kernel) is small enough to test exhaustively by hand.
 - **FR-3.2** The **effect runner** (worker loop) claims pending intents and
   invokes the registered handler with `(payload, idempotencyKey)` where
   `idempotencyKey = hash(instanceId, seq, intentName, ordinal)` — stable
-  across retries and crashes. **Guarantee: at-least-once execution,
+  across retries and crashes. `ordinal` is a single per-step counter over all
+  manifest-declared intents the step emitted (not per-kind), so two intents
+  of the same kind in one step get distinct keys by construction. **Guarantee: at-least-once execution,
   exactly-once emission.** Handlers must be idempotent; the key makes that
   tractable (pass it to Stripe, use it as a natural key, etc.).
 - **FR-3.3** Per-intent retry policy from the effect manifest (§4.2):
@@ -202,8 +204,12 @@ kernel) is small enough to test exhaustively by hand.
 
 ### FR-4 Timers
 
-- **FR-4.1** A timer is an effect intent `{kind: 'timer', key, fireIn|fireAt,
-  action, data}`. Creation is atomic with the step that decided it (FR-2.2).
+- **FR-4.1** A timer is an effect intent `{kind: 'timer', key, fireIn|fireInMs|fireAt,
+  action, data}` — `fireIn` an ISO-8601 duration string (`'PT2M'`),
+  `fireInMs` a relative number, `fireAt` an absolute ms epoch. A timer intent
+  with none of the three (or an unparseable `fireIn`) is a hard dispatch
+  error, never a silent fire-immediately. Creation is atomic with the step
+  that decided it (FR-2.2).
 - **FR-4.2** At `fireAt`, the timer service dispatches `(action, data)` into
   the instance with `actionId = timer:{key}:{seq-at-creation}`. **Staleness is
   handled by the machine, not the scheduler:** if the instance has moved on
@@ -413,8 +419,9 @@ CREATE INDEX ON pr_instance (machine_id, status);
 CREATE INDEX ON pr_instance USING gin (state jsonb_path_ops);  -- FR-5.3
 
 CREATE TABLE pr_journal (
-  instance_id   text   NOT NULL REFERENCES pr_instance,
-  seq           bigint NOT NULL,
+  instance_id     text   NOT NULL REFERENCES pr_instance,
+  machine_version text   NOT NULL,       -- FR-6.3: version recorded per step
+  seq             bigint NOT NULL,
   action        text   NOT NULL,
   data          jsonb  NOT NULL,
   pre           jsonb  NOT NULL,          -- observable projection
@@ -478,8 +485,9 @@ dispatch(instanceId, action, data, actionId):
     validate(intents against manifest)                                   -- belt over the checked braces
 
     INSERT journal row (seq = row.seq + 1, …, actionId);
-    if step.kind == 'accepted':
-      UPDATE pr_instance SET state = m.getState(), seq = seq+1,
+    UPDATE pr_instance SET seq = seq + 1;          -- every journaled step bumps seq,
+    if step.kind == 'accepted':                    -- else the journal PK collides on
+      UPDATE pr_instance SET state = m.getState(), -- the second rejected step
              status = isTerminal(post) ? 'terminal' : 'active';
       INSERT pr_outbox rows (intent_id = hash(instanceId, seq, kind, ordinal));
       INSERT/UPDATE pr_timer rows; cancel timers per cancelTimer intents;

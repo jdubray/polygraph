@@ -5,8 +5,18 @@
 // init()+setState() (reset-then-merge, same semantics as scripts/
 // sam-adapter.cjs and sam-tv.mjs give every replay window), fire
 // actions[name](data), classify via instance({}).lastStep(), commit
-// everything the step decided in one store transaction. It contains no
-// business logic — that is the whole point.
+// everything the step decided in one store transaction — INCLUDING the
+// dedupe read and instance read, so a second writer on the same store
+// serializes instead of racing. It contains no business logic — that is
+// the whole point.
+//
+// Poisoning doctrine (FR-1.3): anything that "cannot happen" for a verified
+// strict-profile module — a mid-step throw, an unreadable step
+// classification, a snapshot the module rejects, a mapper emitting an
+// undeclared kind or a malformed/duplicate timer — poisons the instance
+// LOUDLY (status write + timer cancellation in its own transaction, then a
+// PoisonedError to the caller). A schema-invalid payload from a caller is
+// NOT that: it is journaled as an observable rejected step.
 'use strict';
 
 import { createHash, randomUUID } from 'node:crypto';
@@ -14,8 +24,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadSpec } from '../../scripts/load-spec.mjs';
 import { Store } from './store.mjs';
+import { resolveFireAt } from './duration.mjs';
 
-const BUILTIN_KINDS = new Set(['timer', 'cancelTimer']);
+const CREATE_ACTION = '$create';
 
 const sanitizeReplacer = (key, value) => {
   if (typeof key === 'string' && key.startsWith('__')) return undefined;
@@ -45,6 +56,11 @@ export class ConflictError extends Error {
   constructor(message) { super(message); this.name = 'ConflictError'; }
 }
 
+/** Internal sentinel: thrown inside the dispatch transaction to request
+ *  poisoning; converted OUTSIDE the transaction (so the rollback of the step
+ *  cannot roll back the poison mark) into a durable status + PoisonedError. */
+class PoisonRequest extends Error {}
+
 export class Runtime {
   constructor({ store, dbPath, machines = [], handlers = {}, now = Date.now }) {
     this.store = store ?? new Store(dbPath ?? ':memory:');
@@ -63,6 +79,21 @@ export class Runtime {
     if (!isSamV2Module(mod)) {
       throw new Error(`machine '${machineId}': module does not export the v2 SAM surface { instance, init, actions, getState, setState }`);
     }
+    // Load-time gate (§5.3 / FR-6.2 belt): the module must validate
+    // strict-clean — undeclared obligations block registration instead of
+    // surfacing as runtime poisonings.
+    try {
+      const acc = mod.instance({});
+      if (typeof acc.validate === 'function') {
+        const problems = acc.validate();
+        if (Array.isArray(problems) && problems.length > 0) {
+          throw new Error(problems.join('; '));
+        }
+      }
+    } catch (err) {
+      throw new Error(`machine '${machineId}': module does not validate strict-clean: ${err && err.message}`);
+    }
+
     const contract = contractPath ? JSON.parse(readFileSync(resolve(contractPath), 'utf-8')) : null;
 
     let mapper = null;
@@ -90,6 +121,24 @@ export class Runtime {
     const observableKeys = contract && Array.isArray(contract.stateKeys)
       ? contract.stateKeys.map((k) => k.name)
       : null;
+
+    // Observable-is-total check: the durable snapshot IS the projection, so
+    // the module's declared state and the contract's observable state must
+    // coincide — a module key outside the contract would be silently dropped
+    // on every rehydration (state loss), a contract key the module lacks
+    // would journal 'undefined' forever.
+    if (observableKeys) {
+      mod.init();
+      const raw = JSON.parse(JSON.stringify(mod.getState(), sanitizeReplacer));
+      const modKeys = Object.keys(raw);
+      const extra = modKeys.filter((k) => !observableKeys.includes(k));
+      const missing = observableKeys.filter((k) => !modKeys.includes(k));
+      if (extra.length || missing.length) {
+        throw new Error(`machine '${machineId}': contract stateKeys and module state disagree`
+          + (extra.length ? ` — module keys not in contract: ${extra.join(', ')}` : '')
+          + (missing.length ? ` — contract keys not in module state: ${missing.join(', ')}` : ''));
+      }
+    }
 
     this.machines.set(machineId, {
       machineId,
@@ -133,40 +182,82 @@ export class Runtime {
   _rehydrate(machine, state) {
     // Reset-then-merge: setState is merge-only, so without init() residue from
     // the previous dispatch would leak between instances (same rationale as
-    // sam-adapter.cjs).
+    // sam-adapter.cjs). House rule: getState()/setState() only — no
+    // instance({}).state() error-slot access; strict-profile errors throw.
     machine.mod.init();
-    try {
-      const model = machine.mod.instance({}).state();
-      if (model && typeof model.clearError === 'function') model.clearError();
-    } catch { /* model key may shadow the accessor; strict errors throw anyway */ }
     machine.mod.setState(state);
   }
 
   _lastStep(machine, action) {
-    try {
-      const acc = machine.mod.instance({});
-      if (typeof acc.lastStep !== 'function') return null;
-      const step = acc.lastStep();
-      if (!step || (step.intent !== undefined && step.intent !== null && step.intent !== action)) return null;
-      return step;
-    } catch { return null; }
+    const acc = machine.mod.instance({});
+    if (typeof acc.lastStep !== 'function') {
+      throw new PoisonRequest(`module exposes no lastStep() — step classification unreadable`);
+    }
+    const step = acc.lastStep();
+    if (!step || (step.intent !== undefined && step.intent !== null && step.intent !== action)) {
+      // An unreadable classification on a strict module must NEVER default to
+      // 'accepted' — that would run the effect mapper for a step the module
+      // may have refused.
+      throw new PoisonRequest(`lastStep() did not classify action '${action}' (got ${step ? `intent '${step.intent}'` : 'nothing'})`);
+    }
+    return step;
+  }
+
+  _poison(instanceId, message) {
+    this.store.markPoisoned(instanceId, this.now());
+    return new PoisonedError(instanceId, message);
   }
 
   // ---- API -------------------------------------------------------------------
 
-  create(machineId, instanceId) {
+  /**
+   * FR-1.1. Atomically persists the initial snapshot + journal row 0
+   * ('$create'); optionally dispatches a creation action (its effects flow
+   * through the ordinary mapper path). Same-parameters recreate is
+   * idempotent; different parameters is a ConflictError.
+   */
+  create(machineId, instanceId, creation) {
     const machine = this.machines.get(machineId);
     if (!machine) throw new Error(`unknown machine '${machineId}'`);
-    const id = instanceId ?? randomUUID();
-    const existing = this.store.getInstance(id);
-    if (existing) {
-      if (existing.machine_id !== machineId) throw new ConflictError(`instance '${id}' already exists for machine '${existing.machine_id}'`);
-      return { instanceId: id, created: false, state: existing.state };
+    if (creation && typeof machine.mod.actions[creation.action] !== 'function') {
+      throw new Error(`creation action '${creation.action}' is not in machine '${machineId}'`);
     }
-    machine.mod.init();
-    const state = this._snapshot(machine);
-    this.store.insertInstance({ instanceId: id, machineId, machineVersion: machine.version, state, now: this.now() });
-    return { instanceId: id, created: true, state };
+    const id = instanceId ?? randomUUID();
+    const now = this.now();
+    const creationData = creation ? { action: creation.action, data: creation.data ?? {} } : {};
+
+    const made = this.store.txn(() => {
+      const existing = this.store.getInstance(id);
+      if (existing) {
+        if (existing.machine_id !== machineId) {
+          throw new ConflictError(`instance '${id}' already exists for machine '${existing.machine_id}'`);
+        }
+        const row0 = this.store.getJournalRow(id, 0);
+        if (row0 && JSON.stringify(row0.data) !== JSON.stringify(creationData)) {
+          throw new ConflictError(`instance '${id}' was created with different parameters`);
+        }
+        return { created: false, state: existing.state };
+      }
+      machine.mod.init();
+      const state = this._snapshot(machine);
+      const terminal = machine.isTerminal(state);
+      this.store.insertInstance({
+        instanceId: id, machineId, machineVersion: machine.version, state,
+        status: terminal ? 'terminal' : 'active', now,
+      });
+      this.store.insertJournal({
+        instanceId: id, machineVersion: machine.version, seq: 0,
+        action: CREATE_ACTION, data: creationData, pre: state, post: state,
+        stepKind: 'accepted', rejectReason: null, actionId: CREATE_ACTION, now,
+      });
+      return { created: true, state };
+    });
+
+    if (made.created && creation) {
+      const res = this.dispatch(id, creation.action, creation.data ?? {}, `${CREATE_ACTION}:action`);
+      return { instanceId: id, created: true, state: res.state };
+    }
+    return { instanceId: id, created: made.created, state: made.state };
   }
 
   getState(instanceId) {
@@ -175,14 +266,24 @@ export class Runtime {
     return { state: inst.state, status: inst.status, seq: inst.seq, machineId: inst.machine_id };
   }
 
+  /** FR-5.2: the observable state as of journal seq (post of the last
+   *  accepted step at or before it). */
+  getStateAt(instanceId, seq) {
+    if (!this.store.getInstance(instanceId)) throw new Error(`unknown instance '${instanceId}'`);
+    const row = this.store.lastAcceptedAtOrBefore(instanceId, seq);
+    if (!row) throw new Error(`instance '${instanceId}' has no accepted step at or before seq ${seq}`);
+    return row.post;
+  }
+
   getJournal(instanceId) { return this.store.getJournal(instanceId); }
 
   list(machineId, status) { return this.store.listInstances(machineId, status); }
 
   /** ndjson Polygraph trace windows for the accepted steps (FR-7.1). */
   exportTraces(instanceId) {
+    if (!this.store.getInstance(instanceId)) throw new Error(`unknown instance '${instanceId}'`);
     return this.getJournal(instanceId)
-      .filter((r) => r.step_kind === 'accepted')
+      .filter((r) => r.step_kind === 'accepted' && r.action !== CREATE_ACTION)
       .map((r) => JSON.stringify({ pre: r.pre, action: r.action, data: r.data, post: r.post }))
       .join('\n');
   }
@@ -190,72 +291,98 @@ export class Runtime {
   dispatch(instanceId, action, data = {}, actionId) {
     const aid = actionId ?? `${action}:${randomUUID()}`;
     const now = this.now();
+    try {
+      return this.store.txn(() => this._dispatchInTxn(instanceId, action, data, aid, now));
+    } catch (err) {
+      if (err instanceof PoisonRequest) {
+        // The step's transaction has rolled back; the poison mark gets its
+        // own durable transaction so it cannot be lost with the step.
+        throw this._poison(instanceId, err.message);
+      }
+      throw err;
+    }
+  }
 
+  _dispatchInTxn(instanceId, action, data, aid, now) {
     const inst = this.store.getInstance(instanceId);
     if (!inst) throw new Error(`unknown instance '${instanceId}'`);
     const machine = this.machines.get(inst.machine_id);
     if (!machine) throw new Error(`instance '${instanceId}' references unregistered machine '${inst.machine_id}'`);
 
-    // FR-2.3 dedupe: a redelivered (instanceId, actionId) returns the original
-    // step's result without re-executing.
+    // FR-2.3 dedupe: a redelivered (instanceId, actionId) returns the
+    // original step's result without re-executing — but only for the SAME
+    // action; an actionId reused across different actions is a caller bug
+    // that must be loud, not a silent no-op.
     const cached = this.store.getJournalByActionId(instanceId, aid);
     if (cached) {
-      return { seq: cached.seq, stepKind: cached.step_kind, rejectReason: cached.reject_reason ?? undefined, state: cached.post, deduped: true };
+      if (cached.action !== action) {
+        throw new ConflictError(`actionId '${aid}' was already used for action '${cached.action}' (now '${action}')`);
+      }
+      return {
+        seq: cached.seq, stepKind: cached.step_kind, rejectReason: cached.reject_reason ?? undefined,
+        state: cached.post, terminal: cached.step_kind === 'accepted' && machine.isTerminal(cached.post),
+        deduped: true,
+      };
     }
 
     if (inst.status !== 'active') {
       // FR-1.2: terminal (and poisoned) instances reject observably, never error.
       const journal = { action, data, pre: inst.state, post: inst.state, stepKind: 'rejected', rejectReason: inst.status, actionId: aid };
-      this.store.commitStep({ instanceId, seq: inst.seq + 1, journal, outboxRows: [], timerRows: [], cancelTimerKeys: [], cancelAllTimers: false, now });
-      return { seq: inst.seq + 1, stepKind: 'rejected', rejectReason: inst.status, state: inst.state };
+      this.store.commitStep({ instanceId, machineVersion: machine.version, seq: inst.seq + 1, journal, outboxRows: [], timerRows: [], cancelTimerKeys: [], cancelAllTimers: false, now });
+      return { seq: inst.seq + 1, stepKind: 'rejected', rejectReason: inst.status, state: inst.state, terminal: false };
     }
 
     // ---- the SAM step (pure, in-memory) ----
-    this._rehydrate(machine, inst.state);
-    const pre = this._snapshot(machine);
+    let pre;
+    try {
+      this._rehydrate(machine, inst.state);
+      pre = this._snapshot(machine);
+    } catch (err) {
+      // The module rejecting its own persisted snapshot (SamShapeError from
+      // an incompatible deploy) is exactly the "cannot happen" class.
+      throw new PoisonRequest(`module rejected persisted snapshot: ${err && err.message}`);
+    }
     const handler = machine.mod.actions[action];
 
     let stepKind, rejectReason = null, post = pre;
-    let schemaRejected = false;
+    let classified = false;
     if (typeof handler !== 'function') {
       stepKind = 'unhandled';
       rejectReason = `action '${action}' is not in the machine's action surface`;
+      classified = true;
     } else {
       try {
         handler(data);
       } catch (err) {
         if (err && err.name === 'SamSchemaError') {
           // A schema-invalid payload is a CALLER error, not an internal
-          // impossibility: the strict profile rejected it before any mutation,
-          // so journal it as an observable reject and keep the instance
-          // healthy. Poisoning (below) is reserved for the module violating
-          // its own profile.
+          // impossibility: the strict profile rejected it before any
+          // mutation, so journal it as an observable reject and keep the
+          // instance healthy.
           stepKind = 'rejected';
           rejectReason = err.message;
-          schemaRejected = true;
+          classified = true;
         } else {
-          // A strict-profile throw mid-step is FR-1.3 territory: by
-          // construction "cannot happen", so it must be loud and stop the
-          // instance.
-          this.store.setInstanceStatus(instanceId, 'poisoned', now);
-          throw new PoisonedError(instanceId, `action '${action}' threw: ${err && err.message}`);
+          throw new PoisonRequest(`action '${action}' threw: ${err && err.message}`);
         }
       }
-      const step = schemaRejected ? null : this._lastStep(machine, action);
-      if (step && step.classification === 'rejected') {
-        stepKind = 'rejected';
-        rejectReason = (step.rejections && step.rejections[0] && step.rejections[0].reason) || 'rejected';
-        const after = this._snapshot(machine);
-        if (JSON.stringify(after) !== JSON.stringify(pre)) {
-          this.store.setInstanceStatus(instanceId, 'poisoned', now);
-          throw new PoisonedError(instanceId, `acceptor for '${action}' mutated the observable model and then rejected`);
+      if (!classified) {
+        const step = this._lastStep(machine, action); // throws PoisonRequest if unreadable
+        if (step.classification === 'rejected') {
+          stepKind = 'rejected';
+          rejectReason = (step.rejections && step.rejections[0] && step.rejections[0].reason) || 'rejected';
+          const after = this._snapshot(machine);
+          if (JSON.stringify(after) !== JSON.stringify(pre)) {
+            throw new PoisonRequest(`acceptor for '${action}' mutated the observable model and then rejected`);
+          }
+        } else if (step.classification === 'unhandled') {
+          stepKind = 'unhandled';
+          rejectReason = `no acceptor handled '${action}'`;
+        } else {
+          // 'mutated' and 'identity-by-mutation' are both accepted steps.
+          stepKind = 'accepted';
+          post = this._snapshot(machine);
         }
-      } else if (step && step.classification === 'unhandled') {
-        stepKind = 'unhandled';
-        rejectReason = `no acceptor handled '${action}'`;
-      } else if (!schemaRejected) {
-        stepKind = 'accepted';
-        post = this._snapshot(machine);
       }
     }
 
@@ -267,17 +394,31 @@ export class Runtime {
     if (stepKind === 'accepted' && machine.mapper) {
       const intents = machine.mapper(pre, action, data, post, stepKind) || [];
       let ordinal = 0;
+      const timerKeysThisStep = new Set();
       for (const intent of intents) {
         if (intent.kind === 'timer') {
-          const fireAt = intent.fireAt ?? now + (intent.fireInMs ?? 0);
+          if (typeof intent.key !== 'string' || !intent.key) {
+            throw new PoisonRequest(`effect mapper emitted a timer without a key`);
+          }
+          if (timerKeysThisStep.has(intent.key)) {
+            // Deterministic mapper defect: the second identical timerId would
+            // fail the PK on every retry forever — poison instead.
+            throw new PoisonRequest(`effect mapper emitted duplicate timer key '${intent.key}' in one step`);
+          }
+          timerKeysThisStep.add(intent.key);
+          let fireAt;
+          try {
+            fireAt = resolveFireAt(intent, now);
+          } catch (err) {
+            throw new PoisonRequest(`effect mapper: ${err.message}`);
+          }
           timerRows.push({ timerId: sha(instanceId, intent.key, String(seq)), key: intent.key, fireAt, action: intent.action, data: intent.data ?? {} });
         } else if (intent.kind === 'cancelTimer') {
           cancelTimerKeys.push(intent.key);
         } else if (machine.manifest && machine.manifest.effects && machine.manifest.effects[intent.kind]) {
           outboxRows.push({ intentId: sha(instanceId, String(seq), intent.kind, String(ordinal++)), kind: intent.kind, payload: intent.payload ?? {} });
-        } else if (!BUILTIN_KINDS.has(intent.kind)) {
-          this.store.setInstanceStatus(instanceId, 'poisoned', now);
-          throw new PoisonedError(instanceId, `effect mapper emitted undeclared kind '${intent.kind}'`);
+        } else {
+          throw new PoisonRequest(`effect mapper emitted undeclared kind '${intent.kind}'`);
         }
       }
     }
@@ -286,6 +427,7 @@ export class Runtime {
     const journal = { action, data, pre, post, stepKind, rejectReason, actionId: aid };
     this.store.commitStep({
       instanceId,
+      machineVersion: machine.version,
       seq,
       journal,
       newState: stepKind === 'accepted' ? post : undefined,
