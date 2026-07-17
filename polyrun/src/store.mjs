@@ -5,8 +5,9 @@
 // a mutex + AsyncLocalStorage transaction context: the whole dispatch txn
 // holds the mutex, nested store calls from inside the txn callback run
 // directly (they see the ALS token), and concurrent tasks — whose async
-// context lacks the token — wait for the mutex instead of interleaving
-// writes into an open transaction.
+// context lacks the token — wait for the mutex. This gate applies to READS
+// too: on a shared connection a read inside another task's open transaction
+// would see uncommitted state (torn journal/state pairs, phantom timers).
 //
 // Concurrency note: one process per SQLite file. Multi-writer FR-2.4
 // semantics are the Postgres adapter's job (store-pg.mjs).
@@ -107,26 +108,43 @@ export class Store {
   /** Transaction: the callback may await store calls (they run directly via
    *  the ALS token); other async tasks are excluded by the mutex for the
    *  whole transaction. Nested txn() calls join the open transaction. */
+  _ctx() {
+    const ctx = this._als.getStore();
+    if (ctx && ctx.done) {
+      // A store call scheduled inside a txn callback but executing after
+      // COMMIT (fire-and-forget from user code) would otherwise bypass the
+      // mutex with a stale token and land inside another task's transaction.
+      throw new Error('store call escaped its transaction (context already committed)');
+    }
+    return ctx;
+  }
+
   async txn(fn) {
-    if (this._als.getStore()) return fn();
+    if (this._ctx()) return fn();
     const release = await this._mutex.lock();
-    this.db.exec('BEGIN IMMEDIATE');
+    const token = { txn: true, done: false };
     try {
-      const result = await this._als.run({ txn: true }, fn);
-      this.db.exec('COMMIT');
-      return result;
-    } catch (err) {
-      try { this.db.exec('ROLLBACK'); } catch { /* already rolled back */ }
-      throw err;
+      this.db.exec('BEGIN IMMEDIATE'); // inside try: a BUSY throw must release the mutex
+      try {
+        const result = await this._als.run(token, fn);
+        this.db.exec('COMMIT');
+        return result;
+      } catch (err) {
+        try { this.db.exec('ROLLBACK'); } catch { /* already rolled back */ }
+        throw err;
+      }
     } finally {
+      token.done = true;
       release();
     }
   }
 
-  /** Single-statement writes outside a txn context still take the mutex so
-   *  they can never land inside another task's open transaction. */
-  async _write(fn) {
-    if (this._als.getStore()) return fn();
+  /** EVERY statement outside a txn context — writes AND reads — takes the
+   *  mutex: on a shared SQLite connection a read executing inside another
+   *  task's open BEGIN IMMEDIATE would see uncommitted (possibly rolled-back)
+   *  state — torn journal/state pairs, phantom timers. */
+  async _run(fn) {
+    if (this._ctx()) return fn();
     const release = await this._mutex.lock();
     try { return fn(); } finally { release(); }
   }
@@ -134,16 +152,18 @@ export class Store {
   // ---- instances -----------------------------------------------------------
 
   async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now }) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, created_at, updated_at)
        VALUES (?, ?, ?, 0, ?, ?, ?, ?)`
     ).run(instanceId, machineId, machineVersion, status, JSON.stringify(state), now, now));
   }
 
   async getInstance(instanceId) {
-    const row = this.db.prepare('SELECT * FROM pr_instance WHERE instance_id = ?').get(instanceId);
-    if (!row) return null;
-    return { ...row, state: JSON.parse(row.state) };
+    return this._run(() => {
+      const row = this.db.prepare('SELECT * FROM pr_instance WHERE instance_id = ?').get(instanceId);
+      if (!row) return null;
+      return { ...row, state: JSON.parse(row.state) };
+    });
   }
 
   /** Row-locked read for the dispatch transaction. SQLite: BEGIN IMMEDIATE +
@@ -162,16 +182,18 @@ export class Store {
   }
 
   async listInstances(machineId, status) {
-    let sql = 'SELECT * FROM pr_instance WHERE machine_id = ?';
-    const args = [machineId];
-    if (status) { sql += ' AND status = ?'; args.push(status); }
-    return this.db.prepare(sql).all(...args).map((r) => ({ ...r, state: JSON.parse(r.state) }));
+    return this._run(() => {
+      let sql = 'SELECT * FROM pr_instance WHERE machine_id = ?';
+      const args = [machineId];
+      if (status) { sql += ' AND status = ?'; args.push(status); }
+      return this.db.prepare(sql).all(...args).map((r) => ({ ...r, state: JSON.parse(r.state) }));
+    });
   }
 
   // ---- journal -------------------------------------------------------------
 
   async insertJournal({ instanceId, machineVersion, seq, action, data, pre, post, stepKind, rejectReason, actionId, now }) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `INSERT INTO pr_journal (instance_id, machine_version, seq, action, data, pre, post, step_kind, reject_reason, action_id, at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(instanceId, machineVersion, seq, action, JSON.stringify(data), JSON.stringify(pre),
@@ -179,31 +201,37 @@ export class Store {
   }
 
   async getJournalByActionId(instanceId, actionId) {
-    const row = this.db.prepare(
-      'SELECT * FROM pr_journal WHERE instance_id = ? AND action_id = ?'
-    ).get(instanceId, actionId);
-    return row ? this._journalRow(row) : null;
+    return this._run(() => {
+      const row = this.db.prepare(
+        'SELECT * FROM pr_journal WHERE instance_id = ? AND action_id = ?'
+      ).get(instanceId, actionId);
+      return row ? this._journalRow(row) : null;
+    });
   }
 
   async getJournalRow(instanceId, seq) {
-    const row = this.db.prepare(
-      'SELECT * FROM pr_journal WHERE instance_id = ? AND seq = ?'
-    ).get(instanceId, seq);
-    return row ? this._journalRow(row) : null;
+    return this._run(() => {
+      const row = this.db.prepare(
+        'SELECT * FROM pr_journal WHERE instance_id = ? AND seq = ?'
+      ).get(instanceId, seq);
+      return row ? this._journalRow(row) : null;
+    });
   }
 
   async lastAcceptedAtOrBefore(instanceId, seq) {
-    const row = this.db.prepare(
-      `SELECT * FROM pr_journal WHERE instance_id = ? AND seq <= ? AND step_kind = 'accepted'
-       ORDER BY seq DESC LIMIT 1`
-    ).get(instanceId, seq);
-    return row ? this._journalRow(row) : null;
+    return this._run(() => {
+      const row = this.db.prepare(
+        `SELECT * FROM pr_journal WHERE instance_id = ? AND seq <= ? AND step_kind = 'accepted'
+         ORDER BY seq DESC LIMIT 1`
+      ).get(instanceId, seq);
+      return row ? this._journalRow(row) : null;
+    });
   }
 
   async getJournal(instanceId) {
-    return this.db.prepare(
+    return this._run(() => this.db.prepare(
       'SELECT * FROM pr_journal WHERE instance_id = ? ORDER BY seq'
-    ).all(instanceId).map((r) => this._journalRow(r));
+    ).all(instanceId).map((r) => this._journalRow(r)));
   }
 
   _journalRow(r) {
@@ -260,7 +288,7 @@ export class Store {
   // ---- outbox (effect runner) ----------------------------------------------
 
   async recoverExpiredLeases(now) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'pending', claimed_until = NULL
        WHERE status = 'inflight' AND claimed_until < ?`
     ).run(now));
@@ -284,45 +312,47 @@ export class Store {
   // overwrite a newer outcome (e.g. flip a 'done' row back to 'pending').
 
   async markEffectDone(intentId) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'done', claimed_until = NULL WHERE intent_id = ? AND status = 'inflight'`
     ).run(intentId));
   }
 
   async markEffectRetry(intentId, attempts, nextAttemptAt, lastError) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'pending', attempts = ?, next_attempt_at = ?, claimed_until = NULL, last_error = ? WHERE intent_id = ? AND status = 'inflight'`
     ).run(attempts, nextAttemptAt, lastError, intentId));
   }
 
   async markEffectDead(intentId, attempts, lastError) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'dead', claimed_until = NULL, attempts = ?, last_error = ? WHERE intent_id = ? AND status = 'inflight'`
     ).run(attempts, lastError, intentId));
   }
 
   async getOutbox(instanceId, status) {
-    let sql = 'SELECT * FROM pr_outbox WHERE instance_id = ?';
-    const args = [instanceId];
-    if (status) { sql += ' AND status = ?'; args.push(status); }
-    return this.db.prepare(sql).all(...args).map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+    return this._run(() => {
+      let sql = 'SELECT * FROM pr_outbox WHERE instance_id = ?';
+      const args = [instanceId];
+      if (status) { sql += ' AND status = ?'; args.push(status); }
+      return this.db.prepare(sql).all(...args).map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+    });
   }
 
   // ---- DLQ (CLI surface) -----------------------------------------------------
 
   async dlqList() {
-    return this.db.prepare(`SELECT * FROM pr_outbox WHERE status = 'dead' ORDER BY instance_id, seq`)
-      .all().map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+    return this._run(() => this.db.prepare(`SELECT * FROM pr_outbox WHERE status = 'dead' ORDER BY instance_id, seq`)
+      .all().map((r) => ({ ...r, payload: JSON.parse(r.payload) })));
   }
 
   async dlqRetry(intentId, now) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'pending', attempts = 0, next_attempt_at = ?, last_error = 'dlq-retry' WHERE intent_id = ? AND status = 'dead'`
     ).run(now, intentId));
   }
 
   async dlqDiscard(intentId) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'done', last_error = 'dlq-discarded' WHERE intent_id = ? AND status = 'dead'`
     ).run(intentId));
   }
@@ -330,28 +360,30 @@ export class Store {
   // ---- timers ---------------------------------------------------------------
 
   async dueTimers(now, limit) {
-    return this.db.prepare(
+    return this._run(() => this.db.prepare(
       `SELECT * FROM pr_timer WHERE status = 'scheduled' AND fire_at <= ? ORDER BY fire_at LIMIT ?`
-    ).all(now, limit).map((r) => ({ ...r, data: JSON.parse(r.data) }));
+    ).all(now, limit).map((r) => ({ ...r, data: JSON.parse(r.data) })));
   }
 
   async markTimerFired(timerId) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `UPDATE pr_timer SET status = 'fired' WHERE timer_id = ?`
     ).run(timerId));
   }
 
   /** Push an erroring timer's due time forward (per-timer backoff). */
   async deferTimer(timerId, fireAt) {
-    return this._write(() => this.db.prepare(
+    return this._run(() => this.db.prepare(
       `UPDATE pr_timer SET fire_at = ? WHERE timer_id = ? AND status = 'scheduled'`
     ).run(fireAt, timerId));
   }
 
   async getTimers(instanceId, status) {
-    let sql = 'SELECT * FROM pr_timer WHERE instance_id = ?';
-    const args = [instanceId];
-    if (status) { sql += ' AND status = ?'; args.push(status); }
-    return this.db.prepare(sql).all(...args).map((r) => ({ ...r, data: JSON.parse(r.data) }));
+    return this._run(() => {
+      let sql = 'SELECT * FROM pr_timer WHERE instance_id = ?';
+      const args = [instanceId];
+      if (status) { sql += ' AND status = ?'; args.push(status); }
+      return this.db.prepare(sql).all(...args).map((r) => ({ ...r, data: JSON.parse(r.data) }));
+    });
   }
 }

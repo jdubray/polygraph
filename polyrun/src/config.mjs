@@ -28,5 +28,8 @@ export async function loadConfig(configPath) {
   if (config.store && config.store.sqlite && config.store.sqlite !== ':memory:') {
     config.store = { ...config.store, sqlite: rel(config.store.sqlite) };
   }
+  if (config.dbPath && config.dbPath !== ':memory:') {
+    config.dbPath = rel(config.dbPath);
+  }
   return config;
 }

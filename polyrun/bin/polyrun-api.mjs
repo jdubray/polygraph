@@ -23,6 +23,10 @@ const rt = await createRuntime(config);
 if (has('workers')) rt.startWorkers(config.poll ?? {});
 
 const port = Number(flag('port') ?? 7071);
+if (!Number.isInteger(port) || port < 0 || port > 65535) {
+  console.error(`invalid --port '${flag('port')}'`);
+  process.exit(2);
+}
 const host = flag('host') ?? '127.0.0.1';
 const server = createHttpServer(rt);
 server.listen(port, host, () => {
@@ -34,7 +38,13 @@ async function shutdown(signal) {
   if (closing) return;
   closing = true;
   console.log(`[polyrun-api ${process.pid}] ${signal} — draining`);
-  server.close();
+  // Actually drain: stop accepting, let in-flight requests finish (with a
+  // deadline), THEN close the store under nobody.
+  server.closeIdleConnections?.();
+  await Promise.race([
+    new Promise((r) => server.close(r)),
+    new Promise((r) => setTimeout(r, 10_000)),
+  ]);
   rt.stopWorkers();
   await rt.close();
   process.exit(0);

@@ -48,12 +48,22 @@ export class Workers {
     return machine.manifest.effects[row.kind] ?? null;
   }
 
+  async _journaled(row, suffix) {
+    return !!(await this.rt.store.getJournalByActionId(row.instance_id, `${row.intent_id}${suffix}`));
+  }
+
   _backoff(retry, attempts) {
     const raw = retry.baseMs * 2 ** (attempts - 1) + Math.floor(Math.random() * retry.baseMs * 0.5);
     return Math.min(raw, MAX_BACKOFF_MS);
   }
 
   async tickEffects(now = this.rt.now()) {
+    // Overlapping ticks are deliberate: a tick awaits its batch's handlers,
+    // so WITHOUT overlap one slow handler would stall every other effect in
+    // the process. Overlap is safe because claims are atomic (a claimed row
+    // is no longer pending) and the timeout-below-lease clamp in _runEffect
+    // guarantees a row is marked before its lease can expire — the same
+    // intent cannot be claimed twice while its handler still runs.
     await this.rt.store.recoverExpiredLeases(now);
     const claimed = await this.rt.store.claimEffects(now, this.batch, this.leaseMs);
     // allSettled: one effect's failure must never abort its batch-mates.
@@ -73,10 +83,18 @@ export class Workers {
       return;
     }
     const retry = { ...this.defaultRetry, ...(decl.retry || {}) };
+    // A handler outliving its lease converts crash-at-least-once into
+    // routinely-concurrently-twice — clamp so the lease always outlives the
+    // timeout.
+    if (retry.timeoutMs >= this.leaseMs) retry.timeoutMs = Math.max(1, Math.floor(this.leaseMs * 0.8));
     const handler = this.rt.handlers[row.kind];
 
-    // Re-claimed after a crash that followed exhaustion: don't run the
-    // handler yet again — go straight to the (deduped) exhausted completion.
+    // Crash re-entry fences. A completion that was DISPATCHED but whose row
+    // mark was lost must converge to the same terminal outcome — never to a
+    // second handler run that could deliver a CONTRADICTORY completion
+    // (":failed" journaled, crash, retry succeeds, ":done" dispatched).
+    if (await this._journaled(row, ':done')) { await this.rt.store.markEffectDone(row.intent_id); return; }
+    if (await this._journaled(row, ':failed')) { await this.rt.store.markEffectDead(row.intent_id, row.attempts, row.last_error ?? 'permanent (recovered)'); return; }
     if (row.attempts >= retry.maxAttempts) {
       return this._finishExhausted(row, decl, row.attempts, row.last_error ?? 'exhausted');
     }
@@ -132,6 +150,16 @@ export class Workers {
   }
 
   async tickTimers(now = this.rt.now()) {
+    if (this._timerTickRunning) return 0;
+    this._timerTickRunning = true;
+    try {
+      return await this._tickTimers(now);
+    } finally {
+      this._timerTickRunning = false;
+    }
+  }
+
+  async _tickTimers(now) {
     const due = await this.rt.store.dueTimers(now, this.batch);
     for (const t of due) {
       // Dispatch first, mark second: a crash in between refires the timer and

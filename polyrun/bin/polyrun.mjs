@@ -48,10 +48,17 @@ try {
 
     // [2/3] snapshot round-trip over live instances: the NEW module must
     // accept every persisted snapshot and reproduce it exactly.
-    let checked = 0, failed = 0;
+    let checked = 0, failed = 0, poisonedSkipped = 0;
     for (const [machineId, machine] of rt.machines) {
       const instances = await rt.list(machineId);
       for (const inst of instances) {
+        if (inst.status === 'poisoned') {
+          // A poisoned snapshot may legitimately be unloadable; it must not
+          // block every future deploy — report it separately.
+          poisonedSkipped += 1;
+          console.error(`  note: ${machineId}/${inst.instance_id} is POISONED — excluded from the gate, resolve it via the DLQ/journal`);
+          continue;
+        }
         checked += 1;
         try {
           machine.mod.init();
@@ -70,7 +77,7 @@ try {
         }
       }
     }
-    console.log(`  [2/3] setState round-trip over live snapshots: ${checked} checked, ${failed} failed${failed ? ' — GATE FAIL' : ': PASS'}`);
+    console.log(`  [2/3] setState round-trip over live snapshots: ${checked} checked, ${failed} failed${poisonedSkipped ? `, ${poisonedSkipped} poisoned excluded` : ''}${failed ? ' — GATE FAIL' : ': PASS'}`);
     if (failed) exitCode = 1;
 
     // [3/3] state invariants over live snapshots (per-machine `invariants`
@@ -80,7 +87,14 @@ try {
     let invChecked = 0, invFailed = 0, invSkipped = 0;
     for (const m of config.machines ?? []) {
       if (!m.invariants) { invSkipped += 1; continue; }
-      const mod = await import(pathToFileURL(m.invariants).href);
+      let mod;
+      try {
+        mod = await import(pathToFileURL(m.invariants).href);
+      } catch (err) {
+        invFailed += 1;
+        console.error(`  invariant FAIL: cannot load invariants for '${m.machineId}' (${m.invariants}): ${err.message}`);
+        continue;
+      }
       const preds = mod.stateInvariants ?? mod.invariants ?? [];
       const instances = await rt.list(m.machineId);
       for (const inst of instances) {
@@ -112,19 +126,30 @@ try {
     for (const r of rows) {
       console.log(`${r.intent_id}  ${r.instance_id}#${r.seq}  ${r.kind}  attempts=${r.attempts}  ${r.last_error}`);
     }
-  } else if (command === 'dlq-retry') {
+  } else if (command === 'dlq-retry' || command === 'dlq-discard') {
     const intent = flag('intent');
     if (!intent) usage();
-    await rt.store.dlqRetry(intent, rt.now());
-    console.log(`re-queued ${intent}`);
-  } else if (command === 'dlq-discard') {
-    const intent = flag('intent');
-    if (!intent) usage();
-    await rt.store.dlqDiscard(intent);
-    console.log(`discarded ${intent}`);
+    // The store updates are fenced on status='dead'; verify the target IS
+    // dead first so a typo'd id fails loudly instead of printing success.
+    const dead = await rt.store.dlqList();
+    if (!dead.some((r) => r.intent_id === intent)) {
+      console.error(`no dead intent '${intent}' in the DLQ`);
+      exitCode = 1;
+    } else if (command === 'dlq-retry') {
+      await rt.store.dlqRetry(intent, rt.now());
+      console.log(`re-queued ${intent}`);
+    } else {
+      await rt.store.dlqDiscard(intent);
+      console.log(`discarded ${intent}`);
+    }
   } else {
     usage();
   }
+} catch (err) {
+  // Operator tools print the error, never a raw stack; the exit code is the
+  // machine-readable signal.
+  console.error(String(err && err.message));
+  exitCode = 1;
 } finally {
   await rt.close();
 }

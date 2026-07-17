@@ -100,6 +100,73 @@ test('HTTP facade: create, dispatch, state, journal, traces, metrics, errors', a
   assert.equal((await request(port, 'GET', '/instances/nope')).status, 404);
   assert.equal((await request(port, 'POST', '/instances/h1/actions', {})).status, 400);
   assert.equal((await request(port, 'GET', '/nope')).status, 404);
+
+  // error-mapping hardening (M1 review findings A1/A2/A5)
+  const noActionId = await request(port, 'POST', '/instances/h1/actions', { action: 'CANCEL', data: { reason: 'x' } });
+  assert.equal(noActionId.status, 400, 'dispatch without actionId must be refused (retry safety)');
+  assert.match(noActionId.body.error, /actionId is required/);
+  assert.equal((await request(port, 'POST', '/instances/nope/actions', { action: 'SUBMIT', data: {}, actionId: 'x' })).status, 404);
+  assert.equal((await request(port, 'GET', '/instances/h1/state-at')).status, 400, 'missing seq must not silently mean 0');
+  assert.equal((await request(port, 'GET', '/instances/h1/state-at?seq=abc')).status, 400);
+  assert.equal((await request(port, 'GET', '/instances/%zz')).status, 400, 'malformed percent-encoding is a client error');
+  assert.equal((await request(port, 'PUT', '/instances/h1/actions', { action: 'CANCEL' })).status, 405);
+
+  // invalid JSON body → 400, not 500
+  const rawBad = await new Promise((resolvePromise, reject) => {
+    import('node:http').then(({ default: http }) => {
+      const req = http.request({ host: '127.0.0.1', port, method: 'POST', path: '/instances/h1/actions', headers: { 'content-type': 'application/json' } }, (res) => {
+        res.resume();
+        res.on('end', () => resolvePromise(res.statusCode));
+      });
+      req.on('error', reject);
+      req.end('{not json');
+    });
+  });
+  assert.equal(rawBad, 400);
+});
+
+test('CLI: dlq retry/discard on unknown intent fails loudly; export-traces unknown instance exits 1', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'polyrun-cli-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dbPath = join(dir, 'cli.sqlite');
+  {
+    const rt = await createRuntime({
+      store: { sqlite: dbPath },
+      machines: [{ machineId: 'order', module: join(demo, 'order-machine.cjs'), contract: join(demo, 'contract.json') }],
+      handlers: {},
+    });
+    await rt.create('order', 'c1');
+    await rt.close();
+  }
+  const cfgPath = join(dir, 'cfg.mjs');
+  writeFileSync(cfgPath, `
+export default {
+  store: { sqlite: ${JSON.stringify(dbPath)} },
+  machines: [{ machineId: 'order', module: ${JSON.stringify(join(demo, 'order-machine.cjs'))}, contract: ${JSON.stringify(join(demo, 'contract.json'))} }],
+  handlers: {},
+};
+`);
+  const cli = join(here, '..', 'bin', 'polyrun.mjs');
+  const run = (...cmd) => {
+    try { return { code: 0, out: execFileSync(process.execPath, ['--no-warnings', cli, ...cmd, '--config', cfgPath], { cwd: repoRoot, encoding: 'utf8' }) }; }
+    catch (err) { return { code: err.status, out: `${err.stdout}${err.stderr}` }; }
+  };
+
+  const retry = run('dlq', 'retry', '--intent', 'no-such-intent');
+  assert.equal(retry.code, 1);
+  assert.match(retry.out, /no dead intent/);
+
+  const discard = run('dlq', 'discard', '--intent', 'no-such-intent');
+  assert.equal(discard.code, 1);
+
+  const traces = run('export-traces', '--instance', 'nope');
+  assert.equal(traces.code, 1);
+  assert.match(traces.out, /unknown instance/);
+  assert.ok(!traces.out.includes('at Runtime'), 'no raw stack traces in CLI output');
+
+  const emptyDlq = run('dlq', 'ls');
+  assert.equal(emptyDlq.code, 0);
+  assert.match(emptyDlq.out, /DLQ empty/);
 });
 
 test('deploy gate: passes on healthy state, fails on invariant violation and on shape drift', async (t) => {

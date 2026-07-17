@@ -504,11 +504,13 @@ test('crash between completion dispatch and markEffectDone: handler re-runs, com
   assert.equal((await rt.getState(id)).state.orderState, 'shipping');
   assert.equal((await rt.store.getOutbox(id, 'inflight')).filter((r) => r.kind === 'chargeCard').length, 1);
 
-  now += 2_000; // lease expires → recovered → re-claimed → handler re-runs (idempotent)
+  now += 2_000; // lease expires → recovered → re-claimed → the :done journal
+  // fence detects the already-delivered completion and closes the row
+  // WITHOUT re-running the handler.
   await rt.workers.tickEffects(now);
-  assert.equal(handlerRuns, 2);
+  assert.equal(handlerRuns, 1, 'the journal fence must prevent a needless handler re-run');
   assert.equal((await rt.getJournal(id)).filter((r) => r.action === 'CHARGE_SUCCEEDED' && r.step_kind === 'accepted').length, 1,
-    'exactly one accepted completion despite the re-run');
+    'exactly one accepted completion');
   assert.equal((await rt.store.getOutbox(id, 'done')).filter((r) => r.kind === 'chargeCard').length, 1);
 });
 

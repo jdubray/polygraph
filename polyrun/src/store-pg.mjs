@@ -6,7 +6,7 @@
 // Multi-writer correctness (FR-2.4): the kernel's dispatch txn opens with
 // getInstanceForUpdate → SELECT ... FOR UPDATE, so two writers on one
 // instance serialize on the row lock; the loser re-reads and its dedupe/seq
-// view is fresh by construction. claimEffects/dueTimers use SKIP LOCKED.
+// view is fresh by construction. claimEffects uses SKIP LOCKED; timers rely on the kernel's actionId dedupe.
 'use strict';
 
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -127,7 +127,13 @@ export class PgStore {
       [instanceId, machineId, machineVersion, status, JSON.stringify(state), now]);
   }
 
-  _instanceRow(r) { return r ? { ...r, seq: num(r.seq), state: r.state } : null; }
+  _instanceRow(r) {
+    return r ? { ...r, seq: num(r.seq), created_at: num(r.created_at), updated_at: num(r.updated_at), state: r.state } : null;
+  }
+
+  _outboxRow(r) {
+    return { ...r, seq: num(r.seq), attempts: num(r.attempts), next_attempt_at: num(r.next_attempt_at), claimed_until: num(r.claimed_until) };
+  }
 
   async getInstance(instanceId) {
     const { rows } = await this._q('SELECT * FROM pr_instance WHERE instance_id = $1', [instanceId]);
@@ -246,7 +252,7 @@ export class PgStore {
        )
        RETURNING *`,
       [now + leaseMs, now, limit]);
-    return rows.map((r) => ({ ...r, seq: num(r.seq), attempts: num(r.attempts) }));
+    return rows.map((r) => this._outboxRow(r));
   }
 
   async markEffectDone(intentId) {
@@ -272,12 +278,12 @@ export class PgStore {
       ? 'SELECT * FROM pr_outbox WHERE instance_id = $1 AND status = $2'
       : 'SELECT * FROM pr_outbox WHERE instance_id = $1';
     const { rows } = await this._q(sql, status ? [instanceId, status] : [instanceId]);
-    return rows.map((r) => ({ ...r, seq: num(r.seq), attempts: num(r.attempts) }));
+    return rows.map((r) => this._outboxRow(r));
   }
 
   async dlqList() {
     const { rows } = await this._q(`SELECT * FROM pr_outbox WHERE status = 'dead' ORDER BY instance_id, seq`);
-    return rows.map((r) => ({ ...r, seq: num(r.seq), attempts: num(r.attempts) }));
+    return rows.map((r) => this._outboxRow(r));
   }
 
   async dlqRetry(intentId, now) {
@@ -293,8 +299,13 @@ export class PgStore {
   // ---- timers ---------------------------------------------------------------
 
   async dueTimers(now, limit) {
+    // No FOR UPDATE here on purpose: an autocommit SELECT's row locks expire
+    // with the statement, so the clause would only IMPLY a claim discipline
+    // that doesn't exist. Cross-worker timer mutual exclusion is the kernel's
+    // dedupe on the timer-derived actionId; a duplicate fire costs a deduped
+    // dispatch, never a duplicate step.
     const { rows } = await this._q(
-      `SELECT * FROM pr_timer WHERE status = 'scheduled' AND fire_at <= $1 ORDER BY fire_at LIMIT $2 FOR UPDATE SKIP LOCKED`,
+      `SELECT * FROM pr_timer WHERE status = 'scheduled' AND fire_at <= $1 ORDER BY fire_at LIMIT $2`,
       [now, limit]);
     return rows.map((r) => ({ ...r, fire_at: num(r.fire_at) }));
   }

@@ -4,6 +4,8 @@
 //   node polyrun/bin/polyrun.mjs deploy --config polyrun/demo/polyrun.config.mjs
 'use strict';
 
+import { resolve } from 'node:path';
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default {
@@ -12,7 +14,9 @@ export default {
     : { sqlite: '.demo-state/demo.sqlite' },
   machines: [{
     machineId: 'order',
-    module: process.env.POLYRUN_MACHINE || 'order-machine.cjs',
+    // An env-supplied path is CWD-relative (resolve it here); bare strings in
+    // this file are config-file-relative (the loader's rule).
+    module: process.env.POLYRUN_MACHINE ? resolve(process.env.POLYRUN_MACHINE) : 'order-machine.cjs',
     contract: 'contract.json',
     effects: { mapper: 'effects.cjs', manifest: 'effects.manifest.json' },
     invariants: 'polygen-out/invariants.mjs',

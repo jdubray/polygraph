@@ -18,7 +18,15 @@ export { Runtime, Workers, Store, PgStore, PoisonedError, ConflictError };
 
 export async function createStore(config = {}) {
   if (config.postgres) return new PgStore(config.postgres, config.poolOptions, config.schema).init();
-  return new Store(config.sqlite ?? ':memory:').init();
+  const dbPath = config.sqlite ?? ':memory:';
+  if (dbPath !== ':memory:') {
+    // SQLite's "unable to open database file" for a missing parent directory
+    // is unhelpful — create it.
+    const { mkdirSync } = await import('node:fs');
+    const { dirname } = await import('node:path');
+    mkdirSync(dirname(dbPath), { recursive: true });
+  }
+  return new Store(dbPath).init();
 }
 
 export async function createRuntime(config) {
