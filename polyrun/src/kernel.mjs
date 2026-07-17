@@ -22,7 +22,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { loadSpec } from '../../scripts/load-spec.mjs';
+import { loadSpec, stable } from '../../scripts/load-spec.mjs';
 import { Store } from './store.mjs';
 import { resolveFireAt } from './duration.mjs';
 
@@ -67,10 +67,11 @@ export class Runtime {
     this.handlers = handlers;
     this.now = now;
     this.machines = new Map();
+    this.metrics = { dispatches: 0, accepted: 0, rejected: 0, unhandled: 0, deduped: 0, poisoned: 0, effectsEmitted: 0, timersScheduled: 0 };
     for (const m of machines) this.registerMachine(m);
   }
 
-  close() { this.store.close(); }
+  async close() { return this.store.close(); }
 
   registerMachine({ machineId, module: modulePath, contract: contractPath, effects, isTerminal }) {
     const abs = resolve(modulePath);
@@ -203,8 +204,8 @@ export class Runtime {
     return step;
   }
 
-  _poison(instanceId, message) {
-    this.store.markPoisoned(instanceId, this.now());
+  async _poison(instanceId, message) {
+    await this.store.markPoisoned(instanceId, this.now());
     return new PoisonedError(instanceId, message);
   }
 
@@ -216,7 +217,7 @@ export class Runtime {
    * through the ordinary mapper path). Same-parameters recreate is
    * idempotent; different parameters is a ConflictError.
    */
-  create(machineId, instanceId, creation) {
+  async create(machineId, instanceId, creation) {
     const machine = this.machines.get(machineId);
     if (!machine) throw new Error(`unknown machine '${machineId}'`);
     if (creation && typeof machine.mod.actions[creation.action] !== 'function') {
@@ -226,14 +227,18 @@ export class Runtime {
     const now = this.now();
     const creationData = creation ? { action: creation.action, data: creation.data ?? {} } : {};
 
-    const made = this.store.txn(() => {
-      const existing = this.store.getInstance(id);
+    let made;
+    try {
+      made = await this.store.txn(async () => {
+      const existing = await this.store.getInstanceForUpdate(id);
       if (existing) {
         if (existing.machine_id !== machineId) {
           throw new ConflictError(`instance '${id}' already exists for machine '${existing.machine_id}'`);
         }
-        const row0 = this.store.getJournalRow(id, 0);
-        if (row0 && JSON.stringify(row0.data) !== JSON.stringify(creationData)) {
+        // stable(): key-order-insensitive — Postgres jsonb does not preserve
+        // object key order, so JSON.stringify equality would false-conflict.
+        const row0 = await this.store.getJournalRow(id, 0);
+        if (row0 && stable(row0.data) !== stable(creationData)) {
           throw new ConflictError(`instance '${id}' was created with different parameters`);
         }
         return { created: false, state: existing.state };
@@ -241,70 +246,78 @@ export class Runtime {
       machine.mod.init();
       const state = this._snapshot(machine);
       const terminal = machine.isTerminal(state);
-      this.store.insertInstance({
+      await this.store.insertInstance({
         instanceId: id, machineId, machineVersion: machine.version, state,
         status: terminal ? 'terminal' : 'active', now,
       });
-      this.store.insertJournal({
+      await this.store.insertJournal({
         instanceId: id, machineVersion: machine.version, seq: 0,
         action: CREATE_ACTION, data: creationData, pre: state, post: state,
         stepKind: 'accepted', rejectReason: null, actionId: CREATE_ACTION, now,
       });
       return { created: true, state };
-    });
+      });
+    } catch (err) {
+      // Cross-process create race: the loser converts the unique violation
+      // into the idempotent path by re-entering (it now finds the row).
+      if (this.store.isUniqueViolation(err)) return this.create(machineId, id, creation);
+      throw err;
+    }
 
     if (made.created && creation) {
-      const res = this.dispatch(id, creation.action, creation.data ?? {}, `${CREATE_ACTION}:action`);
+      const res = await this.dispatch(id, creation.action, creation.data ?? {}, `${CREATE_ACTION}:action`);
       return { instanceId: id, created: true, state: res.state };
     }
     return { instanceId: id, created: made.created, state: made.state };
   }
 
-  getState(instanceId) {
-    const inst = this.store.getInstance(instanceId);
+  async getState(instanceId) {
+    const inst = await this.store.getInstance(instanceId);
     if (!inst) throw new Error(`unknown instance '${instanceId}'`);
     return { state: inst.state, status: inst.status, seq: inst.seq, machineId: inst.machine_id };
   }
 
   /** FR-5.2: the observable state as of journal seq (post of the last
    *  accepted step at or before it). */
-  getStateAt(instanceId, seq) {
-    if (!this.store.getInstance(instanceId)) throw new Error(`unknown instance '${instanceId}'`);
-    const row = this.store.lastAcceptedAtOrBefore(instanceId, seq);
+  async getStateAt(instanceId, seq) {
+    if (!(await this.store.getInstance(instanceId))) throw new Error(`unknown instance '${instanceId}'`);
+    const row = await this.store.lastAcceptedAtOrBefore(instanceId, seq);
     if (!row) throw new Error(`instance '${instanceId}' has no accepted step at or before seq ${seq}`);
     return row.post;
   }
 
-  getJournal(instanceId) { return this.store.getJournal(instanceId); }
+  async getJournal(instanceId) { return this.store.getJournal(instanceId); }
 
-  list(machineId, status) { return this.store.listInstances(machineId, status); }
+  async list(machineId, status) { return this.store.listInstances(machineId, status); }
 
   /** ndjson Polygraph trace windows for the accepted steps (FR-7.1). */
-  exportTraces(instanceId) {
-    if (!this.store.getInstance(instanceId)) throw new Error(`unknown instance '${instanceId}'`);
-    return this.getJournal(instanceId)
+  async exportTraces(instanceId) {
+    if (!(await this.store.getInstance(instanceId))) throw new Error(`unknown instance '${instanceId}'`);
+    return (await this.getJournal(instanceId))
       .filter((r) => r.step_kind === 'accepted' && r.action !== CREATE_ACTION)
       .map((r) => JSON.stringify({ pre: r.pre, action: r.action, data: r.data, post: r.post }))
       .join('\n');
   }
 
-  dispatch(instanceId, action, data = {}, actionId) {
+  async dispatch(instanceId, action, data = {}, actionId) {
     const aid = actionId ?? `${action}:${randomUUID()}`;
     const now = this.now();
+    this.metrics.dispatches += 1;
     try {
-      return this.store.txn(() => this._dispatchInTxn(instanceId, action, data, aid, now));
+      return await this.store.txn(() => this._dispatchInTxn(instanceId, action, data, aid, now));
     } catch (err) {
       if (err instanceof PoisonRequest) {
         // The step's transaction has rolled back; the poison mark gets its
         // own durable transaction so it cannot be lost with the step.
-        throw this._poison(instanceId, err.message);
+        this.metrics.poisoned += 1;
+        throw await this._poison(instanceId, err.message);
       }
       throw err;
     }
   }
 
-  _dispatchInTxn(instanceId, action, data, aid, now) {
-    const inst = this.store.getInstance(instanceId);
+  async _dispatchInTxn(instanceId, action, data, aid, now) {
+    const inst = await this.store.getInstanceForUpdate(instanceId);
     if (!inst) throw new Error(`unknown instance '${instanceId}'`);
     const machine = this.machines.get(inst.machine_id);
     if (!machine) throw new Error(`instance '${instanceId}' references unregistered machine '${inst.machine_id}'`);
@@ -313,11 +326,12 @@ export class Runtime {
     // original step's result without re-executing — but only for the SAME
     // action; an actionId reused across different actions is a caller bug
     // that must be loud, not a silent no-op.
-    const cached = this.store.getJournalByActionId(instanceId, aid);
+    const cached = await this.store.getJournalByActionId(instanceId, aid);
     if (cached) {
       if (cached.action !== action) {
         throw new ConflictError(`actionId '${aid}' was already used for action '${cached.action}' (now '${action}')`);
       }
+      this.metrics.deduped += 1;
       return {
         seq: cached.seq, stepKind: cached.step_kind, rejectReason: cached.reject_reason ?? undefined,
         state: cached.post, terminal: cached.step_kind === 'accepted' && machine.isTerminal(cached.post),
@@ -328,7 +342,7 @@ export class Runtime {
     if (inst.status !== 'active') {
       // FR-1.2: terminal (and poisoned) instances reject observably, never error.
       const journal = { action, data, pre: inst.state, post: inst.state, stepKind: 'rejected', rejectReason: inst.status, actionId: aid };
-      this.store.commitStep({ instanceId, machineVersion: machine.version, seq: inst.seq + 1, journal, outboxRows: [], timerRows: [], cancelTimerKeys: [], cancelAllTimers: false, now });
+      await this.store.commitStep({ instanceId, machineVersion: machine.version, seq: inst.seq + 1, journal, outboxRows: [], timerRows: [], cancelTimerKeys: [], cancelAllTimers: false, now });
       return { seq: inst.seq + 1, stepKind: 'rejected', rejectReason: inst.status, state: inst.state, terminal: false };
     }
 
@@ -425,7 +439,7 @@ export class Runtime {
 
     const terminal = stepKind === 'accepted' && machine.isTerminal(post);
     const journal = { action, data, pre, post, stepKind, rejectReason, actionId: aid };
-    this.store.commitStep({
+    await this.store.commitStep({
       instanceId,
       machineVersion: machine.version,
       seq,
@@ -439,6 +453,9 @@ export class Runtime {
       now,
     });
 
+    this.metrics[stepKind === 'accepted' ? 'accepted' : stepKind === 'rejected' ? 'rejected' : 'unhandled'] += 1;
+    this.metrics.effectsEmitted += outboxRows.length;
+    this.metrics.timersScheduled += timerRows.length;
     return { seq, stepKind, rejectReason: rejectReason ?? undefined, state: post, terminal };
   }
 }

@@ -9,9 +9,28 @@ no workflow-versioning patches.
 
 Full functional/technical spec: [`docs/polyrun-spec.md`](../docs/polyrun-spec.md).
 
-## Status: M0 (kernel proof)
+## Status: M1 (production shape)
 
-What exists:
+M1 adds, on top of the M0 kernel:
+
+- **Postgres adapter** (`src/store-pg.mjs`) — pool + `FOR UPDATE` row locks
+  (multi-writer FR-2.4), `SKIP LOCKED` claims, jsonb state with GIN index.
+  The whole test suite runs against it: start Postgres, set
+  `POLYRUN_PG_URL=postgres://...`, run `npm run test:polyrun`.
+- **Standalone worker** (`bin/polyrun-worker.mjs`) — stateless, horizontally
+  scalable effect/timer loops over a `polyrun.config.mjs`.
+- **HTTP facade** (`bin/polyrun-api.mjs`, `src/http.mjs`) — create/dispatch/
+  state/journal/traces/metrics for non-JS callers; loopback by default.
+- **CLI** (`bin/polyrun.mjs`) — `deploy` (the FR-6.2 gate: load gates +
+  setState round-trip over live snapshots + pointwise state invariants),
+  `export-traces`, `dlq ls|retry|discard`. No API key, ever (NFR-6).
+- **Metrics** — `rt.metrics` counters, served at `/metrics`.
+
+The async store interface serializes SQLite callers with a mutex +
+AsyncLocalStorage txn context; one process per SQLite file, any number of
+processes on Postgres.
+
+What exists from M0:
 
 - **Kernel** (`src/kernel.mjs`) — the one write path: rehydrate
   (`init()` + `setState()`), fire `actions[name](data)`, classify via
@@ -45,9 +64,9 @@ a Polygraph trace corpus (`rt.exportTraces()`).
 
 ## Not yet here (see spec milestones)
 
-M1: Postgres adapter, standalone worker process, HTTP facade, `polyrun deploy`
-gate. M2: `check.mjs --effects` effect-emission invariants in polygen's
-self-repair loop, first-class child machines, journal fan-out, read-only UI.
+M2: effect-emission invariants over the machine ∘ mapper composition,
+first-class child machines, journal fan-out, continuous audit, read-only UI.
+M3: soak, archival/retention, migration tooling, benchmarks.
 
 The demo machine is hand-authored in the exact shape polygen emits; the M0
 follow-up is to re-author it with polygen and diff.

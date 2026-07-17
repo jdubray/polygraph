@@ -1,24 +1,24 @@
-// polyrun store — SQLite adapter over node:sqlite (DatabaseSync).
+// polyrun SQLite store — the default adapter, over node:sqlite (DatabaseSync).
 //
-// Everything durable lives in four tables mirroring docs/polyrun-spec.md §5.2
-// (SQLite dialect, ms-epoch timestamps). The adapter is fully synchronous —
-// node:sqlite is sync and so is a SAM step — which is what lets the kernel
-// run the WHOLE dispatch (dedupe read, instance read, step, writes) inside
-// one literal transaction with no async seams (FR-2.2/FR-2.4). txn() is
-// nesting-tolerant so the kernel can compose store calls freely.
+// M1 made the Store INTERFACE async (the Postgres adapter needs it); this
+// adapter keeps its internals synchronous and serializes async callers with
+// a mutex + AsyncLocalStorage transaction context: the whole dispatch txn
+// holds the mutex, nested store calls from inside the txn callback run
+// directly (they see the ALS token), and concurrent tasks — whose async
+// context lacks the token — wait for the mutex instead of interleaving
+// writes into an open transaction.
 //
-// Concurrency note (M0): one process per database file. SQLite + BEGIN
-// IMMEDIATE serializes writers, but the multi-writer "loser re-reads and
-// re-runs" contract of FR-2.4 is the Postgres adapter's job (M1).
+// Concurrency note: one process per SQLite file. Multi-writer FR-2.4
+// semantics are the Postgres adapter's job (store-pg.mjs).
 //
 // Fault injection: tests may set store.fault = (point) => { throw ... } to
 // simulate a crash between any two writes inside commitStep. Because every
 // write sits inside BEGIN IMMEDIATE … COMMIT, a fault at ANY point must roll
-// back to exactly the pre-dispatch state — that property is the kernel's
-// atomicity test, not a best effort.
+// back to exactly the pre-dispatch state.
 'use strict';
 
 import { DatabaseSync } from 'node:sqlite';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS pr_instance (
@@ -71,6 +71,17 @@ CREATE TABLE IF NOT EXISTS pr_timer (
 CREATE INDEX IF NOT EXISTS pr_timer_due ON pr_timer (status, fire_at);
 `;
 
+class Mutex {
+  constructor() { this._tail = Promise.resolve(); }
+  lock() {
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const acquired = this._tail.then(() => release);
+    this._tail = this._tail.then(() => gate);
+    return acquired;
+  }
+}
+
 export class Store {
   constructor(dbPath) {
     this.db = new DatabaseSync(dbPath);
@@ -78,50 +89,71 @@ export class Store {
     this.db.exec('PRAGMA busy_timeout = 5000');
     this.db.exec(SCHEMA);
     this.fault = null; // test hook: (point) => void, may throw
-    this._txnDepth = 0;
+    this._mutex = new Mutex();
+    this._als = new AsyncLocalStorage();
   }
 
-  close() { this.db.close(); }
+  async init() { return this; }
+  async close() { this.db.close(); }
 
   _fault(point) { if (this.fault) this.fault(point); }
 
-  /** Nesting-tolerant transaction: only the outermost call opens/commits. */
-  txn(fn) {
-    if (this._txnDepth > 0) { this._txnDepth++; try { return fn(); } finally { this._txnDepth--; } }
+  /** True when a driver error is a unique-constraint violation (used by the
+   *  kernel to convert a create() race into the idempotent path). */
+  isUniqueViolation(err) {
+    return !!err && typeof err.message === 'string' && /UNIQUE constraint failed/.test(err.message);
+  }
+
+  /** Transaction: the callback may await store calls (they run directly via
+   *  the ALS token); other async tasks are excluded by the mutex for the
+   *  whole transaction. Nested txn() calls join the open transaction. */
+  async txn(fn) {
+    if (this._als.getStore()) return fn();
+    const release = await this._mutex.lock();
     this.db.exec('BEGIN IMMEDIATE');
-    this._txnDepth = 1;
     try {
-      const result = fn();
+      const result = await this._als.run({ txn: true }, fn);
       this.db.exec('COMMIT');
       return result;
     } catch (err) {
       try { this.db.exec('ROLLBACK'); } catch { /* already rolled back */ }
       throw err;
     } finally {
-      this._txnDepth = 0;
+      release();
     }
+  }
+
+  /** Single-statement writes outside a txn context still take the mutex so
+   *  they can never land inside another task's open transaction. */
+  async _write(fn) {
+    if (this._als.getStore()) return fn();
+    const release = await this._mutex.lock();
+    try { return fn(); } finally { release(); }
   }
 
   // ---- instances -----------------------------------------------------------
 
-  insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now }) {
-    this.db.prepare(
+  async insertInstance({ instanceId, machineId, machineVersion, state, status = 'active', now }) {
+    return this._write(() => this.db.prepare(
       `INSERT INTO pr_instance (instance_id, machine_id, machine_version, seq, status, state, created_at, updated_at)
        VALUES (?, ?, ?, 0, ?, ?, ?, ?)`
-    ).run(instanceId, machineId, machineVersion, status, JSON.stringify(state), now, now);
+    ).run(instanceId, machineId, machineVersion, status, JSON.stringify(state), now, now));
   }
 
-  getInstance(instanceId) {
+  async getInstance(instanceId) {
     const row = this.db.prepare('SELECT * FROM pr_instance WHERE instance_id = ?').get(instanceId);
     if (!row) return null;
     return { ...row, state: JSON.parse(row.state) };
   }
 
+  /** Row-locked read for the dispatch transaction. SQLite: BEGIN IMMEDIATE +
+   *  the store mutex already serialize writers, so this is a plain read. */
+  async getInstanceForUpdate(instanceId) { return this.getInstance(instanceId); }
+
   /** FR-1.3: poisoning is a durable status write PLUS cancellation of the
-   *  instance's scheduled timers, atomically — a poisoned instance must not
-   *  keep generating timer round-trips. */
-  markPoisoned(instanceId, now) {
-    this.txn(() => {
+   *  instance's scheduled timers, atomically. */
+  async markPoisoned(instanceId, now) {
+    return this.txn(() => {
       this.db.prepare(`UPDATE pr_instance SET status = 'poisoned', updated_at = ? WHERE instance_id = ?`)
         .run(now, instanceId);
       this.db.prepare(`UPDATE pr_timer SET status = 'cancelled' WHERE instance_id = ? AND status = 'scheduled'`)
@@ -129,7 +161,7 @@ export class Store {
     });
   }
 
-  listInstances(machineId, status) {
+  async listInstances(machineId, status) {
     let sql = 'SELECT * FROM pr_instance WHERE machine_id = ?';
     const args = [machineId];
     if (status) { sql += ' AND status = ?'; args.push(status); }
@@ -138,29 +170,29 @@ export class Store {
 
   // ---- journal -------------------------------------------------------------
 
-  insertJournal({ instanceId, machineVersion, seq, action, data, pre, post, stepKind, rejectReason, actionId, now }) {
-    this.db.prepare(
+  async insertJournal({ instanceId, machineVersion, seq, action, data, pre, post, stepKind, rejectReason, actionId, now }) {
+    return this._write(() => this.db.prepare(
       `INSERT INTO pr_journal (instance_id, machine_version, seq, action, data, pre, post, step_kind, reject_reason, action_id, at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(instanceId, machineVersion, seq, action, JSON.stringify(data), JSON.stringify(pre),
-      JSON.stringify(post), stepKind, rejectReason ?? null, actionId, now);
+      JSON.stringify(post), stepKind, rejectReason ?? null, actionId, now));
   }
 
-  getJournalByActionId(instanceId, actionId) {
+  async getJournalByActionId(instanceId, actionId) {
     const row = this.db.prepare(
       'SELECT * FROM pr_journal WHERE instance_id = ? AND action_id = ?'
     ).get(instanceId, actionId);
     return row ? this._journalRow(row) : null;
   }
 
-  getJournalRow(instanceId, seq) {
+  async getJournalRow(instanceId, seq) {
     const row = this.db.prepare(
       'SELECT * FROM pr_journal WHERE instance_id = ? AND seq = ?'
     ).get(instanceId, seq);
     return row ? this._journalRow(row) : null;
   }
 
-  lastAcceptedAtOrBefore(instanceId, seq) {
+  async lastAcceptedAtOrBefore(instanceId, seq) {
     const row = this.db.prepare(
       `SELECT * FROM pr_journal WHERE instance_id = ? AND seq <= ? AND step_kind = 'accepted'
        ORDER BY seq DESC LIMIT 1`
@@ -168,32 +200,24 @@ export class Store {
     return row ? this._journalRow(row) : null;
   }
 
-  getJournal(instanceId) {
+  async getJournal(instanceId) {
     return this.db.prepare(
       'SELECT * FROM pr_journal WHERE instance_id = ? ORDER BY seq'
     ).all(instanceId).map((r) => this._journalRow(r));
   }
 
   _journalRow(r) {
-    return {
-      ...r,
-      data: JSON.parse(r.data),
-      pre: JSON.parse(r.pre),
-      post: JSON.parse(r.post),
-    };
+    return { ...r, data: JSON.parse(r.data), pre: JSON.parse(r.pre), post: JSON.parse(r.post) };
   }
 
   // ---- the one write path (FR-2.2) ----------------------------------------
   //
-  // Everything a step decided commits here, atomically: journal row, snapshot
-  // + status, outbox intents, timer cancellations then creations. Cancels run
-  // BEFORE inserts so a cancel-and-rearm step cancels the OLD timer, not the
-  // one it just scheduled. `fault(point)` fires between each group so tests
-  // can prove all-or-nothing.
+  // Cancels run BEFORE inserts so a cancel-and-rearm step cancels the OLD
+  // timer, not the one it just scheduled.
 
-  commitStep({ instanceId, machineVersion, seq, journal, newState, newStatus, outboxRows, timerRows, cancelTimerKeys, cancelAllTimers, now }) {
-    return this.txn(() => {
-      this.insertJournal({ instanceId, machineVersion, seq, ...journal, now });
+  async commitStep({ instanceId, machineVersion, seq, journal, newState, newStatus, outboxRows, timerRows, cancelTimerKeys, cancelAllTimers, now }) {
+    return this.txn(async () => {
+      await this.insertJournal({ instanceId, machineVersion, seq, ...journal, now });
       this._fault('after-journal');
 
       if (newState !== undefined) {
@@ -235,14 +259,14 @@ export class Store {
 
   // ---- outbox (effect runner) ----------------------------------------------
 
-  recoverExpiredLeases(now) {
-    this.db.prepare(
+  async recoverExpiredLeases(now) {
+    return this._write(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'pending', claimed_until = NULL
        WHERE status = 'inflight' AND claimed_until < ?`
-    ).run(now);
+    ).run(now));
   }
 
-  claimEffects(now, limit, leaseMs) {
+  async claimEffects(now, limit, leaseMs) {
     return this.txn(() => {
       const rows = this.db.prepare(
         `SELECT * FROM pr_outbox WHERE status = 'pending' AND next_attempt_at <= ?
@@ -256,54 +280,75 @@ export class Store {
     });
   }
 
-  // The three mark* below are FENCED on status='inflight': a worker whose
-  // lease expired (row recovered and possibly re-claimed, finished, or
-  // killed by another worker) must not overwrite the newer outcome — a
-  // stale markEffectRetry flipping a 'done' row back to 'pending' would
-  // re-execute a completed effect and could deliver conflicting completions.
+  // Fenced on status='inflight': a stale lease-expired worker must not
+  // overwrite a newer outcome (e.g. flip a 'done' row back to 'pending').
 
-  markEffectDone(intentId) {
-    this.db.prepare(`UPDATE pr_outbox SET status = 'done', claimed_until = NULL WHERE intent_id = ? AND status = 'inflight'`).run(intentId);
+  async markEffectDone(intentId) {
+    return this._write(() => this.db.prepare(
+      `UPDATE pr_outbox SET status = 'done', claimed_until = NULL WHERE intent_id = ? AND status = 'inflight'`
+    ).run(intentId));
   }
 
-  markEffectRetry(intentId, attempts, nextAttemptAt, lastError) {
-    this.db.prepare(
+  async markEffectRetry(intentId, attempts, nextAttemptAt, lastError) {
+    return this._write(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'pending', attempts = ?, next_attempt_at = ?, claimed_until = NULL, last_error = ? WHERE intent_id = ? AND status = 'inflight'`
-    ).run(attempts, nextAttemptAt, lastError, intentId);
+    ).run(attempts, nextAttemptAt, lastError, intentId));
   }
 
-  markEffectDead(intentId, attempts, lastError) {
-    this.db.prepare(
+  async markEffectDead(intentId, attempts, lastError) {
+    return this._write(() => this.db.prepare(
       `UPDATE pr_outbox SET status = 'dead', claimed_until = NULL, attempts = ?, last_error = ? WHERE intent_id = ? AND status = 'inflight'`
-    ).run(attempts, lastError, intentId);
+    ).run(attempts, lastError, intentId));
   }
 
-  getOutbox(instanceId, status) {
+  async getOutbox(instanceId, status) {
     let sql = 'SELECT * FROM pr_outbox WHERE instance_id = ?';
     const args = [instanceId];
     if (status) { sql += ' AND status = ?'; args.push(status); }
     return this.db.prepare(sql).all(...args).map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
   }
 
+  // ---- DLQ (CLI surface) -----------------------------------------------------
+
+  async dlqList() {
+    return this.db.prepare(`SELECT * FROM pr_outbox WHERE status = 'dead' ORDER BY instance_id, seq`)
+      .all().map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+  }
+
+  async dlqRetry(intentId, now) {
+    return this._write(() => this.db.prepare(
+      `UPDATE pr_outbox SET status = 'pending', attempts = 0, next_attempt_at = ?, last_error = 'dlq-retry' WHERE intent_id = ? AND status = 'dead'`
+    ).run(now, intentId));
+  }
+
+  async dlqDiscard(intentId) {
+    return this._write(() => this.db.prepare(
+      `UPDATE pr_outbox SET status = 'done', last_error = 'dlq-discarded' WHERE intent_id = ? AND status = 'dead'`
+    ).run(intentId));
+  }
+
   // ---- timers ---------------------------------------------------------------
 
-  dueTimers(now, limit) {
+  async dueTimers(now, limit) {
     return this.db.prepare(
       `SELECT * FROM pr_timer WHERE status = 'scheduled' AND fire_at <= ? ORDER BY fire_at LIMIT ?`
     ).all(now, limit).map((r) => ({ ...r, data: JSON.parse(r.data) }));
   }
 
-  markTimerFired(timerId) {
-    this.db.prepare(`UPDATE pr_timer SET status = 'fired' WHERE timer_id = ?`).run(timerId);
+  async markTimerFired(timerId) {
+    return this._write(() => this.db.prepare(
+      `UPDATE pr_timer SET status = 'fired' WHERE timer_id = ?`
+    ).run(timerId));
   }
 
-  /** Push an erroring timer's due time forward so it neither aborts its
-   *  batch-mates nor starves the head of the due queue (per-timer backoff). */
-  deferTimer(timerId, fireAt) {
-    this.db.prepare(`UPDATE pr_timer SET fire_at = ? WHERE timer_id = ? AND status = 'scheduled'`).run(fireAt, timerId);
+  /** Push an erroring timer's due time forward (per-timer backoff). */
+  async deferTimer(timerId, fireAt) {
+    return this._write(() => this.db.prepare(
+      `UPDATE pr_timer SET fire_at = ? WHERE timer_id = ? AND status = 'scheduled'`
+    ).run(fireAt, timerId));
   }
 
-  getTimers(instanceId, status) {
+  async getTimers(instanceId, status) {
     let sql = 'SELECT * FROM pr_timer WHERE instance_id = ?';
     const args = [instanceId];
     if (status) { sql += ' AND status = ?'; args.push(status); }

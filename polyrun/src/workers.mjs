@@ -27,7 +27,7 @@ export class Workers {
 
   start({ effectPollMs = 250, timerPollMs = 250 } = {}) {
     const effectLoop = setInterval(() => { this.tickEffects().catch((e) => this._report(e)); }, effectPollMs);
-    const timerLoop = setInterval(() => { try { this.tickTimers(); } catch (e) { this._report(e); } }, timerPollMs);
+    const timerLoop = setInterval(() => { this.tickTimers().catch((e) => this._report(e)); }, timerPollMs);
     effectLoop.unref?.(); timerLoop.unref?.();
     this._timers.push(effectLoop, timerLoop);
   }
@@ -40,8 +40,8 @@ export class Workers {
    *  instance gone, machine unregistered, or kind undeclared. null means
    *  "park, never execute": running a real-world handler whose completion
    *  wiring is unknowable would move money and silently drop the result. */
-  _declFor(row) {
-    const inst = this.rt.store.getInstance(row.instance_id);
+  async _declFor(row) {
+    const inst = await this.rt.store.getInstance(row.instance_id);
     if (!inst) return null;
     const machine = this.rt.machines.get(inst.machine_id);
     if (!machine || !machine.manifest || !machine.manifest.effects) return null;
@@ -54,8 +54,8 @@ export class Workers {
   }
 
   async tickEffects(now = this.rt.now()) {
-    this.rt.store.recoverExpiredLeases(now);
-    const claimed = this.rt.store.claimEffects(now, this.batch, this.leaseMs);
+    await this.rt.store.recoverExpiredLeases(now);
+    const claimed = await this.rt.store.claimEffects(now, this.batch, this.leaseMs);
     // allSettled: one effect's failure must never abort its batch-mates.
     const results = await Promise.allSettled(claimed.map((row) => this._runEffect(row, now)));
     for (const r of results) if (r.status === 'rejected') this._report(r.reason);
@@ -63,12 +63,12 @@ export class Workers {
   }
 
   async _runEffect(row, now) {
-    const decl = this._declFor(row);
+    const decl = await this._declFor(row);
     if (decl === null) {
       // Park with a fixed backoff and WITHOUT burning an attempt — this is an
       // operator problem (machine not registered / manifest changed), not an
       // effect failure, and it must stay visible until resolved.
-      this.rt.store.markEffectRetry(row.intent_id, row.attempts, now + 30_000,
+      await this.rt.store.markEffectRetry(row.intent_id, row.attempts, now + 30_000,
         `parked: machine/manifest unavailable for effect '${row.kind}' — not executed`);
       return;
     }
@@ -98,12 +98,12 @@ export class Workers {
       if (decl.onFailure && decl.onFailure.action && err && err.permanent) {
         // A handler may throw {permanent: true} to short-circuit retries
         // (e.g. card declined — a RESULT, not an infrastructure failure).
-        this.rt.dispatch(row.instance_id, decl.onFailure.action,
+        await this.rt.dispatch(row.instance_id, decl.onFailure.action,
           mapCompletion(decl.onFailure, { error: err }, { reason: message }), `${row.intent_id}:failed`);
-        this.rt.store.markEffectDead(row.intent_id, attempts, message);
+        await this.rt.store.markEffectDead(row.intent_id, attempts, message);
         return;
       }
-      this.rt.store.markEffectRetry(row.intent_id, attempts, now + this._backoff(retry, attempts), message);
+      await this.rt.store.markEffectRetry(row.intent_id, attempts, now + this._backoff(retry, attempts), message);
       return;
     }
 
@@ -112,27 +112,27 @@ export class Workers {
     // handler (idempotent by contract) and the completion dedupes — the
     // handler's success is never reclassified as an attempt failure.
     if (decl.onSuccess && decl.onSuccess.action) {
-      this.rt.dispatch(row.instance_id, decl.onSuccess.action,
+      await this.rt.dispatch(row.instance_id, decl.onSuccess.action,
         mapCompletion(decl.onSuccess, { result }, result && typeof result === 'object' ? result : {}),
         `${row.intent_id}:done`);
     }
-    this.rt.store.markEffectDone(row.intent_id);
+    await this.rt.store.markEffectDone(row.intent_id);
   }
 
-  _finishExhausted(row, decl, attempts, message) {
+  async _finishExhausted(row, decl, attempts, message) {
     // DLQ + let VERIFIED logic decide what exhaustion means (FR-3.3).
     // Dispatch first (deduped by :exhausted), mark dead second — a crash in
     // between re-enters here via the attempts>=max fast path and converges.
     const hook = decl.onExhausted || decl.onFailure;
     if (hook && hook.action) {
-      this.rt.dispatch(row.instance_id, hook.action,
+      await this.rt.dispatch(row.instance_id, hook.action,
         mapCompletion(hook, { error: { message } }, { reason: 'exhausted' }), `${row.intent_id}:exhausted`);
     }
-    this.rt.store.markEffectDead(row.intent_id, attempts, message);
+    await this.rt.store.markEffectDead(row.intent_id, attempts, message);
   }
 
-  tickTimers(now = this.rt.now()) {
-    const due = this.rt.store.dueTimers(now, this.batch);
+  async tickTimers(now = this.rt.now()) {
+    const due = await this.rt.store.dueTimers(now, this.batch);
     for (const t of due) {
       // Dispatch first, mark second: a crash in between refires the timer and
       // the kernel dedupes on the timer-derived actionId. Staleness needs no
@@ -141,11 +141,11 @@ export class Workers {
       // its machine not registered after a restart) must neither abort the
       // batch nor starve the head of the due queue — defer it and move on.
       try {
-        this.rt.dispatch(t.instance_id, t.action, t.data, `timer:${t.timer_id}`);
-        this.rt.store.markTimerFired(t.timer_id);
+        await this.rt.dispatch(t.instance_id, t.action, t.data, `timer:${t.timer_id}`);
+        await this.rt.store.markTimerFired(t.timer_id);
       } catch (err) {
         this._report(err);
-        this.rt.store.deferTimer(t.timer_id, now + 5_000);
+        await this.rt.store.deferTimer(t.timer_id, now + 5_000);
       }
     }
     return due.length;
