@@ -136,9 +136,13 @@ func (d *driver) closeWindow(snap Snapshot) {
 	d.open = nil
 }
 
+func quietLogger() tlog.Logger {
+	return tlog.NewStructuredLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
+}
+
 func run(sc *Scenario) ([]Window, error) {
 	var ts testsuite.WorkflowTestSuite
-	ts.SetLogger(tlog.NewStructuredLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))))
+	ts.SetLogger(quietLogger())
 	env := ts.NewTestWorkflowEnvironment()
 
 	d := &driver{
@@ -351,35 +355,67 @@ func scenarios() []*Scenario {
 	}
 }
 
+func writeTrace(outDir, name string, rows []any) int {
+	f, err := os.Create(filepath.Join(outDir, name+".ndjson"))
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for _, w := range rows {
+		if err := enc.Encode(w); err != nil {
+			panic(err)
+		}
+	}
+	return len(rows)
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: go run . <traces-output-dir>")
+		fmt.Fprintln(os.Stderr, "usage: go run . <traces-output-dir> [order|shipment]")
 		os.Exit(2)
 	}
 	outDir := os.Args[1]
+	mode := "order"
+	if len(os.Args) > 2 {
+		mode = os.Args[2]
+	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		panic(err)
 	}
 	total := 0
-	for _, sc := range scenarios() {
-		windows, err := run(sc)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", sc.Name, err)
-			os.Exit(1)
-		}
-		f, err := os.Create(filepath.Join(outDir, sc.Name+".ndjson"))
-		if err != nil {
-			panic(err)
-		}
-		enc := json.NewEncoder(f)
-		for _, w := range windows {
-			if err := enc.Encode(w); err != nil {
-				panic(err)
+	switch mode {
+	case "order":
+		for _, sc := range scenarios() {
+			windows, err := run(sc)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", sc.Name, err)
+				os.Exit(1)
 			}
+			rows := make([]any, len(windows))
+			for i, w := range windows {
+				rows[i] = w
+			}
+			total += writeTrace(outDir, sc.Name, rows)
+			fmt.Printf("%-45s %d window(s), final %s %v\n", sc.Name, len(windows), windows[len(windows)-1].Post.Status, windows[len(windows)-1].Post.Fulfillments)
 		}
-		f.Close()
-		total += len(windows)
-		fmt.Printf("%-45s %d window(s), final %s %v\n", sc.Name, len(windows), windows[len(windows)-1].Post.Status, windows[len(windows)-1].Post.Fulfillments)
+	case "shipment":
+		for _, sc := range shipmentScenarios() {
+			windows, err := runShipment(sc)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", sc.Name, err)
+				os.Exit(1)
+			}
+			rows := make([]any, len(windows))
+			for i, w := range windows {
+				rows[i] = w
+			}
+			total += writeTrace(outDir, sc.Name, rows)
+			fmt.Printf("%-45s %d window(s), final %s\n", sc.Name, len(windows), windows[len(windows)-1].Post.Status)
+		}
+	default:
+		fmt.Fprintln(os.Stderr, "unknown mode "+mode)
+		os.Exit(2)
 	}
 	fmt.Printf("TOTAL: %d windows\n", total)
 }

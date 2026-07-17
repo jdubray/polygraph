@@ -1,0 +1,321 @@
+{
+  "summary": {
+    "specs": 1,
+    "liveSpecs": 1,
+    "deadSpecs": [],
+    "windows": 21,
+    "consistent": 21,
+    "specError": 0,
+    "codeFinding": 0,
+    "unscoreableAll": 0,
+    "unhandledWindows": 0
+  },
+  "findings": [],
+  "perWindow": [
+    {
+      "scenario": "t1_normal_progression.ndjson",
+      "index": 0,
+      "action": "BOOKED",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t1_normal_progression.ndjson",
+      "index": 1,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t1_normal_progression.ndjson",
+      "index": 2,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t2_direct_delivery_skips_dispatch.ndjson",
+      "index": 0,
+      "action": "BOOKED",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t2_direct_delivery_skips_dispatch.ndjson",
+      "index": 1,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t3_status_regression.ndjson",
+      "index": 0,
+      "action": "BOOKED",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t3_status_regression.ndjson",
+      "index": 1,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t3_status_regression.ndjson",
+      "index": 2,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t3_status_regression.ndjson",
+      "index": 3,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t3_status_regression.ndjson",
+      "index": 4,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t4_bogus_carrier_status.ndjson",
+      "index": 0,
+      "action": "BOOKED",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t4_bogus_carrier_status.ndjson",
+      "index": 1,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t4_bogus_carrier_status.ndjson",
+      "index": 2,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t5_duplicate_update.ndjson",
+      "index": 0,
+      "action": "BOOKED",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t5_duplicate_update.ndjson",
+      "index": 1,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t5_duplicate_update.ndjson",
+      "index": 2,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "identity-by-mutation"
+      ]
+    },
+    {
+      "scenario": "t5_duplicate_update.ndjson",
+      "index": 3,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t6_regression_to_pending_then_onward.ndjson",
+      "index": 0,
+      "action": "BOOKED",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t6_regression_to_pending_then_onward.ndjson",
+      "index": 1,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t6_regression_to_pending_then_onward.ndjson",
+      "index": 2,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "t6_regression_to_pending_then_onward.ndjson",
+      "index": 3,
+      "action": "CARRIER_UPDATE",
+      "statuses": [
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated"
+      ]
+    }
+  ],
+  "invReport": {
+    "specs": 1,
+    "checkedSpecs": 1,
+    "statesExplored": 6,
+    "capHit": false,
+    "errors": [],
+    "domainNotes": [],
+    "violations": [
+      {
+        "invariant": "enums-valid",
+        "kind": "state",
+        "specs": 1,
+        "example": {
+          "invariant": "enums-valid",
+          "kind": "state",
+          "path": [
+            {
+              "action": null,
+              "data": null,
+              "state": {
+                "status": "pending",
+                "booked": false
+              }
+            }
+          ],
+          "detail": "violated in the initial state"
+        },
+        "strength": "all-specs"
+      },
+      {
+        "invariant": "no-completion-before-processing",
+        "kind": "state",
+        "specs": 1,
+        "example": {
+          "invariant": "no-completion-before-processing",
+          "kind": "state",
+          "path": [
+            {
+              "action": null,
+              "data": null,
+              "state": {
+                "status": "pending",
+                "booked": false
+              }
+            }
+          ],
+          "detail": "violated in the initial state"
+        },
+        "strength": "all-specs"
+      }
+    ]
+  },
+  "tlaReport": null
+}

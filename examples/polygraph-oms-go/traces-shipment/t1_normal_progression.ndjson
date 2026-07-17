@@ -1,0 +1,3 @@
+{"pre":{"status":"pending","booked":false},"action":"BOOKED","data":{},"post":{"status":"booked","booked":true}}
+{"pre":{"status":"booked","booked":true},"action":"CARRIER_UPDATE","data":{"status":"dispatched"},"post":{"status":"dispatched","booked":true}}
+{"pre":{"status":"dispatched","booked":true},"action":"CARRIER_UPDATE","data":{"status":"delivered"},"post":{"status":"delivered","booked":true}}

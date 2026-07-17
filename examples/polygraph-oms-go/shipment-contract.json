@@ -1,0 +1,65 @@
+{
+  "lang": "go",
+  "sourceNote": "Audited code: the Shipment workflow of github.com/temporalio/reference-app-orders-go (app/shipment/workflows.go, vendored under source/). Observable state is the workflow's own StatusQuery projection: the shipment status string. NOTE the audit's central question: the carrier-update loop applies the signal's status VERBATIM — the contract's dataDomain therefore deliberately includes a value outside the documented enum, so the checker can explore what the code actually does with it. AUDIT NOTE: the first contract draft projected only {status}; the model check exposed that 'pending' is then ambiguous (never-booked vs carrier-regressed-to-pending have different behavior), making the machine not a function of the projection — Polygraph's contract-error class. The projection was widened with the `booked` flag (the BookShipment activity's completion, an observable event).",
+  "stateKeys": [
+    {
+      "name": "status",
+      "type": "string — documented values: 'pending' | 'booked' | 'dispatched' | 'delivered'; the code does not enforce this set (that is finding S1)"
+    },
+    {
+      "name": "booked",
+      "type": "boolean — whether the BookShipment activity has completed (the carrier-update loop only drains after booking)"
+    }
+  ],
+  "initState": {
+    "status": "pending",
+    "booked": false
+  },
+  "actions": {
+    "BOOKED": {
+      "dataFields": {}
+    },
+    "CARRIER_UPDATE": {
+      "dataFields": {
+        "status": "string — the carrier's reported status, applied to the shipment VERBATIM. The workflow's receive loop exits (workflow completes) when the status becomes 'delivered'."
+      }
+    }
+  },
+  "dataDomain": {
+    "BOOKED": {},
+    "CARRIER_UPDATE": {
+      "status": [
+        "booked",
+        "dispatched",
+        "delivered",
+        "pending",
+        "lost-in-transit"
+      ]
+    }
+  },
+  "terminalKey": "status",
+  "terminalStates": [
+    "delivered"
+  ],
+  "specialRules": [
+    {
+      "name": "booking-first",
+      "note": "BOOKED (the BookShipment activity completing) is only applicable while status == 'pending'; it moves the shipment to 'booked' and notifies the requestor.",
+      "whenState": "status == 'pending'",
+      "whenAction": "BOOKED"
+    },
+    {
+      "name": "carrier-update-verbatim",
+      "note": "CARRIER_UPDATE (applicable when booked == true and status != 'delivered') sets status to the signal's value VERBATIM — including values outside the documented enum, duplicates, and regressions (e.g. 'dispatched' -> 'booked', or even back to 'pending'). Each update notifies the requestor. When the value is 'delivered' the receive loop exits and the workflow completes (terminal).",
+      "whenState": "booked == true and status != 'delivered'",
+      "whenAction": "CARRIER_UPDATE"
+    },
+    {
+      "name": "no-updates-before-booking-or-after-delivery",
+      "note": "A CARRIER_UPDATE before booking (booked == false: the loop is not yet draining — the signal buffers, observably nothing changes at the sample instant) or after 'delivered' (workflow completed) yields post == pre in the observable projection.",
+      "whenState": "booked == false or status == 'delivered'",
+      "whenAction": "CARRIER_UPDATE"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state yields post == pre."
+}
