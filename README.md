@@ -79,6 +79,13 @@ $40 per repository. The convergent finding: the LLM alone is not trustworthy,
 but an LLM *held accountable by a model checker and trace validation* is a
 practical bug-finder.
 
+> **Deep dives:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the
+> three engines (Polygraph audits, polygen authors, polyrun executes) share
+> one artifact family; [`docs/SDLC.md`](docs/SDLC.md) — a team lifecycle for
+> integrating them into agentic workflows, with the human gates spelled out;
+> [`docs/polyrun-spec.md`](docs/polyrun-spec.md) — the durable-execution
+> harness specification.
+
 ## How it works
 
 Everything revolves around three artifacts you can read and diff:
