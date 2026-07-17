@@ -33,11 +33,15 @@ app's own Go source — the Order workflow of
    replays **27/27**; the mutated control (`controls/mutant.js`, charge
    failures silently absorbed) fails exactly its 4 corrupted windows. The
    harness can tell good from bad before any generated spec is trusted.
-4. **Generation** — LLM-derived specs written from the GO SOURCE
-   (`verify.mjs --source source/workflows.go`), replayed against the traces
-   (see `results-generated/findings.md`).
-5. **Model check** (`check.mjs` + `invariants.mjs`) — the faithful spec is
-   explored exhaustively against intent invariants.
+4. **Generation** — THREE independent LLM specs written from the GO SOURCE
+   (`verify.mjs --source source/workflows.go --n 3`, fable-5): all three
+   replay **27/27** against the real-execution traces
+   (`results-generated/findings.md`).
+5. **Model check** (`check.mjs` + `invariants.mjs`) — every spec is explored
+   exhaustively against intent invariants. All FOUR specs (3 generated + the
+   reference) explore the identical 26-state space and report the identical
+   two violations below. The audit's conclusion does not depend on any
+   single reading of the code — including the human one.
 
 ## Findings
 

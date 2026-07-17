@@ -20,6 +20,16 @@ findings fixed. 60 tests green on both stores; the kill -9 mid-charge demo
 (`npm run demo:polyrun`) recovers with exactly one charge — on both the
 hand-written and the polygen-authored order machine.
 
+Two capstone examples: `examples/polyrun-oms` reimplements Temporal's OMS
+reference app on polyrun (multi-fulfillment orders, shipment children,
+rollup, storefront — every machine polygen-authored), and
+`examples/polygraph-oms-go` AUDITS the reference app's actual Go source:
+real-execution traces via Temporal's own testsuite, positive/negative
+controls, three independent LLM specs replaying 27/27, and a unanimous
+model-check verdict — two intent findings with shortest counterexamples
+(an all-unavailable amended order completes with nothing fulfilled or
+charged; partial failure reports as plain success).
+
 ## 2.0.1 — 2026-07-15
 
 Hardening release: a full code review of the 2.0.0 pipeline (four review

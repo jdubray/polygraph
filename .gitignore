@@ -17,6 +17,7 @@ test/.tmp-v2/
 # polyrun demo — regenerated on every run
 polyrun/demo/.demo-state/
 examples/polyrun-oms/.oms-state/
+examples/polygraph-oms-go/harness/*.exe
 examples/polyrun-oms/demo/.demo-state/
 
 # Personal drafts — not part of the project
