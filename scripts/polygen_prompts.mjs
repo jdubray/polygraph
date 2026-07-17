@@ -92,7 +92,11 @@ The initial state is:
 - ${DISCIPLINE_SENTENCE.split('\n').join('\n  ')}
 - No hidden state: every piece of state lives under the declared modelShape keys
 - Do NOT include component \`safety\` conditions or a \`render\` function —
-  invariants are verified in a separate phase`;
+  invariants are verified in a separate phase
+- The component MUST be anonymous: never set a \`name:\` key on it. A named
+  component binds its acceptors to a LOCAL component state tree, so every
+  guard reads undefined and the machine is dead at init (this is gated and
+  will fail the build)`;
 }
 
 /** Render optional replay/determinism triage evidence for a repair prompt. */

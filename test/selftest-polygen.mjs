@@ -224,6 +224,57 @@ console.log('4) domain cross-check: numeric/boolean values are token-matched, no
   const cs = { dataDomain: { GO: { dir: ['up'] } } };
   ok('string values still require a quoted literal', findDataDomainRefGaps(cs, 'const up = 1;').length === 1
     && findDataDomainRefGaps(cs, "go('up')").length === 0);
+
+  // OBJECT-valued entries: the code references LEAVES, never the object
+  // verbatim — the old whole-object string check was a permanently
+  // unsatisfiable false positive that burned repair iterations
+  // (examples/polyrun-oms REPAIR-NOTE).
+  const co = { dataDomain: { DONE: { childState: [{ shipState: 'delivered' }, { shipState: 'cancelledShipment' }] } } };
+  ok('object domain entry with all leaves referenced is NOT a gap',
+    findDataDomainRefGaps(co, "if (p.childState.shipState === 'delivered') {} else if (p.childState.shipState === 'cancelledShipment') {}").length === 0);
+  const gaps = findDataDomainRefGaps(co, "if (p.childState.shipState === 'delivered') {}");
+  ok('object domain entry with a MISSING leaf reports that leaf path',
+    gaps.length === 1 && /childState\.shipState = "cancelledShipment"/.test(gaps[0]));
+  const cn = { dataDomain: { SET: { opt: [{ mode: null }] } } };
+  ok('null leaves carry no referenceable token and are not gaps',
+    findDataDomainRefGaps(cn, 'const nothing = 0;').length === 0);
+}
+
+console.log("4b) v2 gate: a NAMED component (local-state acceptor binding) is dead at init and refused");
+{
+  const { validateV2Module } = await import('../scripts/polygen.mjs');
+  const { loadSpec } = await import('../scripts/load-spec.mjs');
+  const mkModule = (nameLine) => `
+'use strict';
+const { createInstance } = require('@cognitive-fab/sam-pattern');
+const instance = createInstance({ strict: true, hasAsyncActions: false });
+const INITIAL_STATE = { st: 'a' };
+const { intents } = instance({
+  initialState: { ...INITIAL_STATE },
+  component: {
+    ${nameLine}
+    modelShape: { st: { type: 'string' } },
+    actions: { GO: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
+    acceptors: { GO: (m) => (p, { reject }) => { if (m.st !== 'a') return reject('done'); m.st = 'b'; } },
+  },
+});
+const getState = () => instance({}).getState();
+const setState = (s) => { instance({}).setState(s); };
+const init = () => { setState(INITIAL_STATE); };
+module.exports = { instance, init, actions: { GO: (d = {}) => intents.GO(d) }, getState, setState };
+`;
+  const goodPath = join(TMP, 'gate-good.cjs');
+  writeFileSync(goodPath, mkModule(''), 'utf-8');
+  let goodOk = true;
+  try { validateV2Module(loadSpec(goodPath)); } catch { goodOk = false; }
+  ok('an anonymous component passes the dead-at-init gate', goodOk);
+
+  const badPath = join(TMP, 'gate-named.cjs');
+  writeFileSync(badPath, mkModule(`name: 'gate',`), 'utf-8');
+  let badMsg = null;
+  try { validateV2Module(loadSpec(badPath)); } catch (e) { badMsg = e.message; }
+  ok('a NAMED component is refused as DEAD AT INIT with the name: diagnosis',
+    badMsg !== null && /DEAD AT INIT/.test(badMsg) && /name:/.test(badMsg));
 }
 
 console.log('5) corpus synthesis hygiene: stale traces cleaned, scenario names sanitized');

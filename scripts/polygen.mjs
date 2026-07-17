@@ -58,21 +58,42 @@ const { isSamV2Module } = samAdapter;
  */
 export function findDataDomainRefGaps(contract, code) {
   const gaps = [];
+  // Strings: quoted-literal presence. Numbers/booleans: standalone-token
+  // match — bare `code.includes(String(v))` made these UNFALSIFIABLE
+  // (any digit in a comment matched `3`; every module contains `true`
+  // in `strict: true`). Token matching still can't tell `true` the
+  // domain value from `true` the option flag — booleans stay a weak
+  // signal; the checker's manifest-driven exploration + coverage notes
+  // carry the real guarantee for those.
+  const scalarFound = (v) => {
+    const token = String(v).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+    return typeof v === 'string'
+      ? code.includes(`'${v}'`) || code.includes(`"${v}"`)
+      : new RegExp(`(?<![\\w.$])${token}(?![\\w.$])`).test(code);
+  };
+  // OBJECT-valued domain entries (e.g. childState = {shipState:'delivered'})
+  // are never referenced "verbatim" — code reads their LEAVES
+  // (`childState.shipState === 'delivered'`). Checking the whole object as a
+  // string made such entries permanently-unsatisfiable false positives that
+  // burned real repair iterations (see examples/polyrun-oms REPAIR-NOTE).
+  // So: recurse and require each scalar LEAF to be referenced, reporting the
+  // leaf path on a miss.
+  const leaves = (v, path) => {
+    if (v !== null && typeof v === 'object') {
+      const entries = Array.isArray(v) ? v.map((x, i) => [i, x]) : Object.entries(v);
+      return entries.flatMap(([k, x]) => leaves(x, `${path}.${k}`));
+    }
+    return [[path, v]];
+  };
   for (const [action, fields] of Object.entries(contract.dataDomain || {})) {
     for (const [field, values] of Object.entries(fields)) {
       for (const v of values) {
-        // Strings: quoted-literal presence. Numbers/booleans: standalone-token
-        // match — bare `code.includes(String(v))` made these UNFALSIFIABLE
-        // (any digit in a comment matched `3`; every module contains `true`
-        // in `strict: true`). Token matching still can't tell `true` the
-        // domain value from `true` the option flag — booleans stay a weak
-        // signal; the checker's manifest-driven exploration + coverage notes
-        // carry the real guarantee for those.
-        const token = String(v).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
-        const found = typeof v === 'string'
-          ? code.includes(`'${v}'`) || code.includes(`"${v}"`)
-          : new RegExp(`(?<![\\w.$])${token}(?![\\w.$])`).test(code);
-        if (!found) gaps.push(`${action}.${field} = ${JSON.stringify(v)} (declared in dataDomain, never referenced in the code — the transition it should gate may be unreachable)`);
+        for (const [path, leaf] of leaves(v, `${action}.${field}`)) {
+          if (leaf === null || !scalarFound(leaf)) {
+            if (leaf === null) continue; // null carries no referenceable token
+            gaps.push(`${path} = ${JSON.stringify(leaf)} (declared in dataDomain, never referenced in the code — the transition it should gate may be unreachable)`);
+          }
+        }
       }
     }
   }
@@ -115,6 +136,33 @@ export function validateV2Module(mod) {
     const problems = accessor.validate();
     if (Array.isArray(problems) && problems.length) {
       throw new Error(`generated module fails strict validate() (and was built NON-STRICT — the profile requires strict: true): ${problems.join('; ')}`);
+    }
+  }
+  // Dead-at-init gate: at least ONE declared domain step must be ACCEPTED
+  // from the initial state, or the whole machine is unreachable and every
+  // downstream stage silently checks nothing (the checker reports "1 state
+  // explored, no violations" — technically true, entirely vacuous). The
+  // known generator failure this catches: emitting `name:` on the SAM
+  // component, which binds acceptors to a LOCAL component state tree — every
+  // guard reads undefined and rejects, while validate() stays green.
+  {
+    const { makeSamAdapter, domainFromManifest } = samAdapter;
+    const adapter = makeSamAdapter(mod);
+    const { steps } = domainFromManifest(mod);
+    if (steps.length > 0) {
+      const initState = adapter.init();
+      const initKey = JSON.stringify(initState);
+      let live = false;
+      for (const step of steps.slice(0, 200)) {
+        try {
+          if (JSON.stringify(adapter.next(initState, step.action, step.data)) !== initKey) { live = true; break; }
+        } catch { /* a throwing step is not an accepting step; keep probing */ }
+      }
+      if (!live) {
+        throw new Error('generated module is DEAD AT INIT: every declared domain action is rejected from the initial state. '
+          + 'Most common cause: the component declares `name:`, which binds acceptors to a LOCAL state tree so every guard reads undefined — '
+          + 'the component must be anonymous (no `name:` key) so acceptors operate on the shared instance state.');
+      }
     }
   }
   return mod;
