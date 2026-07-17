@@ -21,8 +21,7 @@ examples/polygraph-oms-go/harness/*.exe
 examples/polyrun-oms/demo/.demo-state/
 
 # Personal drafts — not part of the project
-docs/linkedin-the-original-question.md
-docs/linkedin-teaser-post.md
+docs/linkedin-*.md
 
 # Eval — traces, generated specs, and results are regenerated on demand
 eval/machines/*/traces/
