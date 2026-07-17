@@ -17,8 +17,8 @@
 
   <div>
     <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">Versioning · fig 2</div>
-    <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Four things called \u201Ca version\u201D</div>
-    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #4b4f55; margin-top: 8px; max-width: 900px;">Conflating them is how most versioning schemes get into trouble — a \u201Cminor\u201D semantic change can be far more dangerous to in-flight state than a \u201Cmajor\u201D shape change with a clean migration.</div>
+    <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Four things called "a version"</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #4b4f55; margin-top: 8px; max-width: 900px;">Conflating them is how most versioning schemes get into trouble — a "minor" semantic change can be far more dangerous to in-flight state than a "major" shape change with a clean migration.</div>
   </div>
 
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px;">
@@ -53,7 +53,7 @@ class Component extends DCLogic {
         danger: 'The most under-estimated axis: a small rule change can drive existing in-flight state somewhere the old rules never could.' },
       { name: 'Vocabulary', tag: 'v.alphabet', color: '#3f7a54',
         what: 'Which actions exist at all — and, for orchestration, which completion signals a parent and child exchange.',
-        danger: 'Cross-version delivery: a courier webhook scheduled under one vocabulary arrives under another — at-least-once delivery\u2019s evil twin.' },
+        danger: 'Cross-version delivery: a courier webhook scheduled under one vocabulary arrives under another — at-least-once delivery\'s evil twin.' },
       { name: 'Intent', tag: 'v.invariants', color: '#b23b2e',
         what: 'The invariants themselves, which can strengthen or weaken independently of any code change.',
         danger: 'Semantic drift the invariants do not mention is invisible to every gate — versioning maturity is really invariant-writing maturity.' },

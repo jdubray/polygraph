@@ -18,7 +18,7 @@
   <div>
     <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">Versioning · fig 1</div>
     <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">The compatibility taxonomy</div>
-    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #4b4f55; margin-top: 8px; max-width: 880px;">\u201CCompatible\u201D is not one question. It is <strong style="font-weight:600;">five</strong> — and each has its own mechanical check.</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #4b4f55; margin-top: 8px; max-width: 880px;">"Compatible" is not one question. It is <strong style="font-weight:600;">five</strong> — and each has its own mechanical check.</div>
   </div>
 
   <div style="display: flex; flex-direction: column; gap: 9px; margin-top: 20px;">
@@ -54,8 +54,8 @@ class Component extends DCLogic {
         check: 'The landmine problem. The gate re-runs the exhaustive check with live snapshots as initial states — not "correct from init" but "can any sequence drive a currently-existing instance to a violation under the new rules." A computable property, not a checkbox.',
         gate: 'model check from live snapshots as initial states' },
       { name: 'Behavioral', color: '#bc6a1e', q: 'what happens to in-flight stimuli?',
-        check: 'A v1 timer firing into a v2 instance that no longer awaits it is not undefined behavior — it is a journaled rejected(\u2019stale-timer\u2019). A machine that is safe under redelivery is, for free, safe under cross-version delivery: the same problem, solved once.',
-        gate: 'observable rejection — verified as the machine\u2019s own behavior' },
+        check: 'A v1 timer firing into a v2 instance that no longer awaits it is not undefined behavior — it is a journaled rejected(\'stale-timer\'). A machine that is safe under redelivery is, for free, safe under cross-version delivery: the same problem, solved once.',
+        gate: 'observable rejection — verified as the machine\'s own behavior' },
       { name: 'Vocabulary & protocol', color: '#3f7a54', q: 'do the machines still speak?',
         check: 'Actions, effect kinds, and completion wirings are all declared and cross-checked at registration. A manifest wiring a completion to an action the machine no longer exports, or a parent spawning a child whose cancel disappeared, is a refused boot — the correct failure mode.',
         gate: 'load-time cross-checks at registration' },

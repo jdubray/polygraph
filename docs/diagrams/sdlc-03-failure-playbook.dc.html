@@ -54,11 +54,11 @@ class Component extends DCLogic {
     const P = '#b8892b', I = '#2f6f8f', X = '#b23b2e';
     const rows = [
       { signal: 'polygen NOT converged', sev: P, meaning: 'residual violation with a counterexample', move: 'Hand-repair at the counterexample + a REPAIR-NOTE, or raise --repair-max. Never ship as-is.' },
-      { signal: 'replay spec-errors cluster', sev: P, meaning: 'the LLM systematically misread a subtlety', move: 'Improve the contract\u2019s specialRules note; regenerate.' },
+      { signal: 'replay spec-errors cluster', sev: P, meaning: 'the LLM systematically misread a subtlety', move: 'Improve the contract\'s specialRules note; regenerate.' },
       { signal: 'code-finding', sev: I, meaning: 'code disagrees with independent readings of itself', move: 'Investigate by hand. It is a lead, not a verdict.' },
       { signal: 'check-effects BOUNDED', sev: P, meaning: 'exploration was truncated', move: 'Raise --depth / --max-paths; only pass --allow-bounded deliberately.' },
       { signal: 'poisoned instance', sev: X, meaning: '"cannot happen" happened', move: 'Fix the module / mapper → deploy gate → resolve the instance deliberately.' },
-      { signal: 'audit drift', sev: X, meaning: 'production \u2260 verified model', move: 'Incident: find the hot patch, the manual DB edit, or the harness bug.' },
+      { signal: 'audit drift', sev: X, meaning: 'production \≠ verified model', move: 'Incident: find the hot patch, the manual DB edit, or the harness bug.' },
       { signal: 'DLQ growth', sev: P, meaning: 'provider trouble beyond the retry budget', move: 'The machine already chose its onExhausted semantics; retry via dlq retry after the outage.' },
     ];
     return { rows: rows.map((r, i) => ({

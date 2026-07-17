@@ -41,7 +41,7 @@
 
   <div style="margin-top: 14px; display: flex; gap: 12px; align-items: flex-start; background: #1b1d1f; border-radius: 12px; padding: 15px 20px;">
     <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #ffd9a8; border: 1px solid #5c4a30; border-radius: 5px; padding: 3px 8px; flex: none; margin-top: 2px;">pays off downstream</span>
-    <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.45; color: #d7d2c6;">The continuous audit is <strong style="color:#fff;font-weight:500;">version-aware</strong>: windows journaled under an older machine version are counted and reported, not replayed through the current module — so a migration doesn\u2019t convert your pre-migration history into false drift, and genuine drift still surfaces.</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.45; color: #d7d2c6;">The continuous audit is <strong style="color:#fff;font-weight:500;">version-aware</strong>: windows journaled under an older machine version are counted and reported, not replayed through the current module — so a migration doesn\'t convert your pre-migration history into false drift, and genuine drift still surfaces.</div>
   </div>
 
 </div>
@@ -54,13 +54,13 @@ class Component extends DCLogic {
     const A = this.state.active, N = 4;
     const stages = [
       { name: 'Pure', sig: 'migrate(oldState) → newState · no I/O, no clock', accent: '#bc6a1e',
-        body: 'Because it is pure, it is checkable: the gate validates that the new module accepts every migrated snapshot, that the result equals the module\u2019s own observable projection (stray keys would poison later), and that the state invariants hold on every migrated state.' },
+        body: 'Because it is pure, it is checkable: the gate validates that the new module accepts every migrated snapshot, that the result equals the module\'s own observable projection (stray keys would poison later), and that the state invariants hold on every migrated state.' },
       { name: 'Two-phase', sig: 'validate ALL (dry run) → apply nothing on any failure', accent: '#bc6a1e',
-        body: 'Validate everything, apply nothing on any failure. A fleet is never left half-migrated by instance #4,217\u2019s weird state — always dry-run first, then apply.' },
+        body: 'Validate everything, apply nothing on any failure. A fleet is never left half-migrated by instance #4,217\'s weird state — always dry-run first, then apply.' },
       { name: 'Fenced', sig: 'apply guarded on the seq observed at validation', accent: '#bc6a1e',
         body: 'Each apply is guarded on the seq observed at validation time; an instance that took a live dispatch in between is skipped and reported, never silently overwritten with migrate(staleState). Re-run rather than force.' },
       { name: 'Journaled', sig: '$migrate row · pre = old · post = new · new version', accent: '#bc6a1e',
-        body: 'Every applied migration writes a $migrate row: pre = old snapshot, post = new, stamped with the new machine version and bumping the sequence. The journal\u2019s chain survives, getStateAt stays coherent, and the migration is in the audit trail rather than the event that invalidates it.' },
+        body: 'Every applied migration writes a $migrate row: pre = old snapshot, post = new, stamped with the new machine version and bumping the sequence. The journal\'s chain survives, getStateAt stays coherent, and the migration is in the audit trail rather than the event that invalidates it.' },
     ];
     const s = stages[A];
     return {

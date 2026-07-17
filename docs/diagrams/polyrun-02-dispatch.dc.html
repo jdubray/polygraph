@@ -19,7 +19,7 @@
     <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #bc6a1e;">polyrun · fig 2</div>
     <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Dispatch — one ACID transaction per step</div>
   </div>
-  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #bc6a1e; margin: 6px 0 20px;">There is no window in which the state says \u201Ccharging\u201D but no charge intent exists, or vice versa.</div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #bc6a1e; margin: 6px 0 20px;">There is no window in which the state says "charging" but no charge intent exists, or vice versa.</div>
 
   <div style="display: grid; grid-template-columns: 1fr 320px; gap: 26px; align-items: start;">
     <div style="display: flex;">
@@ -74,7 +74,7 @@ class Component extends DCLogic {
       { code: 'SELECT … FOR UPDATE  — single writer', name: 'Lock',
         body: 'The instance row is locked for the transaction: one writer at a time. Contention on a hot instance is inherent to serialized steps and bounded by step cost — a pure in-memory call, typically < 1 ms.' },
       { code: 'dedupe · guard  — cached result | terminal reject', name: 'Dedupe & guard',
-        body: 'A redelivered (instanceId, actionId) returns the original step\u2019s result without re-executing — at-least-once becomes effectively-once. A non-active instance journals an observable rejected(terminal | poisoned), never an error.' },
+        body: 'A redelivered (instanceId, actionId) returns the original step\'s result without re-executing — at-least-once becomes effectively-once. A non-active instance journals an observable rejected(terminal | poisoned), never an error.' },
       { code: 'setState(row.state) → pre = project(getState())', name: 'Rehydrate',
         body: 'Rehydration is snapshot-based: setState round-trips totally over the sealed shape — no event-sourced replay, no determinism sandbox. The observable projection pre is captured for the journal window.' },
       { code: "actions[action](data) · lastStep() → post", name: 'Step',

@@ -65,15 +65,15 @@ class Component extends DCLogic {
       { title: 'Intent', sub: 'one paragraph: states, events, "never happens"', gate: false },
       { title: 'Contract draft', sub: 'observable keys · domains · terminal states', gate: true },
       { title: 'Author module', sub: 'gates: v2 surface · strict validate · DEAD-AT-INIT', gate: false },
-      { title: 'Propose invariants', sub: 'the model\u2019s reading of your intent', gate: true },
-      { title: 'Model check \u21ba repair', sub: 'violation → fix code, never invariants', gate: false },
+      { title: 'Propose invariants', sub: 'the model\'s reading of your intent', gate: true },
+      { title: 'Model check \↺ repair', sub: 'violation → fix code, never invariants', gate: false },
       { title: 'Cross-check + corpus', sub: '→ module · invariants · report · traces', gate: false },
     ];
     const captions = [
       { t: 'Intent', c: 'Write one paragraph of intent: the states, the events, and anything you already know must never happen ("a customer is never charged twice").' },
       { t: 'Contract draft · HUMAN GATE #1', c: 'polygen drafts contract.json. It is now the design spec every downstream check is built against — confirm the observable keys, populated data domains, and terminal states before continuing.' },
       { t: 'Author module', c: 'polygen authors the SAM v2 module. Every stage boundary is gated: v2 surface, strict validate, and a DEAD-AT-INIT refusal — a module that validates clean but can never move is rejected with the diagnosis in the retry prompt.' },
-      { t: 'Propose invariants · HUMAN GATE #2', c: 'polygen proposes invariants.mjs — the model\u2019s reading of your intent, not ground truth. Add the rules only you know; never weaken one to make a check pass.' },
+      { t: 'Propose invariants · HUMAN GATE #2', c: 'polygen proposes invariants.mjs — the model\'s reading of your intent, not ground truth. Add the rules only you know; never weaken one to make a check pass.' },
       { t: 'Model check ⟲ self-repair', c: 'Exhaustive model check from init. On a violation the self-repair loop fixes the CODE, never the invariants, and re-checks — looping until clean or reporting NOT converged.' },
       { t: 'Cross-check + corpus', c: 'Contract/code domain cross-checks catch enum-spelling and domain-reference gaps; then a replayed regression corpus is synthesized. Output: module + invariants + report + traces. A run that did not converge says so.' },
     ];
@@ -81,7 +81,7 @@ class Component extends DCLogic {
     return {
       stages: stages.map((s, i) => ({
         n: i + 1, title: s.title, sub: s.sub,
-        tag: s.gate ? '\u2691 human review' : (i === 4 ? '\u21ba self-repair' : 'agent'),
+        tag: s.gate ? '\⚑ human review' : (i === 4 ? '\↺ self-repair' : 'agent'),
         tagColor: s.gate ? gateAccent : (i === 4 ? '#6a4b9c' : '#a09a8c'),
         on: () => this.go(i),
         dot: i > step ? '#c3bdae' : (s.gate ? gateAccent : norm),

@@ -81,17 +81,17 @@ class Component extends DCLogic {
       { kicker: 'transactional outbox', name: 'Outbox rows', sub: 'committed with the state (one txn)', accent: amber,
         body: 'The mapper runs inside the dispatch transaction; its intent rows land in the outbox atomically with the new state. There is never a state that implies an effect without the intent row, or vice versa.' },
       { kicker: 'worker loop', name: 'Effect runner', sub: 'FOR UPDATE SKIP LOCKED · lease', accent: amber,
-        body: 'The runner claims pending intents under a lease and marks them inflight. A crashed worker\u2019s inflight rows revert to pending when the lease expires — at-least-once by lease, the recovery model of a Temporal activity timeout minus the heartbeat protocol.' },
+        body: 'The runner claims pending intents under a lease and marks them inflight. A crashed worker\'s inflight rows revert to pending when the lease expires — at-least-once by lease, the recovery model of a Temporal activity timeout minus the heartbeat protocol.' },
       { kicker: 'YOUR code', name: 'Handler(payload, key)', sub: 'idempotent · outside the boundary', accent: '#b23b2e',
         body: 'The handler performs the side effect with the stable idempotency key. Long-running work uses request/callback: initiate, return promptly, and let the result arrive as an external dispatch — keeping the wait inside the verified boundary.' },
       { kicker: 'guarantee', name: 'exactly-once emission', sub: 'two same-kind intents → distinct keys', accent: amber,
         body: 'The ordinal is a per-step counter over all manifest-declared intents, so two intents of the same kind in one step get distinct keys by construction. Emission is exactly-once; execution is at-least-once and the key makes handler idempotency tractable.' },
     ];
     const outcomes = [
-      { tag: 'success', name: 'onSuccess / onFailure', color: '#3f7a54', sub: 'result mapped into the action\u2019s schema · dispatched back · actionId = key + \u2019:done\u2019',
-        body: 'On success or failure the manifest\u2019s completion action is dispatched back into the instance, with the handler result mapped into the action\u2019s declared data schema. Completions use derived actionIds so redelivery is deduped.' },
+      { tag: 'success', name: 'onSuccess / onFailure', color: '#3f7a54', sub: 'result mapped into the action\'s schema · dispatched back · actionId = key + \':done\'',
+        body: 'On success or failure the manifest\'s completion action is dispatched back into the instance, with the handler result mapped into the action\'s declared data schema. Completions use derived actionIds so redelivery is deduped.' },
       { tag: 'retry', name: 'backoff + jitter', color: '#bc6a1e', sub: 'attempts++ · exponential backoff · up to maxAttempts',
-        body: 'A failed attempt increments the counter and re-queues with exponential backoff plus jitter, per the manifest\u2019s retry policy, until it succeeds or exhausts maxAttempts.' },
+        body: 'A failed attempt increments the counter and re-queues with exponential backoff plus jitter, per the manifest\'s retry policy, until it s쳮ds or exhausts maxAttempts.' },
       { tag: 'exhausted', name: 'DLQ + onExhausted', color: '#b23b2e', sub: 'mark dead · dispatch onExhausted → verified logic decides',
         body: 'Exhausted intents go to the DLQ and, if declared, dispatch the onExhausted action into the instance — so the machine (verified logic) decides what "provider is down" means, not the infrastructure.' },
     ];

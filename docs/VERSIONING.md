@@ -13,6 +13,9 @@ This essay lays out why the problem is genuinely hard, the taxonomy of
 compatibility it decomposes into, how the Polygraph/polygen/polyrun triad
 addresses each piece, and — honestly — what remains open.
 
+[![The compatibility taxonomy](diagrams/thumbs/versioning-01-taxonomy.png)](diagrams/versioning-01-taxonomy.dc.html)
+*Interactive diagram — [The compatibility taxonomy](diagrams/versioning-01-taxonomy.dc.html)*
+
 ## Why it is hard
 
 **1. The state is the contract you didn't know you signed.** Every
@@ -66,9 +69,6 @@ production.
 
 The triad's answer starts by refusing to treat "compatible" as one
 question. It is five, and each has its own mechanical check:
-
-[![The compatibility taxonomy](diagrams/thumbs/versioning-01-taxonomy.png)](diagrams/versioning-01-taxonomy.dc.html)
-*Interactive diagram — [The compatibility taxonomy](diagrams/versioning-01-taxonomy.dc.html)*
 
 ### Shape compatibility — *does the new machine accept the old state?*
 

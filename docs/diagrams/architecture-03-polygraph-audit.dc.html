@@ -71,7 +71,7 @@ class Component extends DCLogic {
       { t: 'Controls before trust', c: 'A hand-written reference spec must replay 100% and a deliberately mutated one must fail, proving the harness can tell good from bad before any generated spec means anything.' },
       { t: 'Generate ×N', c: 'Several specs are generated independently, and ground-truth traces are captured from the code actually executing — instrumented app, test-double harness, or the polyrun journal.' },
       { t: 'Replay + vote', c: 'Replay every { pre, action, data, post } window against every spec. N-way voting means one bad generation cannot decide the outcome; disagreements triage into spec-error · code-finding · contract-error.' },
-      { t: 'Model check', c: 'A faithful spec reproduces the code\u2019s bugs, so replay alone cannot see them. Exhaustive iteration against intent invariants surfaces the reachable bad state — with a shortest action path as a ready repro (optionally transpiled to TLA+ and run through TLC).' },
+      { t: 'Model check', c: 'A faithful spec reproduces the code\'s bugs, so replay alone cannot see them. Exhaustive iteration against intent invariants surfaces the reachable bad state — with a shortest action path as a ready repro (optionally transpiled to TLA+ and run through TLC).' },
     ];
     return {
       stages: stages.map((s, i) => ({

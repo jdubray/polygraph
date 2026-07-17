@@ -60,24 +60,24 @@ class Component extends DCLogic {
     })) });
     return { sections: [
       S('ARCHITECTURE.md', '#1b1d1f', 'three engines around one artifact family', [
-        ['Three engines, one artifact family', 'The audit \u2192 verification \u2192 production loop, with the shared artifact hub.', 'architecture-01-three-engines.dc.html'],
+        ['Three engines, one artifact family', 'The audit \→ verification \→ production loop, with the shared artifact hub.', 'architecture-01-three-engines.dc.html'],
         ['The artifact family', 'The five artifacts, who produces each and who consumes it.', 'architecture-02-artifact-family.dc.html'],
-        ['Polygraph \u2014 audit', 'Controls, N-way specs, replay and model check against existing code.', 'architecture-03-polygraph-audit.dc.html'],
-        ['polygen \u2014 author', 'Intent \u2192 contract \u2192 module \u2192 the repair loop that never touches invariants.', 'architecture-04-polygen-author.dc.html'],
+        ['Polygraph \— audit', 'Controls, N-way specs, replay and model check against existing code.', 'architecture-03-polygraph-audit.dc.html'],
+        ['polygen \— author', 'Intent \→ contract \→ module \→ the repair loop that never touches invariants.', 'architecture-04-polygen-author.dc.html'],
       ]),
       S('SDLC.md', '#6a4b9c', 'threading the engines into an agentic lifecycle', [
-        ['A lifecycle for verified code', 'Phases 0\u20137 with the three human gates surfaced.', 'sdlc-01-lifecycle.dc.html'],
-        ['The division of labor', 'What the human, the agent, and CI each own \u2014 and the four things agents must not do alone.', 'sdlc-02-division-of-labor.dc.html'],
-        ['Failure playbook', 'Signal \u2192 meaning \u2192 move, across seven failure modes.', 'sdlc-03-failure-playbook.dc.html'],
+        ['A lifecycle for verified code', 'Phases 0\–7 with the three human gates surfaced.', 'sdlc-01-lifecycle.dc.html'],
+        ['The division of labor', 'What the human, the agent, and CI each own \— and the four things agents must not do alone.', 'sdlc-02-division-of-labor.dc.html'],
+        ['Failure playbook', 'Signal \→ meaning \→ move, across seven failure modes.', 'sdlc-03-failure-playbook.dc.html'],
       ]),
       S('VERSIONING.md', '#2f6f8f', 'the hardest problem the toolset touches', [
-        ['The compatibility taxonomy', 'Five kinds of \u201Ccompatible,\u201D each with its own mechanical check.', 'versioning-01-taxonomy.dc.html'],
-        ['Four things called \u201Ca version\u201D', 'Shape, semantics, vocabulary, intent \u2014 and the danger in each.', 'versioning-02-four-versions.dc.html'],
-        ['Migration as an artifact', 'Pure, two-phase, fenced, journaled \u2014 and a version-aware audit.', 'versioning-03-migration.dc.html'],
+        ['The compatibility taxonomy', 'Five kinds of "compatible," each with its own mechanical check.', 'versioning-01-taxonomy.dc.html'],
+        ['Four things called "a version"', 'Shape, semantics, vocabulary, intent \— and the danger in each.', 'versioning-02-four-versions.dc.html'],
+        ['Migration as an artifact', 'Pure, two-phase, fenced, journaled \— and a version-aware audit.', 'versioning-03-migration.dc.html'],
       ]),
       S('polyrun-spec.md', '#bc6a1e', 'durable execution for verified machines', [
-        ['The runtime', 'Kernel, module, store, workers, fan-out \u2014 and the verified boundary.', 'polyrun-01-runtime.dc.html'],
-        ['Dispatch \u2014 one ACID transaction', 'The single write path, step by step, committing everything together.', 'polyrun-02-dispatch.dc.html'],
+        ['The runtime', 'Kernel, module, store, workers, fan-out \— and the verified boundary.', 'polyrun-01-runtime.dc.html'],
+        ['Dispatch \— one ACID transaction', 'The single write path, step by step, committing everything together.', 'polyrun-02-dispatch.dc.html'],
         ['The effect outbox &amp; completion loop', 'At-least-once execution, exactly-once emission, retries, DLQ, and the loop back.', 'polyrun-03-effects-loop.dc.html'],
       ]),
     ] };
