@@ -1,0 +1,54 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "shipState",
+      "type": "enum: 'preparing' | 'inTransit' | 'delivered' | 'cancelledShipment'"
+    }
+  ],
+  "initState": {
+    "shipState": "preparing"
+  },
+  "actions": {
+    "SHIP": {
+      "dataFields": {}
+    },
+    "DELIVER": {
+      "dataFields": {}
+    },
+    "CANCEL_SHIPMENT": {
+      "dataFields": {}
+    }
+  },
+  "dataDomain": {
+    "SHIP": {},
+    "DELIVER": {},
+    "CANCEL_SHIPMENT": {}
+  },
+  "terminalKey": "shipState",
+  "terminalStates": [
+    "delivered",
+    "cancelledShipment"
+  ],
+  "specialRules": [
+    {
+      "name": "already-shipped",
+      "note": "SHIP is only applicable while shipState == 'preparing'; in any other state it is an observable rejection (reason = this rule's name).",
+      "whenState": "shipState != 'preparing'",
+      "whenAction": "SHIP"
+    },
+    {
+      "name": "not-in-transit",
+      "note": "DELIVER is only applicable while shipState == 'inTransit'; in any other state it is an observable rejection (reason = this rule's name).",
+      "whenState": "shipState != 'inTransit'",
+      "whenAction": "DELIVER"
+    },
+    {
+      "name": "cancel-too-late",
+      "note": "CANCEL_SHIPMENT is only applicable while shipState == 'preparing' — once handed to the courier a shipment cannot be cancelled; in any other state it is an observable rejection (reason = this rule's name). This action is also the parent order's declared onParentTerminal cancel, so it MUST be delivery-safe: late or duplicate deliveries reject cleanly.",
+      "whenState": "shipState != 'preparing'",
+      "whenAction": "CANCEL_SHIPMENT"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre, never a throw and never a silent mutation (completions and timers are delivered at-least-once)."
+}

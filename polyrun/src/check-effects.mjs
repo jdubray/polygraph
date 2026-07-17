@@ -78,10 +78,17 @@ function validateIntents(intents, manifest, violations, pathDescr) {
         violations.push({ invariant: 'mapper-defect:spawnChild-shape', counterexample: pathDescr(), emitted: [], detail: JSON.stringify(intent) });
       } else if (childKeys.has(intent.childKey)) {
         violations.push({ invariant: 'mapper-defect:duplicate-spawn-key', counterexample: pathDescr(), emitted: [], detail: intent.childKey });
-      } else childKeys.add(intent.childKey);
+      } else {
+        childKeys.add(intent.childKey);
+        // Spawns are emissions too: invariants may count children per path
+        // ("spawns exactly `fulfillments` shipments", "no spawn before charge").
+        out.push({ kind: 'spawnChild', payload: { machineId: intent.machineId, childKey: intent.childKey } });
+      }
     } else if (intent.kind === 'signalChild') {
       if (typeof intent.childKey !== 'string' || !intent.childKey || typeof intent.action !== 'string' || !intent.action) {
         violations.push({ invariant: 'mapper-defect:signalChild-shape', counterexample: pathDescr(), emitted: [], detail: JSON.stringify(intent) });
+      } else {
+        out.push({ kind: 'signalChild', payload: { childKey: intent.childKey, action: intent.action } });
       }
     } else if (declared[intent.kind]) {
       out.push(intent);

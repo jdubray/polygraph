@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>polyrun OMS — storefront</title>
+<style>
+  :root { color-scheme: light dark; --line:#8884; --accent:#4a7dbd; --bad:#c0504d; --ok:#5a9e6f; --dim:#8888; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 0; padding: 1.5rem; max-width: 76rem; margin-inline: auto; }
+  h1 { font-size: 1.1rem; } h1 small { color: var(--dim); font-weight: normal; }
+  h2 { font-size: .95rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+  @media (max-width: 60rem) { .cols { grid-template-columns: 1fr; } }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .25rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: normal; }
+  button { font: inherit; border: 1px solid var(--line); border-radius: 4px; padding: .2rem .7rem; background: transparent; color: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  .completed, .delivered, .inTransit { color: var(--ok); }
+  .cancelled, .rejected, .paymentFailed, .partiallyDelivered, .cancelledShipment { color: var(--bad); }
+  .awaitingAmend { color: var(--accent); }
+  .dim { color: var(--dim); }
+  label { display: block; padding: .15rem 0; cursor: pointer; }
+  #msg { min-height: 1.4em; color: var(--dim); }
+</style>
+</head>
+<body>
+<h1>polyrun OMS <small>— every machine below is LLM-authored and model-checked</small></h1>
+<p id="msg"></p>
+<div class="cols">
+  <section>
+    <h2>&#128100; User — place an order</h2>
+    <div id="products"></div>
+    <p><button class="primary" id="place">Place order</button> <span class="dim" id="cartinfo"></span></p>
+    <h2>Your orders</h2>
+    <table><thead><tr><th>order</th><th>state</th><th>total</th><th>shipments</th><th></th></tr></thead><tbody id="orders"></tbody></table>
+  </section>
+  <section>
+    <h2>&#128666; Courier — shipments</h2>
+    <table><thead><tr><th>shipment</th><th>order</th><th>state</th><th></th></tr></thead><tbody id="shipments"></tbody></table>
+  </section>
+</div>
+<script>
+  // Product fixtures: fulfillments = number of distinct warehouses in the cart
+  // (each warehouse ships separately), mirroring the OMS reference app's
+  // order-splitting behavior.
+  const PRODUCTS = [
+    { sku: 'tee',    name: 'Polygraph tee',        cents: 2500, warehouse: 'A' },
+    { sku: 'mug',    name: 'State-machine mug',    cents: 1500, warehouse: 'A' },
+    { sku: 'poster', name: 'TLA+ wall poster',     cents: 1900, warehouse: 'B' },
+    { sku: 'socks',  name: 'Deterministic socks',  cents:  900, warehouse: 'B' },
+  ];
+  const $ = (s) => document.querySelector(s);
+  const msg = (t, bad) => { const m = $('#msg'); m.textContent = t; m.style.color = bad ? 'var(--bad)' : 'var(--dim)'; };
+  const jfetch = async (url, opts) => {
+    const r = await fetch(url, opts);
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || r.status);
+    return body;
+  };
+  const post = (url, body) => jfetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const cell = (tr, text, cls) => { const td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
+  const money = (c) => '$' + (c / 100).toFixed(2);
+  const aid = (label) => label + ':' + crypto.randomUUID(); // one per user gesture: retries of THIS request dedupe
+
+  // ---- user panel ----
+  const productsDiv = $('#products');
+  for (const p of PRODUCTS) {
+    const label = document.createElement('label');
+    const box = document.createElement('input');
+    box.type = 'checkbox'; box.dataset.sku = p.sku;
+    box.addEventListener('change', updateCart);
+    label.appendChild(box);
+    label.appendChild(document.createTextNode(` ${p.name} — ${money(p.cents)} `));
+    const wh = document.createElement('span');
+    wh.className = 'dim'; wh.textContent = `(warehouse ${p.warehouse})`;
+    label.appendChild(wh);
+    productsDiv.appendChild(label);
+  }
+  function cart() {
+    const skus = [...productsDiv.querySelectorAll('input:checked')].map((b) => b.dataset.sku);
+    const items = PRODUCTS.filter((p) => skus.includes(p.sku));
+    const totalCents = items.reduce((a, p) => a + p.cents, 0);
+    const fulfillments = new Set(items.map((p) => p.warehouse)).size;
+    return { items, totalCents, fulfillments };
+  }
+  function updateCart() {
+    const c = cart();
+    $('#cartinfo').textContent = c.items.length
+      ? `${c.items.length} item(s), ${money(c.totalCents)}, ships in ${c.fulfillments} shipment(s)`
+      : '';
+  }
+  $('#place').addEventListener('click', async () => {
+    const c = cart();
+    if (c.items.length === 0) return msg('pick at least one product', true);
+    try {
+      const id = 'order-' + Date.now().toString(36);
+      await post('/machines/order/instances', { instanceId: id });
+      await post(`/instances/${id}/actions`, { action: 'SUBMIT', data: { fulfillments: c.fulfillments, totalCents: c.totalCents }, actionId: aid('submit') });
+      msg(`order ${id} placed`);
+      refresh();
+    } catch (e) { msg(e.message, true); }
+  });
+
+  async function amend(orderId) {
+    // The amend flow: retry with whatever is in the cart now.
+    const c = cart();
+    if (c.items.length === 0) return msg('pick replacement products first, then amend', true);
+    try {
+      await post(`/instances/${orderId}/actions`, { action: 'AMEND', data: { fulfillments: c.fulfillments, totalCents: c.totalCents }, actionId: aid('amend') });
+      msg(`order ${orderId} amended`);
+      refresh();
+    } catch (e) { msg(e.message, true); }
+  }
+  async function cancelOrder(orderId) {
+    try {
+      const r = await post(`/instances/${orderId}/actions`, { action: 'CANCEL', data: { reason: 'customer-request' }, actionId: aid('cancel') });
+      msg(r.stepKind === 'rejected' ? `cancel rejected: ${r.rejectReason}` : `order ${orderId} cancelled`, r.stepKind === 'rejected');
+      refresh();
+    } catch (e) { msg(e.message, true); }
+  }
+
+  // ---- courier panel ----
+  async function signal(shipmentId, action) {
+    try {
+      const r = await post(`/instances/${shipmentId}/actions`, { action, data: {}, actionId: aid(action.toLowerCase()) });
+      msg(r.stepKind === 'rejected' ? `${action} rejected: ${r.rejectReason}` : `${action} ok`, r.stepKind === 'rejected');
+      refresh();
+    } catch (e) { msg(e.message, true); }
+  }
+
+  // ---- polling ----
+  async function refresh() {
+    try {
+      const orders = await jfetch('/machines/order/instances');
+      const otb = $('#orders'); otb.replaceChildren();
+      for (const o of orders.sort((a, b) => a.instanceId < b.instanceId ? 1 : -1)) {
+        const tr = document.createElement('tr');
+        cell(tr, o.instanceId);
+        cell(tr, o.state.orderState, o.state.orderState);
+        cell(tr, money(o.state.totalCents));
+        cell(tr, o.state.fulfillments ? `${o.state.shipmentsDelivered}/${o.state.fulfillments} delivered` + (o.state.shipmentsFailed ? `, ${o.state.shipmentsFailed} failed` : '') : '—');
+        const actions = cell(tr, '');
+        if (o.state.orderState === 'awaitingAmend') {
+          const b = document.createElement('button'); b.textContent = 'Amend from cart'; b.onclick = () => amend(o.instanceId); actions.appendChild(b);
+        }
+        if (['pending', 'fraudCheck', 'awaitingAmend'].includes(o.state.orderState)) {
+          const b = document.createElement('button'); b.textContent = 'Cancel'; b.onclick = () => cancelOrder(o.instanceId); actions.appendChild(b);
+        }
+        otb.appendChild(tr);
+      }
+      const ships = await jfetch('/machines/shipment/instances');
+      const stb = $('#shipments'); stb.replaceChildren();
+      for (const s of ships.sort((a, b) => a.instanceId < b.instanceId ? 1 : -1)) {
+        const tr = document.createElement('tr');
+        cell(tr, s.instanceId.slice(0, 10) + '…');
+        cell(tr, '');
+        cell(tr, s.state.shipState, s.state.shipState);
+        const actions = cell(tr, '');
+        if (s.state.shipState === 'preparing') {
+          const b = document.createElement('button'); b.textContent = 'Ship'; b.onclick = () => signal(s.instanceId, 'SHIP'); actions.appendChild(b);
+        }
+        if (s.state.shipState === 'inTransit') {
+          const b = document.createElement('button'); b.textContent = 'Deliver'; b.onclick = () => signal(s.instanceId, 'DELIVER'); actions.appendChild(b);
+        }
+        stb.appendChild(tr);
+      }
+    } catch (e) { msg('refresh failed: ' + e.message, true); }
+  }
+  refresh();
+  setInterval(refresh, 1500);
+</script>
+</body>
+</html>
