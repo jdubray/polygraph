@@ -1,0 +1,571 @@
+{
+  "summary": {
+    "specs": 3,
+    "liveSpecs": 3,
+    "deadSpecs": [],
+    "windows": 27,
+    "consistent": 27,
+    "specError": 0,
+    "codeFinding": 0,
+    "unscoreableAll": 0,
+    "unhandledWindows": 0
+  },
+  "findings": [],
+  "perWindow": [
+    {
+      "scenario": "s1_happy_two_fulfillments.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s1_happy_two_fulfillments.ndjson",
+      "index": 1,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "unhandled",
+        "unhandled",
+        "rejected(out-of-scope-actions-are-noops)"
+      ]
+    },
+    {
+      "scenario": "s1_happy_two_fulfillments.ndjson",
+      "index": 2,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "unhandled",
+        "unhandled",
+        "rejected(out-of-scope-actions-are-noops)"
+      ]
+    },
+    {
+      "scenario": "s1_happy_two_fulfillments.ndjson",
+      "index": 3,
+      "action": "SHIPMENT_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s1_happy_two_fulfillments.ndjson",
+      "index": 4,
+      "action": "SHIPMENT_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s2_amend_then_complete.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s2_amend_then_complete.ndjson",
+      "index": 1,
+      "action": "CUSTOMER_ACTION",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s2_amend_then_complete.ndjson",
+      "index": 2,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "unhandled",
+        "unhandled",
+        "rejected(out-of-scope-actions-are-noops)"
+      ]
+    },
+    {
+      "scenario": "s2_amend_then_complete.ndjson",
+      "index": 3,
+      "action": "SHIPMENT_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s3_customer_cancel.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s3_customer_cancel.ndjson",
+      "index": 1,
+      "action": "CUSTOMER_ACTION",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s4_customer_timeout.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s4_customer_timeout.ndjson",
+      "index": 1,
+      "action": "CUSTOMER_TIMEOUT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s5_charge_declined_single.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s5_charge_declined_single.ndjson",
+      "index": 1,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s6_charge_error_single.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s6_charge_error_single.ndjson",
+      "index": 1,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s7_partial_shipment_failure.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s7_partial_shipment_failure.ndjson",
+      "index": 1,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "unhandled",
+        "unhandled",
+        "rejected(out-of-scope-actions-are-noops)"
+      ]
+    },
+    {
+      "scenario": "s7_partial_shipment_failure.ndjson",
+      "index": 2,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "unhandled",
+        "unhandled",
+        "rejected(out-of-scope-actions-are-noops)"
+      ]
+    },
+    {
+      "scenario": "s7_partial_shipment_failure.ndjson",
+      "index": 3,
+      "action": "SHIPMENT_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s7_partial_shipment_failure.ndjson",
+      "index": 4,
+      "action": "SHIPMENT_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s8_all_unavailable_amend_completes_empty.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s8_all_unavailable_amend_completes_empty.ndjson",
+      "index": 1,
+      "action": "CUSTOMER_ACTION",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s9_both_charges_fail_order_failed.ndjson",
+      "index": 0,
+      "action": "RESERVED",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s9_both_charges_fail_order_failed.ndjson",
+      "index": 1,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    },
+    {
+      "scenario": "s9_both_charges_fail_order_failed.ndjson",
+      "index": 2,
+      "action": "CHARGE_RESULT",
+      "statuses": [
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "verdict": "consistent",
+      "classifications": [
+        "mutated",
+        "mutated",
+        "mutated"
+      ]
+    }
+  ],
+  "invReport": {
+    "specs": 3,
+    "checkedSpecs": 3,
+    "statesExplored": 26,
+    "capHit": false,
+    "errors": [],
+    "domainNotes": [],
+    "violations": [
+      {
+        "invariant": "completed-implies-some-fulfillment-completed",
+        "kind": "state",
+        "specs": 3,
+        "example": {
+          "invariant": "completed-implies-some-fulfillment-completed",
+          "kind": "state",
+          "path": [
+            {
+              "action": null,
+              "data": null,
+              "state": {
+                "status": "pending",
+                "fulfillments": []
+              }
+            },
+            {
+              "action": "RESERVED",
+              "data": {
+                "available": [
+                  false
+                ]
+              },
+              "state": {
+                "status": "customerActionRequired",
+                "fulfillments": [
+                  "unavailable"
+                ]
+              }
+            },
+            {
+              "action": "CUSTOMER_ACTION",
+              "data": {
+                "action": "amend"
+              },
+              "state": {
+                "status": "completed",
+                "fulfillments": [
+                  "cancelled"
+                ]
+              }
+            }
+          ],
+          "detail": "reachable state violates the rule"
+        },
+        "strength": "all-specs"
+      },
+      {
+        "invariant": "completed-implies-no-failed-fulfillment",
+        "kind": "state",
+        "specs": 3,
+        "example": {
+          "invariant": "completed-implies-no-failed-fulfillment",
+          "kind": "state",
+          "path": [
+            {
+              "action": null,
+              "data": null,
+              "state": {
+                "status": "pending",
+                "fulfillments": []
+              }
+            },
+            {
+              "action": "RESERVED",
+              "data": {
+                "available": [
+                  true,
+                  true
+                ]
+              },
+              "state": {
+                "status": "processing",
+                "fulfillments": [
+                  "processing",
+                  "processing"
+                ]
+              }
+            },
+            {
+              "action": "CHARGE_RESULT",
+              "data": {
+                "index": 0,
+                "success": false
+              },
+              "state": {
+                "status": "processing",
+                "fulfillments": [
+                  "failed",
+                  "processing"
+                ]
+              }
+            },
+            {
+              "action": "SHIPMENT_RESULT",
+              "data": {
+                "index": 1,
+                "ok": true
+              },
+              "state": {
+                "status": "completed",
+                "fulfillments": [
+                  "failed",
+                  "completed"
+                ]
+              }
+            }
+          ],
+          "detail": "reachable state violates the rule"
+        },
+        "strength": "all-specs"
+      }
+    ]
+  },
+  "tlaReport": null
+}

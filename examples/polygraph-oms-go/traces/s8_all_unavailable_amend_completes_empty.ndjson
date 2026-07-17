@@ -1,0 +1,2 @@
+{"pre":{"status":"pending","fulfillments":[]},"action":"RESERVED","data":{"available":[false,false]},"post":{"status":"customerActionRequired","fulfillments":["unavailable","unavailable"]}}
+{"pre":{"status":"customerActionRequired","fulfillments":["unavailable","unavailable"]},"action":"CUSTOMER_ACTION","data":{"action":"amend"},"post":{"status":"completed","fulfillments":["cancelled","cancelled"]}}

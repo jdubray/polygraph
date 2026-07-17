@@ -1,0 +1,72 @@
+	Status string `json:"status"`
+}
+
+const (
+	// OrderStatusPending is the status of a pending Order.
+	OrderStatusPending = "pending"
+
+	// OrderStatusProcessing is the status of a processing Order.
+	OrderStatusProcessing = "processing"
+
+	// OrderStatusCustomerActionRequired is the status of an Order that requires customer action.
+	OrderStatusCustomerActionRequired = "customerActionRequired"
+
+	// OrderStatusCompleted is the status of a completed Order.
+	OrderStatusCompleted = "completed"
+
+	// OrderStatusFailed is the status of a failed Order.
+	OrderStatusFailed = "failed"
+
+	// OrderStatusCancelled is the status of a cancelled Order.
+	OrderStatusCancelled = "cancelled"
+
+	// OrderStatusTimedOut is the status of a timed out Order.
+	OrderStatusTimedOut = "timedOut"
+)
+
+// ListOrderEntry is an entry in the Order list.
+type ListOrderEntry struct {
+	ID         string    `json:"id"`
+	Status     string    `json:"status"`
+	ReceivedAt time.Time `json:"receivedAt" db:"received_at"`
+
+const (
+	// FulfillmentStatusUnavailable is the status of an unavailable Fulfillment.
+	FulfillmentStatusUnavailable = "unavailable"
+
+	// FulfillmentStatusPending is the status of a pending Fulfillment.
+	FulfillmentStatusPending = "pending"
+
+	// FulfillmentStatusProcessing is the status of a processing Fulfillment.
+	FulfillmentStatusProcessing = "processing"
+
+	// FulfillmentStatusCompleted is the status of a processing Fulfillment.
+	FulfillmentStatusCompleted = "completed"
+
+	// FulfillmentStatusCancelled is the status of a cancelled Fulfillment.
+	FulfillmentStatusCancelled = "cancelled"
+
+	// FulfillmentStatusFailed is the status of a failed Fulfillment.
+	FulfillmentStatusFailed = "failed"
+)
+
+// CustomerActionSignalName is the name of the signal used to send customer actions.
+const CustomerActionSignalName = "CustomerAction"
+
+// CustomerActionSignal is the signal sent to the Fulfillment workflow to indicate a customer action.
+type CustomerActionSignal struct {
+	Action string `json:"action"`
+}
+
+const (
+	// CustomerActionCancel is the action to cancel a Fulfillment.
+	CustomerActionCancel = "cancel"
+
+	// CustomerActionAmend is the action to amend a Fulfillment.
+	CustomerActionAmend = "amend"
+
+	// CustomerActionTimedOut represents customer failing to take action in time.
+	CustomerActionTimedOut = "timedOut"
+)
+
+// OrderResult is the result of an Order workflow.

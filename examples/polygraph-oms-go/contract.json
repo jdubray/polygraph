@@ -1,0 +1,86 @@
+{
+  "lang": "go",
+  "sourceNote": "Audited code: the Order workflow of github.com/temporalio/reference-app-orders-go (app/order/workflows.go, vendored under source/). The observable state is the workflow's own StatusQuery projection: the order status plus the per-fulfillment status list.",
+  "stateKeys": [
+    { "name": "status", "type": "enum: 'pending' | 'customerActionRequired' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'timedOut'" },
+    { "name": "fulfillments", "type": "array of enum: 'pending' | 'unavailable' | 'processing' | 'completed' | 'cancelled' | 'failed' — one entry per fulfillment, [] before reservation" }
+  ],
+  "initState": { "status": "pending", "fulfillments": [] },
+  "actions": {
+    "RESERVED": {
+      "dataFields": {
+        "available": "array of boolean — per-fulfillment availability from the ReserveItems activity. Builds the fulfillment list. If ANY entry is false the order requires customer action; otherwise it proceeds directly to processing, at which point every fulfillment starts processing (charges are scheduled)."
+      }
+    },
+    "CUSTOMER_ACTION": {
+      "dataFields": {
+        "action": "enum: 'amend' | 'cancel'. amend: unavailable fulfillments become cancelled and the order proceeds to processing (remaining fulfillments start processing). cancel: the order becomes cancelled; fulfillment statuses are LEFT AS THEY ARE (the code does not cancel them on this path)."
+      }
+    },
+    "CUSTOMER_TIMEOUT": {
+      "dataFields": {}
+    },
+    "CHARGE_RESULT": {
+      "dataFields": {
+        "index": "integer — which fulfillment's Charge activity resolved (0-based)",
+        "success": "boolean — the charge outcome. success: the fulfillment stays 'processing' (its shipment child is started; no observable change). failure: the fulfillment becomes 'failed' and no shipment is started."
+      }
+    },
+    "SHIPMENT_RESULT": {
+      "dataFields": {
+        "index": "integer — which fulfillment's Shipment child workflow completed (0-based)",
+        "ok": "boolean — ok: the fulfillment becomes 'completed'; not ok: 'failed'. When the LAST fulfillment finishes (completed/failed/cancelled all count as finished), the order becomes 'failed' if EVERY fulfillment is 'failed' (at least one), otherwise 'completed'."
+      }
+    }
+  },
+  "dataDomain": {
+    "RESERVED": {
+      "available": [[true], [false], [true, true], [true, false], [false, false]]
+    },
+    "CUSTOMER_ACTION": { "action": ["amend", "cancel"] },
+    "CUSTOMER_TIMEOUT": {},
+    "CHARGE_RESULT": { "index": [0, 1], "success": [true, false] },
+    "SHIPMENT_RESULT": { "index": [0, 1], "ok": [true, false] }
+  },
+  "terminalKey": "status",
+  "terminalStates": ["completed", "failed", "cancelled", "timedOut"],
+  "specialRules": [
+    {
+      "name": "reservation-splits-and-routes",
+      "note": "RESERVED (only from 'pending') creates one fulfillment per availability entry: true → 'pending', false → 'unavailable'. If any is 'unavailable' → status 'customerActionRequired'. Otherwise → status 'processing' AND every fulfillment moves to 'processing' in the same step (the workflow starts all fulfillment goroutines immediately).",
+      "whenState": "status == 'pending'",
+      "whenAction": "RESERVED"
+    },
+    {
+      "name": "amend-cancels-unavailable-then-processes",
+      "note": "CUSTOMER_ACTION{amend} (only from 'customerActionRequired'): every 'unavailable' fulfillment becomes 'cancelled'; status → 'processing'; every remaining 'pending' fulfillment becomes 'processing' in the same step. NOTE: if ALL fulfillments were unavailable, they all become 'cancelled' and processing completes immediately with status 'completed' IN THE SAME STEP (cancelled fulfillments are skipped, zero failures ≠ all-failed).",
+      "whenState": "status == 'customerActionRequired'",
+      "whenAction": "CUSTOMER_ACTION{action:'amend'}"
+    },
+    {
+      "name": "cancel-leaves-fulfillments",
+      "note": "CUSTOMER_ACTION{cancel} (only from 'customerActionRequired'): status → 'cancelled'. Fulfillment statuses are NOT changed (they remain 'pending'/'unavailable').",
+      "whenState": "status == 'customerActionRequired'",
+      "whenAction": "CUSTOMER_ACTION{action:'cancel'}"
+    },
+    {
+      "name": "timeout-cancels-everything",
+      "note": "CUSTOMER_TIMEOUT (only from 'customerActionRequired'): every fulfillment becomes 'cancelled'; status → 'timedOut'.",
+      "whenState": "status == 'customerActionRequired'",
+      "whenAction": "CUSTOMER_TIMEOUT"
+    },
+    {
+      "name": "completion-rollup",
+      "note": "When a CHARGE_RESULT{success:false} or SHIPMENT_RESULT finishes the LAST unfinished fulfillment (unfinished = 'pending' or 'processing'), the order status resolves in the same step: 'failed' if every fulfillment is 'failed' and there is at least one, else 'completed'. A mix of completed/failed/cancelled — or even ALL-cancelled — yields 'completed'.",
+      "whenState": "status == 'processing'",
+      "whenAction": "CHARGE_RESULT | SHIPMENT_RESULT"
+    },
+    {
+      "name": "out-of-scope-actions-are-noops",
+      "note": "An action arriving in a state that does not await it (e.g. CHARGE_RESULT while 'pending', CUSTOMER_ACTION while 'processing', anything in a terminal state, or an index with no matching unfinished fulfillment) yields post == pre.",
+      "whenState": "any non-awaiting state",
+      "whenAction": "any"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state yields post == pre."
+}

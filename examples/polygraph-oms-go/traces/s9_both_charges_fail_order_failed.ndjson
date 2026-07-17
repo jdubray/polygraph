@@ -1,0 +1,3 @@
+{"pre":{"status":"pending","fulfillments":[]},"action":"RESERVED","data":{"available":[true,true]},"post":{"status":"processing","fulfillments":["processing","processing"]}}
+{"pre":{"status":"processing","fulfillments":["processing","processing"]},"action":"CHARGE_RESULT","data":{"index":0,"success":false},"post":{"status":"processing","fulfillments":["failed","processing"]}}
+{"pre":{"status":"processing","fulfillments":["failed","processing"]},"action":"CHARGE_RESULT","data":{"index":1,"success":false},"post":{"status":"failed","fulfillments":["failed","failed"]}}

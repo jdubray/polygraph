@@ -1,0 +1,5 @@
+{"pre":{"status":"pending","fulfillments":[]},"action":"RESERVED","data":{"available":[true,true]},"post":{"status":"processing","fulfillments":["processing","processing"]}}
+{"pre":{"status":"processing","fulfillments":["processing","processing"]},"action":"CHARGE_RESULT","data":{"index":0,"success":true},"post":{"status":"processing","fulfillments":["processing","processing"]}}
+{"pre":{"status":"processing","fulfillments":["processing","processing"]},"action":"CHARGE_RESULT","data":{"index":1,"success":true},"post":{"status":"processing","fulfillments":["processing","processing"]}}
+{"pre":{"status":"processing","fulfillments":["processing","processing"]},"action":"SHIPMENT_RESULT","data":{"index":0,"ok":true},"post":{"status":"processing","fulfillments":["completed","processing"]}}
+{"pre":{"status":"processing","fulfillments":["completed","processing"]},"action":"SHIPMENT_RESULT","data":{"index":1,"ok":false},"post":{"status":"completed","fulfillments":["completed","failed"]}}

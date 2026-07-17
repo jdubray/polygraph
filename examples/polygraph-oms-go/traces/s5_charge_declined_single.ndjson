@@ -1,0 +1,2 @@
+{"pre":{"status":"pending","fulfillments":[]},"action":"RESERVED","data":{"available":[true]},"post":{"status":"processing","fulfillments":["processing"]}}
+{"pre":{"status":"processing","fulfillments":["processing"]},"action":"CHARGE_RESULT","data":{"index":0,"success":false},"post":{"status":"failed","fulfillments":["failed"]}}
