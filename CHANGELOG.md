@@ -3,6 +3,23 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## Unreleased — polyrun (2026-07-16..17)
+
+New component: **polyrun**, a durable execution harness for polygen-verified
+SAM v2 strict-profile machines — spec in `docs/polyrun-spec.md`, code under
+`polyrun/`. Snapshot-based durability (no event-sourced replay, no
+determinism constraints), transactional outbox with idempotency keys and
+leases, durable timers whose staleness is resolved by verified
+`reject(reason)`, SQLite and Postgres adapters, standalone worker, HTTP
+facade + read-only UI, and a CLI (deploy gate, effect-emission checker over
+the machine ∘ mapper composition, journal-replay audit, migrate, archive,
+DLQ). First-class parent/child machines and post-commit journal fan-out.
+The production journal doubles as a Polygraph trace corpus. Every milestone
+(M0–M3) shipped with an adversarial multi-agent review; all confirmed
+findings fixed. 60 tests green on both stores; the kill -9 mid-charge demo
+(`npm run demo:polyrun`) recovers with exactly one charge — on both the
+hand-written and the polygen-authored order machine.
+
 ## 2.0.1 — 2026-07-15
 
 Hardening release: a full code review of the 2.0.0 pipeline (four review

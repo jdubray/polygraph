@@ -33,12 +33,20 @@ export async function auditMachine({ runtime, machineId, sinceMs = 0, instanceId
 
   const mismatches = [];
   let windowsReplayed = 0;
+  let olderVersionSkipped = 0;
 
   for (const inst of instances) {
     const journal = await runtime.getJournal(inst.instance_id);
     for (const row of journal) {
       if (row.at < sinceMs) continue;
-      if (row.action === '$create') continue;
+      if (row.action === '$create' || row.action === '$migrate') continue;
+      // Version-aware: windows journaled under an OLDER module version are in
+      // that version's state shape — replaying them through the current
+      // module would report false drift on every pre-migration row forever.
+      if (row.machine_version && row.machine_version !== machine.version) {
+        olderVersionSkipped += 1;
+        continue;
+      }
       if (row.step_kind === 'accepted') {
         windowsReplayed += 1;
         let replayed;
@@ -96,12 +104,13 @@ export async function auditMachine({ runtime, machineId, sinceMs = 0, instanceId
     }
   }
 
-  return { instancesAudited: instances.length, windowsReplayed, mismatches };
+  return { instancesAudited: instances.length, windowsReplayed, olderVersionSkipped, mismatches };
 }
 
 export function renderAudit(machineId, result) {
   const lines = [];
-  lines.push(`audit ${machineId}: ${result.instancesAudited} instance(s), ${result.windowsReplayed} window(s) replayed`);
+  lines.push(`audit ${machineId}: ${result.instancesAudited} instance(s), ${result.windowsReplayed} window(s) replayed`
+    + (result.olderVersionSkipped ? ` (${result.olderVersionSkipped} window(s) from older module versions — not replayed)` : ''));
   if (result.mismatches.length === 0) {
     lines.push('drift: NONE — production journal matches the module');
   } else {

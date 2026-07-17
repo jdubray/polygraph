@@ -174,15 +174,18 @@ try {
     }
   } else if (command === 'migrate') {
     // FR-6.2 step 4: a pure migrate.cjs (module.exports.migrate(oldState) ->
-    // newState) is gated over live snapshots — round-trip through the NEW
-    // module and (when configured) state invariants over migrated states —
-    // and applied only with --apply.
+    // newState) is gated over live snapshots and applied only with --apply.
+    // Two-phase: validate EVERYTHING first (a failure applies nothing), then
+    // apply each instance fenced on its validation-time seq and with a
+    // $migrate journal marker in the same transaction — the audit's
+    // version-aware replay depends on that record.
     const only = flag('machine');
     const apply = args.includes('--apply');
-    let migrated = 0, failed = 0;
+    let migrated = 0, failed = 0, fencedOut = 0, ran = 0;
     for (const m of config.machines ?? []) {
       if (only && m.machineId !== only) continue;
       if (!m.migrate) continue;
+      ran += 1;
       const { createRequire } = await import('node:module');
       const migrateMod = createRequire(import.meta.url)(m.migrate);
       if (typeof migrateMod.migrate !== 'function') { console.error(`${m.machineId}: ${m.migrate} does not export migrate()`); exitCode = 1; continue; }
@@ -191,27 +194,55 @@ try {
       if (m.invariants) {
         try { preds = (await import(pathToFileURL(m.invariants).href)).stateInvariants ?? []; } catch { /* gate reported by deploy */ }
       }
+      // ---- phase 1: validate all ----
+      const plan = [];
       for (const inst of await rt.list(m.machineId)) {
         if (inst.status === 'poisoned') continue;
-        let next;
         try {
-          next = migrateMod.migrate(inst.state);
+          const next = migrateMod.migrate(inst.state);
           machine.mod.init();
           machine.mod.setState(next); // the NEW module must accept the migrated snapshot
+          // the persisted snapshot must equal the observable projection —
+          // stray keys a merge-lenient module tolerates would poison later
+          const raw = JSON.parse(JSON.stringify(machine.mod.getState(), (k, v) =>
+            (typeof k === 'string' && k.startsWith('__')) || typeof v === 'function' ? undefined : v));
+          const projected = {};
+          for (const k of machine.observableKeys ?? Object.keys(raw)) projected[k] = raw[k];
+          if (stable(projected) !== stable(next)) {
+            throw new Error('migrated state is not the module projection (stray or dropped keys)');
+          }
           for (const inv of preds) {
             if (!inv.pred(next)) throw new Error(`migrated state violates '${inv.name}'`);
           }
+          plan.push({ inst, next });
         } catch (err) {
           failed += 1;
           console.error(`  migrate FAIL: ${m.machineId}/${inst.instance_id} — ${err.message}`);
-          continue;
         }
-        migrated += 1;
-        if (apply) await rt.store.rewriteSnapshot(inst.instance_id, next, machine.version, rt.now());
+      }
+      if (failed > 0) continue; // gate: apply nothing for this machine
+      // ---- phase 2: apply, fenced + journaled ----
+      for (const { inst, next } of plan) {
+        if (apply) {
+          const applied = await rt.store.txn(async () => {
+            const newSeq = inst.seq + 1;
+            const changed = await rt.store.rewriteSnapshot(inst.instance_id, next, machine.version, rt.now(), inst.seq, newSeq);
+            if (!changed) return false; // a live dispatch moved the instance
+            await rt.store.insertJournal({
+              instanceId: inst.instance_id, machineVersion: machine.version, seq: newSeq,
+              action: '$migrate', data: {}, pre: inst.state, post: next,
+              stepKind: 'accepted', rejectReason: null, actionId: `$migrate:${newSeq}`, now: rt.now(),
+            });
+            return true;
+          });
+          if (applied) migrated += 1;
+          else { fencedOut += 1; console.error(`  migrate SKIP: ${m.machineId}/${inst.instance_id} moved during migration — re-run`); }
+        } else migrated += 1;
       }
     }
-    console.log(`migrate: ${migrated} snapshot(s) ${apply ? 'MIGRATED' : 'validated (dry run — use --apply)'}, ${failed} failed`);
-    if (failed) exitCode = 1;
+    if (ran === 0) { console.error('migrate: no machine with a migrate module (config key: migrate) matched'); exitCode = 1; }
+    console.log(`migrate: ${migrated} snapshot(s) ${apply ? 'MIGRATED' : 'validated (dry run — use --apply)'}, ${failed} failed${fencedOut ? `, ${fencedOut} skipped (moved during migration — re-run)` : ''}`);
+    if (failed || fencedOut) exitCode = 1;
   } else if (command === 'archive') {
     // FR-1.2 retention: export each eligible terminal instance (journal +
     // final state, ndjson) then purge its rows — only with --apply.
@@ -222,27 +253,33 @@ try {
     const apply = args.includes('--apply');
     if (apply && !outDir) { console.error('--apply requires --out <dir> (never purge without an export)'); process.exit(2); }
     const { mkdirSync } = await import('node:fs');
-    if (outDir) mkdirSync(outDir, { recursive: true });
+    if (outDir && apply) mkdirSync(outDir, { recursive: true });
     let archived = 0, skipped = 0;
-    const seen = new Set();
+    let cursor = { updatedAt: 0, instanceId: '' };
     for (;;) {
-      const fresh = (await rt.store.archivableInstances(before, 100)).filter((i) => !seen.has(i.instance_id));
-      if (fresh.length === 0) break;
-      for (const inst of fresh) {
-        seen.add(inst.instance_id);
+      const batch = await rt.store.archivableInstances(before, 100, cursor);
+      if (batch.length === 0) break;
+      cursor = { updatedAt: batch[batch.length - 1].updated_at, instanceId: batch[batch.length - 1].instance_id };
+      for (const inst of batch) {
+        if (!apply) { archived += 1; continue; } // dry run: report only, no side effects
         const journal = await rt.getJournal(inst.instance_id);
-        if (outDir) {
-          const lines = journal.map((r) => JSON.stringify(r)).join('\n');
-          writeFileSync(`${outDir}/${inst.instance_id}.ndjson`, `${JSON.stringify({ archived: inst })}\n${lines}\n`);
+        // instance ids are caller-supplied — never let them become path segments
+        const safeName = encodeURIComponent(inst.instance_id);
+        const lines = journal.map((r) => JSON.stringify(r)).join('\n');
+        writeFileSync(`${outDir}/${safeName}.ndjson`, `${JSON.stringify({ archived: inst })}\n${lines}\n`);
+        try {
+          // fenced on the exported seq: rows journaled after the export
+          // (e.g. a stale timer's rejected(terminal) step) must never be
+          // purged unexported
+          await rt.store.purgeInstance(inst.instance_id, inst.seq);
+          archived += 1;
+        } catch (err) {
+          skipped += 1;
+          console.error(`  skip ${inst.instance_id}: ${err.message}`);
         }
-        if (apply) {
-          try { await rt.store.purgeInstance(inst.instance_id); archived += 1; }
-          catch (err) { skipped += 1; console.error(`  skip ${inst.instance_id}: ${err.message}`); }
-        } else archived += 1;
       }
-      if (!apply) break; // dry run: one batch is enough to report
     }
-    console.log(`archive: ${archived} instance(s) ${apply ? 'exported+purged' : 'eligible (dry run — use --apply with --out)'}${skipped ? `, ${skipped} skipped (unsettled effects)` : ''}`);
+    console.log(`archive: ${archived} instance(s) ${apply ? 'exported+purged' : 'eligible (dry run — use --apply with --out)'}${skipped ? `, ${skipped} skipped (see reasons above)` : ''}`);
   } else if (command === 'export-traces') {
     const instance = flag('instance');
     if (!instance) usage();

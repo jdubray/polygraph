@@ -307,22 +307,45 @@ export class Store {
 
   // ---- archival (M3, FR-1.2) ------------------------------------------------
 
-  /** Terminal instances not updated since `beforeMs`, ready for archival. */
-  async archivableInstances(beforeMs, limit = 100) {
+  /** Terminal instances not updated since `beforeMs`, ready for archival.
+   *  Keyset-paginated on (updated_at, instance_id) so a run can walk past
+   *  unpurgeable rows instead of stalling on the first full batch of them. */
+  async archivableInstances(beforeMs, limit = 100, after = { updatedAt: 0, instanceId: '' }) {
     return this._run(() => this.db.prepare(
-      `SELECT * FROM pr_instance WHERE status = 'terminal' AND updated_at < ? ORDER BY updated_at LIMIT ?`
-    ).all(beforeMs, limit).map((r) => ({ ...r, state: JSON.parse(r.state) })));
+      `SELECT * FROM pr_instance
+       WHERE status = 'terminal' AND updated_at < ?
+         AND (updated_at > ? OR (updated_at = ? AND instance_id > ?))
+       ORDER BY updated_at, instance_id LIMIT ?`
+    ).all(beforeMs, after.updatedAt, after.updatedAt, after.instanceId, limit)
+      .map((r) => ({ ...r, state: JSON.parse(r.state) })));
   }
 
-  /** Delete one archived instance's rows. The caller has already exported
-   *  them; this only removes settled data (scheduled timers were cancelled
-   *  at terminal; pending/inflight outbox rows block archival). */
-  async purgeInstance(instanceId) {
+  /** Delete one archived instance's rows. Refuses when: effects are
+   *  unsettled; the journal moved past the exported seq (rows would be
+   *  destroyed unexported); an ACTIVE child still references this parent (its
+   *  terminal notify would roll back its own step forever); or an ACTIVE
+   *  parent survives (a later signalChild would poison it). */
+  async purgeInstance(instanceId, expectedSeq) {
     return this.txn(() => {
+      const inst = this.db.prepare(`SELECT * FROM pr_instance WHERE instance_id = ?`).get(instanceId);
+      if (!inst) throw new Error(`instance '${instanceId}' does not exist`);
+      if (expectedSeq !== undefined && inst.seq !== expectedSeq) {
+        throw new Error(`instance '${instanceId}' moved since export (seq ${inst.seq} != ${expectedSeq})`);
+      }
       const busy = this.db.prepare(
         `SELECT COUNT(*) AS n FROM pr_outbox WHERE instance_id = ? AND status IN ('pending','inflight')`
       ).get(instanceId).n;
       if (busy > 0) throw new Error(`instance '${instanceId}' still has ${busy} unsettled effect(s)`);
+      const activeChildren = this.db.prepare(
+        `SELECT COUNT(*) AS n FROM pr_instance WHERE parent_instance_id = ? AND status = 'active'`
+      ).get(instanceId).n;
+      if (activeChildren > 0) throw new Error(`instance '${instanceId}' has ${activeChildren} active child(ren)`);
+      if (inst.parent_instance_id) {
+        const parent = this.db.prepare(`SELECT status FROM pr_instance WHERE instance_id = ?`).get(inst.parent_instance_id);
+        if (parent && parent.status === 'active') {
+          throw new Error(`instance '${instanceId}' has an active parent '${inst.parent_instance_id}'`);
+        }
+      }
       this.db.prepare(`DELETE FROM pr_journal WHERE instance_id = ?`).run(instanceId);
       this.db.prepare(`DELETE FROM pr_outbox WHERE instance_id = ?`).run(instanceId);
       this.db.prepare(`DELETE FROM pr_timer WHERE instance_id = ?`).run(instanceId);
@@ -337,11 +360,15 @@ export class Store {
     ).run(untilMs, intentId));
   }
 
-  /** Rewrite an instance's snapshot + version (migration tooling). */
-  async rewriteSnapshot(instanceId, state, machineVersion, now) {
+  /** Rewrite an instance's snapshot + version (migration tooling), fenced
+   *  on the seq observed at validation time — a live dispatch committing in
+   *  between must not be silently overwritten with migrate(staleState).
+   *  Bumps seq to newSeq (the $migrate journal row's seq). Returns the
+   *  number of rows changed (0 = fence rejected). */
+  async rewriteSnapshot(instanceId, state, machineVersion, now, expectedSeq, newSeq) {
     return this._run(() => this.db.prepare(
-      `UPDATE pr_instance SET state = ?, machine_version = ?, updated_at = ? WHERE instance_id = ?`
-    ).run(JSON.stringify(state), machineVersion, now, instanceId));
+      `UPDATE pr_instance SET state = ?, machine_version = ?, seq = ?, updated_at = ? WHERE instance_id = ? AND seq = ?`
+    ).run(JSON.stringify(state), machineVersion, newSeq, now, instanceId, expectedSeq).changes);
   }
 
   // ---- the one write path (FR-2.2) ----------------------------------------

@@ -111,8 +111,13 @@ export class Workers {
       const ctx = {
         instanceId: row.instance_id, seq: row.seq, attempt: attempts,
         extendLease: async (ms) => {
+          if (!Number.isFinite(ms) || ms <= 0) throw new Error(`extendLease: ms must be a positive number, got ${ms}`);
           extraMs += ms;
-          await this.rt.store.extendLease(row.intent_id, this.rt.now() + this.leaseMs + extraMs);
+          // Heartbeat semantics: the lease horizon is re-based from NOW on
+          // each call (never accumulated into the far future — a crash after
+          // many extensions must still be recovered promptly), and never
+          // shortened below the base lease.
+          await this.rt.store.extendLease(row.intent_id, this.rt.now() + Math.max(this.leaseMs, ms));
         },
       };
       result = await withTimeout(

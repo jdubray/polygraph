@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createRuntime } from '../src/index.mjs';
@@ -24,8 +24,9 @@ const machineDef = {
 };
 
 function runCli(cfgPath, ...cmd) {
-  try { return { code: 0, out: execFileSync(process.execPath, ['--no-warnings', cli, ...cmd, '--config', cfgPath], { cwd: repoRoot, encoding: 'utf8' }) }; }
-  catch (err) { return { code: err.status, out: `${err.stdout}${err.stderr}` }; }
+  // spawnSync so stderr (skip reasons, gate detail) is captured on success too
+  const res = spawnSync(process.execPath, ['--no-warnings', cli, ...cmd, '--config', cfgPath], { cwd: repoRoot, encoding: 'utf8' });
+  return { code: res.status, out: `${res.stdout}${res.stderr}` };
 }
 
 function writeCfg(dir, dbPath, extraMachine = '') {
@@ -78,7 +79,8 @@ test('archive: dry run reports, --apply exports then purges, unsettled effects b
   const applied = runCli(cfg, 'archive', '--before', '2000000', '--out', outDir, '--apply');
   assert.equal(applied.code, 0, applied.out);
   assert.match(applied.out, /1 instance\(s\) exported\+purged/);
-  assert.match(applied.out, /1 skipped \(unsettled effects\)/);
+  assert.match(applied.out, /1 skipped/);
+  assert.match(applied.out, /unsettled effect/);
 
   // export exists and carries the journal
   const exported = readdirSync(outDir);
@@ -175,4 +177,114 @@ test('lease extension: a long handler that extends its lease is not re-claimed a
   await tick;
   assert.equal(runs, 1, 'the extended lease must prevent re-claim');
   assert.equal((await rt.getState('l1')).state.orderState, 'shipping');
+});
+
+test('purge guards: active children and active parents block archival', async (t) => {
+  const rt = await createRuntime({
+    store: { sqlite: ':memory:' },
+    machines: [
+      machineDef,
+      { machineId: 'shipment', module: join(here, 'fixtures', 'shipment-machine.cjs'),
+        isTerminal: (s) => ['delivered', 'cancelledShipment'].includes(s.shipState) },
+    ],
+    handlers: {},
+  });
+  t.after(() => rt.close());
+  const machine = rt.machines.get('order');
+  const original = machine.mapper;
+  machine.mapper = (pre, action, data, post) =>
+    (pre.orderState !== 'shipping' && post.orderState === 'shipping')
+      ? [{ kind: 'spawnChild', machineId: 'shipment', childKey: 'main', onComplete: 'SHIPMENT_DELIVERED' }]
+      : [];
+  t.after(() => { machine.mapper = original; });
+
+  await rt.create('order', 'pg1');
+  await rt.dispatch('pg1', 'SUBMIT', { totalCents: 2500 }, 'a1');
+  await rt.dispatch('pg1', 'FRAUD_PASSED', { itemsAvailable: true }, 'a2');
+  await rt.dispatch('pg1', 'CHARGE_SUCCEEDED', { txId: 't' }, 'a3'); // spawns child (preparing, active)
+  const child = await rt.store.findChild('pg1', 'main');
+  await rt.dispatch('pg1', 'SHIPMENT_DELIVERED', {}, 'a4'); // parent terminal, child still active
+
+  // terminal parent with an ACTIVE child: purge must refuse — the child's
+  // eventual terminal notify into a purged parent would roll back forever
+  await assert.rejects(() => rt.store.purgeInstance('pg1'), /active child/);
+
+  // child terminal, parent ACTIVE: purging the child must refuse (the parent
+  // can still signalChild → poison). Wire onComplete to an action the parent
+  // REJECTS in 'shipping' so the terminal notify leaves the parent active.
+  machine.mapper = (pre, action, data, post) =>
+    (pre.orderState !== 'shipping' && post.orderState === 'shipping')
+      ? [{ kind: 'spawnChild', machineId: 'shipment', childKey: 'main', onComplete: 'CHARGE_FAILED' }]
+      : [];
+  await rt.create('order', 'pg2');
+  await rt.dispatch('pg2', 'SUBMIT', { totalCents: 2500 }, 'b1');
+  await rt.dispatch('pg2', 'FRAUD_PASSED', { itemsAvailable: true }, 'b2');
+  await rt.dispatch('pg2', 'CHARGE_SUCCEEDED', { txId: 't' }, 'b3'); // spawns child of ACTIVE parent
+  const child2 = await rt.store.findChild('pg2', 'main');
+  await rt.dispatch(child2.instance_id, 'CANCEL_SHIPMENT', {}, 'b4'); // child terminal; notify rejected → parent stays active
+  assert.equal((await rt.getState('pg2')).status, 'active');
+  await assert.rejects(() => rt.store.purgeInstance(child2.instance_id), /active parent/);
+});
+
+test('migrate + audit: version-aware audit stays clean after a shape-preserving migration', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'polyrun-m3-'));
+  t.after(() => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* win */ } });
+  const dbPath = join(dir, 'aud.sqlite');
+  {
+    const rt = await createRuntime({ store: { sqlite: dbPath }, machines: [machineDef], handlers: {} });
+    await rt.create('order', 'va1');
+    await rt.dispatch('va1', 'SUBMIT', { totalCents: 2500 }, 'a1');
+    await rt.close();
+  }
+  const migratePath = join(dir, 'migrate.cjs');
+  writeFileSync(migratePath, `module.exports.migrate = (s) => ({ ...s, totalCents: s.totalCents * 10 });`);
+  const cfg = writeCfg(dir, dbPath, `migrate: ${JSON.stringify(migratePath)},`);
+  assert.equal(runCli(cfg, 'migrate', '--apply').code, 0);
+
+  // the $migrate journal marker exists and chains pre -> post
+  const rt = await createRuntime({ store: { sqlite: dbPath }, machines: [machineDef], handlers: {} });
+  t.after(() => rt.close());
+  const journal = await rt.getJournal('va1');
+  const marker = journal.find((r) => r.action === '$migrate');
+  assert.ok(marker, 'migration must leave a journal record');
+  assert.equal(marker.post.totalCents, 25000);
+  assert.equal((await rt.getState('va1')).seq, marker.seq, 'snapshot seq must match the marker');
+
+  // pre-migration windows replay against the SAME module version here (the
+  // module did not change), so a plain audit is clean; the marker is skipped
+  const audit = runCli(cfg, 'audit');
+  assert.equal(audit.code, 0, audit.out);
+  assert.match(audit.out, /drift: NONE/);
+});
+
+test('migrate: validation failure on ONE instance applies NOTHING (two-phase gate)', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'polyrun-m3-'));
+  t.after(() => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* win */ } });
+  const dbPath = join(dir, 'gate.sqlite');
+  {
+    const rt = await createRuntime({ store: { sqlite: dbPath }, machines: [machineDef], handlers: {} });
+    await rt.create('order', 'g1');
+    await rt.dispatch('g1', 'SUBMIT', { totalCents: 2500 }, 'a1');
+    await rt.create('order', 'g2'); // pending: totalCents 0 → migration divides by it → NaN
+    await rt.close();
+  }
+  const migratePath = join(dir, 'partial.cjs');
+  writeFileSync(migratePath, `module.exports.migrate = (s) => ({ ...s, totalCents: s.totalCents > 0 ? s.totalCents * 10 : 'zero' });`);
+  const cfg = writeCfg(dir, dbPath, `migrate: ${JSON.stringify(migratePath)},`);
+  const res = runCli(cfg, 'migrate', '--apply');
+  assert.equal(res.code, 1);
+  assert.match(res.out, /migrate FAIL/);
+  const rt = await createRuntime({ store: { sqlite: dbPath }, machines: [machineDef], handlers: {} });
+  t.after(() => rt.close());
+  assert.equal((await rt.getState('g1')).state.totalCents, 2500, 'the valid instance must NOT have been migrated');
+});
+
+test('migrate with no matching machine is a loud failure, not a silent pass', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'polyrun-m3-'));
+  t.after(() => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* win */ } });
+  const dbPath = join(dir, 'none.sqlite');
+  const cfg = writeCfg(dir, dbPath); // no migrate key
+  const res = runCli(cfg, 'migrate');
+  assert.equal(res.code, 1);
+  assert.match(res.out, /no machine with a migrate module/);
 });

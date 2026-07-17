@@ -355,18 +355,36 @@ export class PgStore {
 
   // ---- archival (M3, FR-1.2) ------------------------------------------------
 
-  async archivableInstances(beforeMs, limit = 100) {
+  async archivableInstances(beforeMs, limit = 100, after = { updatedAt: 0, instanceId: '' }) {
     const { rows } = await this._q(
-      `SELECT * FROM pr_instance WHERE status = 'terminal' AND updated_at < $1 ORDER BY updated_at LIMIT $2`,
-      [beforeMs, limit]);
+      `SELECT * FROM pr_instance
+       WHERE status = 'terminal' AND updated_at < $1
+         AND (updated_at > $2 OR (updated_at = $2 AND instance_id > $3))
+       ORDER BY updated_at, instance_id LIMIT $4`,
+      [beforeMs, after.updatedAt, after.instanceId, limit]);
     return rows.map((r) => this._instanceRow(r));
   }
 
-  async purgeInstance(instanceId) {
+  async purgeInstance(instanceId, expectedSeq) {
     return this.txn(async () => {
+      const instRes = await this._q(`SELECT * FROM pr_instance WHERE instance_id = $1 FOR UPDATE`, [instanceId]);
+      const inst = instRes.rows[0];
+      if (!inst) throw new Error(`instance '${instanceId}' does not exist`);
+      if (expectedSeq !== undefined && Number(inst.seq) !== expectedSeq) {
+        throw new Error(`instance '${instanceId}' moved since export (seq ${inst.seq} != ${expectedSeq})`);
+      }
       const { rows } = await this._q(
         `SELECT COUNT(*)::int AS n FROM pr_outbox WHERE instance_id = $1 AND status IN ('pending','inflight')`, [instanceId]);
       if (rows[0].n > 0) throw new Error(`instance '${instanceId}' still has ${rows[0].n} unsettled effect(s)`);
+      const kids = await this._q(
+        `SELECT COUNT(*)::int AS n FROM pr_instance WHERE parent_instance_id = $1 AND status = 'active'`, [instanceId]);
+      if (kids.rows[0].n > 0) throw new Error(`instance '${instanceId}' has ${kids.rows[0].n} active child(ren)`);
+      if (inst.parent_instance_id) {
+        const parent = await this._q(`SELECT status FROM pr_instance WHERE instance_id = $1`, [inst.parent_instance_id]);
+        if (parent.rows[0] && parent.rows[0].status === 'active') {
+          throw new Error(`instance '${instanceId}' has an active parent '${inst.parent_instance_id}'`);
+        }
+      }
       await this._q(`DELETE FROM pr_journal WHERE instance_id = $1`, [instanceId]);
       await this._q(`DELETE FROM pr_outbox WHERE instance_id = $1`, [instanceId]);
       await this._q(`DELETE FROM pr_timer WHERE instance_id = $1`, [instanceId]);
@@ -379,10 +397,13 @@ export class PgStore {
     await this._q(`UPDATE pr_outbox SET claimed_until = $2 WHERE intent_id = $1 AND status = 'inflight'`, [intentId, untilMs]);
   }
 
-  /** Rewrite an instance's snapshot + version (migration tooling). */
-  async rewriteSnapshot(instanceId, state, machineVersion, now) {
-    await this._q(`UPDATE pr_instance SET state = $2, machine_version = $3, updated_at = $4 WHERE instance_id = $1`,
-      [instanceId, JSON.stringify(state), machineVersion, now]);
+  /** Rewrite an instance's snapshot + version (migration tooling), fenced
+   *  on the seq observed at validation time. Returns changed-row count. */
+  async rewriteSnapshot(instanceId, state, machineVersion, now, expectedSeq, newSeq) {
+    const res = await this._q(
+      `UPDATE pr_instance SET state = $2, machine_version = $3, seq = $5, updated_at = $4 WHERE instance_id = $1 AND seq = $6`,
+      [instanceId, JSON.stringify(state), machineVersion, now, newSeq, expectedSeq]);
+    return res.rowCount;
   }
 
   // ---- timers ---------------------------------------------------------------
