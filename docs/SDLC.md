@@ -14,6 +14,12 @@ The division of labor, stated once and used everywhere:
 | **agent** (Claude Code + this plugin) | draft contracts, author machines, build test doubles, capture traces, run pipelines, triage, propose repairs |
 | **CI** | run the no-API-key gates on every change; block on exit codes |
 
+[![A lifecycle for verified stateful code](diagrams/thumbs/sdlc-01-lifecycle.png)](diagrams/sdlc-01-lifecycle.dc.html)
+*Interactive diagram — [A lifecycle for verified stateful code](diagrams/sdlc-01-lifecycle.dc.html) (click through phases 0–7)*
+
+[![The division of labor](diagrams/thumbs/sdlc-02-division-of-labor.png)](diagrams/sdlc-02-division-of-labor.dc.html)
+*Interactive diagram — [The division of labor](diagrams/sdlc-02-division-of-labor.dc.html)*
+
 ---
 
 ## Phase 0 — Decide which door you are entering
@@ -237,6 +243,9 @@ make a check pass. Those four are the human's whole job in this lifecycle —
 small in hours, decisive in outcome.
 
 ## Failure playbook
+
+[![Failure playbook](diagrams/thumbs/sdlc-03-failure-playbook.png)](diagrams/sdlc-03-failure-playbook.dc.html)
+*Interactive diagram — [Failure playbook](diagrams/sdlc-03-failure-playbook.dc.html)*
 
 | signal | meaning | move |
 |---|---|---|

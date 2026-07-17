@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #bc6a1e;">Versioning · fig 3</div>
+    <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Migration is a verified, fenced, journaled artifact</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #4b4f55; margin-top: 8px; max-width: 900px;">When the shape genuinely must change, the migration function gets the same treatment as any other machine artifact — because it is one. <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#bc6a1e;">hover a property ↗</span></div>
+  </div>
+
+  <div style="display: flex; align-items: stretch; gap: 0; margin-top: 22px;">
+    <sc-for list="{{ stages }}" as="s" hint-placeholder-count="4">
+      <div style="display: flex; align-items: center; flex: 1;">
+        <div onMouseEnter="{{ s.on }}" style="flex: 1; background: #fffdf8; border: 1px solid #e4dfcf; border-radius: 12px; padding: 15px 16px; min-height: 116px; box-shadow: {{ s.ring }}; transition: box-shadow .18s; cursor: default;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: {{ s.accent }};">step {{ s.n }}</div>
+          <div style="font-size: 18px; font-weight: 600; margin: 5px 0 6px;">{{ s.name }}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.45; color: #6b6f76;">{{ s.sig }}</div>
+        </div>
+        <div style="width: 24px; text-align: center; color: #c9a877; font-size: 16px; flex: none; opacity: {{ s.arrow }};">→</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top: 18px; background: #f7efe4; border: 1px solid #e6d3b6; border-left: 3px solid #bc6a1e; border-radius: 12px; padding: 16px 20px; min-height: 84px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #bc6a1e;">{{ detName }}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #2b3033; margin-top: 6px; max-width: 900px;">{{ detBody }}</div>
+  </div>
+
+  <div style="margin-top: 14px; display: flex; gap: 12px; align-items: flex-start; background: #1b1d1f; border-radius: 12px; padding: 15px 20px;">
+    <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #ffd9a8; border: 1px solid #5c4a30; border-radius: 5px; padding: 3px 8px; flex: none; margin-top: 2px;">pays off downstream</span>
+    <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.45; color: #d7d2c6;">The continuous audit is <strong style="color:#fff;font-weight:500;">version-aware</strong>: windows journaled under an older machine version are counted and reported, not replayed through the current module — so a migration doesn\u2019t convert your pre-migration history into false drift, and genuine drift still surfaces.</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 520}}">
+class Component extends DCLogic {
+  state = { active: 0 };
+  go(i){ this.setState({ active: i }); }
+  renderVals(){
+    const A = this.state.active, N = 4;
+    const stages = [
+      { name: 'Pure', sig: 'migrate(oldState) → newState · no I/O, no clock', accent: '#bc6a1e',
+        body: 'Because it is pure, it is checkable: the gate validates that the new module accepts every migrated snapshot, that the result equals the module\u2019s own observable projection (stray keys would poison later), and that the state invariants hold on every migrated state.' },
+      { name: 'Two-phase', sig: 'validate ALL (dry run) → apply nothing on any failure', accent: '#bc6a1e',
+        body: 'Validate everything, apply nothing on any failure. A fleet is never left half-migrated by instance #4,217\u2019s weird state — always dry-run first, then apply.' },
+      { name: 'Fenced', sig: 'apply guarded on the seq observed at validation', accent: '#bc6a1e',
+        body: 'Each apply is guarded on the seq observed at validation time; an instance that took a live dispatch in between is skipped and reported, never silently overwritten with migrate(staleState). Re-run rather than force.' },
+      { name: 'Journaled', sig: '$migrate row · pre = old · post = new · new version', accent: '#bc6a1e',
+        body: 'Every applied migration writes a $migrate row: pre = old snapshot, post = new, stamped with the new machine version and bumping the sequence. The journal\u2019s chain survives, getStateAt stays coherent, and the migration is in the audit trail rather than the event that invalidates it.' },
+    ];
+    const s = stages[A];
+    return {
+      stages: stages.map((st, i) => ({
+        n: i + 1, name: st.name, sig: st.sig, accent: st.accent,
+        on: () => this.go(i),
+        ring: i === A ? '0 0 0 2px #bc6a1e, 0 6px 16px rgba(188,106,30,0.16)' : '0 1px 0 #e9e4d5',
+        arrow: i < N - 1 ? '1' : '0',
+      })),
+      detName: s.name, detBody: s.body,
+    };
+  }
+}
+</script>
+</body>
+</html>

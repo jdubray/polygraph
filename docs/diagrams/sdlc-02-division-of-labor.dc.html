@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">SDLC · fig 2</div>
+    <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">The division of labor</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #4b4f55; margin-top: 8px; max-width: 880px;">Agents do the mechanical work. Humans own exactly two things — <strong style="font-weight:600;">the contract</strong> (what is observable) and <strong style="font-weight:600;">the invariants</strong> (what must never happen). Everything between those two is machine-checked.</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 22px;">
+    <sc-for list="{{ cols }}" as="c" hint-placeholder-count="3">
+      <div onMouseEnter="{{ c.on }}" onMouseLeave="{{ c.off }}" style="background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid {{ c.color }}; border-radius: 13px; padding: 18px 20px; box-shadow: {{ c.shadow }}; transform: {{ c.lift }}; transition: box-shadow .16s, transform .16s;">
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <span style="width: 12px; height: 12px; border-radius: 3px; background: {{ c.color }};"></span>
+          <span style="font-size: 19px; font-weight: 600;">{{ c.name }}</span>
+        </div>
+        <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: {{ c.color }}; margin: 5px 0 14px; line-height: 1.35;">{{ c.tag }}</div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <sc-for list="{{ c.items }}" as="it" hint-placeholder-count="4">
+            <div style="display: flex; gap: 9px; align-items: baseline;">
+              <span style="color: {{ c.color }}; font-size: 13px; flex: none;">▪</span>
+              <span style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.4; color: #33373c;">{{ it.t }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top: 18px; background: #1b1d1f; border-radius: 13px; padding: 18px 22px;">
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #ff9b8f; border: 1px solid #6e3b34; border-radius: 5px; padding: 3px 8px;">encode in team norms</span>
+      <span style="font-size: 16px; font-weight: 600; color: #f6f4ee;">What agents must not do alone</span>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+      <sc-for list="{{ forbidden }}" as="f" hint-placeholder-count="4">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #f0ede3; background: #2b2e31; border: 1px solid #45322f; border-radius: 7px; padding: 7px 12px;">{{ f.t }}</span>
+      </sc-for>
+    </div>
+    <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: #b9b4a6; margin-top: 13px;">Those four are the human\u2019s whole job in this lifecycle — small in hours, decisive in outcome.</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 560}}">
+class Component extends DCLogic {
+  state = { hover: null };
+  renderVals(){
+    const h = this.state.hover;
+    const cols = [
+      { name: 'Human', color: '#1b1d1f', tag: 'judgment — the one thing no tool derives',
+        items: ['Confirm the contract scopes the right state', 'Confirm the invariants say what you mean', 'Judge findings', 'Approve deploys'] },
+      { name: 'Agent', color: '#6a4b9c', tag: 'Claude Code + this plugin — the mechanical work',
+        items: ['Draft contracts, author machines', 'Build test doubles, capture traces', 'Run pipelines, triage', 'Propose repairs'] },
+      { name: 'CI', color: '#3f7a54', tag: 'the mechanical, no-API-key backstop',
+        items: ['Run the no-API-key gates on every change', 'Block on exit codes'] },
+    ];
+    const forbidden = ['approve contracts', 'approve invariants', 'dismiss code-findings', 'weaken a rule to pass a check'].map(t => ({ t }));
+    return {
+      cols: cols.map((c, i) => ({
+        ...c, items: c.items.map(t => ({ t })),
+        on: () => this.setState({ hover: i }), off: () => this.setState({ hover: null }),
+        shadow: h === i ? '0 8px 22px rgba(27,29,31,0.14)' : '0 1px 0 #e9e4d5',
+        lift: h === i ? 'translateY(-2px)' : 'none',
+      })),
+      forbidden,
+    };
+  }
+}
+</script>
+</body>
+</html>

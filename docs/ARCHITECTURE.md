@@ -10,6 +10,9 @@ the same artifacts flow from design to verification to production and back.
 > not a proof**. A clean run means observable behavior matches an
 > independent reading of the code within explored bounds — nothing more.
 
+[![Three engines, one artifact family](diagrams/thumbs/architecture-01-three-engines.png)](diagrams/architecture-01-three-engines.dc.html)
+*Interactive diagram — [Three engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine)*
+
 ## The artifact family
 
 Every engine consumes and produces the same small set of inspectable,
@@ -28,6 +31,9 @@ replayer scores specs against it, the harness captures it, the polyrun
 journal *is* a stream of it, and `stable()` (key-order-insensitive
 canonical stringify in `scripts/load-spec.mjs`) is the single
 state-equality definition every consumer shares.
+
+[![The artifact family](diagrams/thumbs/architecture-02-artifact-family.png)](diagrams/architecture-02-artifact-family.dc.html)
+*Interactive diagram — [The artifact family](diagrams/architecture-02-artifact-family.dc.html)*
 
 ## The SAM v2 strict profile — why it is the common substrate
 
@@ -54,6 +60,9 @@ contract (reset-then-merge rehydration) so the BFS checker and the replayer
 can never disagree about semantics.
 
 ## Engine 1 — Polygraph (audit)
+
+[![Polygraph — auditing code that already exists](diagrams/thumbs/architecture-03-polygraph-audit.png)](diagrams/architecture-03-polygraph-audit.dc.html)
+*Interactive diagram — [Polygraph — auditing code that already exists](diagrams/architecture-03-polygraph-audit.dc.html) (step through the 5 stages)*
 
 ```mermaid
 flowchart LR
@@ -94,6 +103,9 @@ Key properties:
   testsuite.
 
 ## Engine 2 — polygen (author)
+
+[![polygen — authoring verifiable code from intent](diagrams/thumbs/architecture-04-polygen-author.png)](diagrams/architecture-04-polygen-author.dc.html)
+*Interactive diagram — [polygen — authoring verifiable code from intent](diagrams/architecture-04-polygen-author.dc.html)*
 
 ```mermaid
 flowchart LR

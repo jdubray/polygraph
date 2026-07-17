@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 4px;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #2f6f8f;">Architecture · fig 3 · Engine 1 audit</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Polygraph — auditing code that already exists</div>
+    </div>
+  </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #2f6f8f; margin-bottom: 20px;">Replay finds unfaithfulness; the model check finds bugs.</div>
+
+  <div style="display: flex; align-items: stretch; gap: 0;">
+    <sc-for list="{{ stages }}" as="s" hint-placeholder-count="5">
+      <div style="display: flex; align-items: center; flex: 1;">
+        <div onMouseEnter="{{ s.on }}" style="flex: 1; background: #fffdf8; border: 1px solid #e4dfcf; border-radius: 12px; padding: 14px 15px; min-height: 128px; box-shadow: {{ s.ring }}; opacity: {{ s.op }}; transition: box-shadow .18s, opacity .18s; cursor: default;">
+          <div style="width: 22px; height: 22px; border-radius: 50%; background: {{ s.dot }}; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;">{{ s.n }}</div>
+          <div style="font-size: 14.5px; font-weight: 600; margin: 9px 0 5px; line-height: 1.2;">{{ s.title }}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.45; color: #6b6f76;">{{ s.sub }}</div>
+        </div>
+        <div style="width: 22px; text-align: center; color: #b9b3a4; font-size: 15px; flex: none; opacity: {{ s.arrow }};">›</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top: 18px; background: #eef4f6; border: 1px solid #cfe0e6; border-radius: 12px; padding: 16px 20px; min-height: 92px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #2f6f8f;">Step {{ stepNo }} / 5 · {{ capTitle }}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #2b3033; margin-top: 6px; max-width: 900px;">{{ caption }}</div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 14px; margin-top: 16px;">
+    <button onClick="{{ prev }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #fffdf8; border: 1px solid #cdc7b8; color: #33373c; border-radius: 8px; padding: 8px 16px; cursor: pointer;">‹ Prev</button>
+    <button onClick="{{ next }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #2f6f8f; border: 1px solid #2f6f8f; color: #fff; border-radius: 8px; padding: 8px 16px; cursor: pointer;">Next ›</button>
+    <div style="display: flex; gap: 7px; margin-left: 6px;">
+      <sc-for list="{{ dots }}" as="d" hint-placeholder-count="5">
+        <span onClick="{{ d.go }}" style="width: 9px; height: 9px; border-radius: 50%; background: {{ d.fill }}; cursor: pointer;"></span>
+      </sc-for>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 500}}">
+class Component extends DCLogic {
+  state = { step: 0 };
+  go(i){ this.setState({ step: i }); }
+  renderVals(){
+    const step = this.state.step, N = 5;
+    const stages = [
+      { title: 'Inputs', sub: 'contract.json (scope) + source code — any language' },
+      { title: 'Controls before trust', sub: 'reference spec replays 100% · mutant must fail' },
+      { title: 'Generate ×N', sub: 'independent LLM specs + traces from executing code' },
+      { title: 'Replay + vote', sub: 'every window vs every spec → triage' },
+      { title: 'Model check', sub: 'specs vs invariants, exhaustive from init' },
+    ];
+    const captions = [
+      { t: 'Inputs', c: 'Start from the contract — the observable scope — and the real source. The source language is irrelevant: the spec is always JS, even when auditing Go.' },
+      { t: 'Controls before trust', c: 'A hand-written reference spec must replay 100% and a deliberately mutated one must fail, proving the harness can tell good from bad before any generated spec means anything.' },
+      { t: 'Generate ×N', c: 'Several specs are generated independently, and ground-truth traces are captured from the code actually executing — instrumented app, test-double harness, or the polyrun journal.' },
+      { t: 'Replay + vote', c: 'Replay every { pre, action, data, post } window against every spec. N-way voting means one bad generation cannot decide the outcome; disagreements triage into spec-error · code-finding · contract-error.' },
+      { t: 'Model check', c: 'A faithful spec reproduces the code\u2019s bugs, so replay alone cannot see them. Exhaustive iteration against intent invariants surfaces the reachable bad state — with a shortest action path as a ready repro (optionally transpiled to TLA+ and run through TLC).' },
+    ];
+    return {
+      stages: stages.map((s, i) => ({
+        n: i + 1, title: s.title, sub: s.sub,
+        on: () => this.go(i),
+        dot: i <= step ? '#2f6f8f' : '#c3bdae',
+        ring: i === step ? '0 0 0 2px #2f6f8f, 0 6px 16px rgba(47,111,143,0.18)' : '0 1px 0 #e9e4d5',
+        op: i <= step ? '1' : '0.5',
+        arrow: i < N - 1 ? (i < step ? '1' : '0.35') : '0',
+      })),
+      dots: Array.from({ length: N }, (_, i) => ({ go: () => this.go(i), fill: i === step ? '#2f6f8f' : '#cdc7b8' })),
+      stepNo: step + 1, capTitle: captions[step].t, caption: captions[step].c,
+      prev: () => this.setState(s => ({ step: Math.max(0, s.step - 1) })),
+      next: () => this.setState(s => ({ step: Math.min(N - 1, s.step + 1) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -19,6 +19,9 @@ against workflow engines (Temporal, Step Functions, Restate).
 
 ---
 
+[![The runtime — one write path, one dependency](diagrams/thumbs/polyrun-01-runtime.png)](diagrams/polyrun-01-runtime.dc.html)
+*Interactive diagram — [The runtime — one write path, one dependency](diagrams/polyrun-01-runtime.dc.html)*
+
 ## 0. One-paragraph summary
 
 polyrun is a thin runtime that takes the artifact polygen already produces — a
@@ -148,6 +151,9 @@ kernel) is small enough to test exhaustively by hand.
 
 ### FR-2 Dispatch — the one write path
 
+[![Dispatch — one ACID transaction per step](diagrams/thumbs/polyrun-02-dispatch.png)](diagrams/polyrun-02-dispatch.dc.html)
+*Interactive diagram — [Dispatch — one ACID transaction per step](diagrams/polyrun-02-dispatch.dc.html)*
+
 - **FR-2.1** `dispatch(instanceId, action, data, actionId)` is the sole state
   mutation API. Exactly one step is journaled per accepted dispatch.
 - **FR-2.2** **Atomicity:** the new snapshot, the journal row, all derived
@@ -170,6 +176,9 @@ kernel) is small enough to test exhaustively by hand.
   synchronously (the SAM step is synchronous by construction).
 
 ### FR-3 Effects — the outbox contract
+
+[![The effect outbox & completion loop](diagrams/thumbs/polyrun-03-effects-loop.png)](diagrams/polyrun-03-effects-loop.dc.html)
+*Interactive diagram — [The effect outbox & completion loop](diagrams/polyrun-03-effects-loop.dc.html)*
 
 - **FR-3.1** Effects are **declared, not performed**, by pure code: the effect
   mapper runs inside the dispatch transaction and its output rows land in the

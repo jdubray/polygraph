@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">Versioning · fig 1</div>
+    <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">The compatibility taxonomy</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #4b4f55; margin-top: 8px; max-width: 880px;">\u201CCompatible\u201D is not one question. It is <strong style="font-weight:600;">five</strong> — and each has its own mechanical check.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 9px; margin-top: 20px;">
+    <sc-for list="{{ levels }}" as="l" hint-placeholder-count="5">
+      <div onMouseEnter="{{ l.on }}" onMouseLeave="{{ l.off }}" style="display: grid; grid-template-columns: 250px 1fr; gap: 22px; background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid {{ l.color }}; border-radius: 12px; padding: 15px 20px; box-shadow: {{ l.shadow }}; transition: box-shadow .15s;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 600; color: {{ l.color }}; line-height: 1;">{{ l.n }}</div>
+          <div>
+            <div style="font-size: 17px; font-weight: 600;">{{ l.name }}</div>
+            <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 14.5px; line-height: 1.35; color: {{ l.color }}; margin-top: 3px;">{{ l.q }}</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.42; color: #33373c;">{{ l.check }}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: {{ l.color }}; margin-top: 7px;"><span style="color:#a09a8c;">gate ▸ </span>{{ l.gate }}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 620}}">
+class Component extends DCLogic {
+  state = { hover: null };
+  renderVals(){
+    const h = this.state.hover;
+    const levels = [
+      { name: 'Shape', color: '#2f6f8f', q: 'does the new machine accept the old state?',
+        check: 'The strict profile makes state shape a declared, sealed thing, so compatibility stops being a review judgment: every live snapshot is round-tripped through the new module. A snapshot it mangles or rejects fails before any instance sees the new code.',
+        gate: 'round-trip live snapshots · load · setState · project · compare' },
+      { name: 'Semantic', color: '#6a4b9c', q: 'can the new rules hurt the old state?',
+        check: 'The landmine problem. The gate re-runs the exhaustive check with live snapshots as initial states — not "correct from init" but "can any sequence drive a currently-existing instance to a violation under the new rules." A computable property, not a checkbox.',
+        gate: 'model check from live snapshots as initial states' },
+      { name: 'Behavioral', color: '#bc6a1e', q: 'what happens to in-flight stimuli?',
+        check: 'A v1 timer firing into a v2 instance that no longer awaits it is not undefined behavior — it is a journaled rejected(\u2019stale-timer\u2019). A machine that is safe under redelivery is, for free, safe under cross-version delivery: the same problem, solved once.',
+        gate: 'observable rejection — verified as the machine\u2019s own behavior' },
+      { name: 'Vocabulary & protocol', color: '#3f7a54', q: 'do the machines still speak?',
+        check: 'Actions, effect kinds, and completion wirings are all declared and cross-checked at registration. A manifest wiring a completion to an action the machine no longer exports, or a parent spawning a child whose cancel disappeared, is a refused boot — the correct failure mode.',
+        gate: 'load-time cross-checks at registration' },
+      { name: 'Intent', color: '#b23b2e', q: 'did the rules themselves change?',
+        check: 'Invariants move first. Strengthening one is a compatibility event against your own fleet: the gate names the live instances that already violate the stronger rule. Because invariants are a small standalone artifact, their history is the semantic changelog.',
+        gate: 'gate re-run against the live fleet · model check reachability' },
+    ];
+    return { levels: levels.map((l, i) => ({
+      ...l, n: i + 1,
+      on: () => this.setState({ hover: i }), off: () => this.setState({ hover: null }),
+      shadow: h === i ? '0 6px 18px rgba(27,29,31,0.12)' : '0 1px 0 #e9e4d5',
+    })) };
+  }
+}
+</script>
+</body>
+</html>

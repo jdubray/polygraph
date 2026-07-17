@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">Architecture · fig 2</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">The artifact family</div>
+    </div>
+    <div style="display: flex; gap: 16px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #71757c; padding-bottom: 4px;">
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#1b1d1f;margin-right:5px;"></span>human</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#6a4b9c;margin-right:5px;"></span>polygen</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2f6f8f;margin-right:5px;"></span>Polygraph</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#bc6a1e;margin-right:5px;"></span>polyrun</span>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 9px;">
+    <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+      <div onMouseEnter="{{ r.on }}" onMouseLeave="{{ r.off }}" style="display: grid; grid-template-columns: 220px 1fr 250px; gap: 20px; align-items: center; background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid {{ r.color }}; border-radius: 11px; padding: 14px 18px; box-shadow: {{ r.shadow }}; transition: box-shadow .16s, transform .16s; transform: {{ r.lift }};">
+        <div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; color: {{ r.color }};">{{ r.id }}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #a09a8c; margin-top: 3px;">{{ r.kind }}</div>
+        </div>
+        <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.4; color: #3a3e43;">{{ r.what }}</div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: baseline; gap: 7px;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #a09a8c; width: 62px; flex: none;">produced</span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #33373c;">{{ r.produced }}</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 7px;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #a09a8c; width: 62px; flex: none;">consumed</span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #33373c;">{{ r.consumed }}</span>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top: 16px; background: #1b1d1f; color: #f0ede3; border-radius: 12px; padding: 16px 20px; display: flex; gap: 18px; align-items: center;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #ffd9a8; white-space: nowrap;">{ pre, action, data, post }</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.4; color: #d7d2c6;">The <strong style="color:#fff;font-weight:500;">window</strong> is the universal currency — the replayer scores specs against it, the harness captures it, the polyrun journal <em>is</em> a stream of it, and <span style="font-family:'JetBrains Mono',monospace;font-size:12px;">stable()</span> is the one state-equality definition every consumer shares.</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 620}}">
+class Component extends DCLogic {
+  state = { hover: null };
+  renderVals(){
+    const h = this.state.hover;
+    const data = [
+      { id: 'contract.json', kind: 'audit / design scope', color: '#2f6f8f',
+        what: 'Observable state keys, action alphabet, data domains, terminal states, named special rules.',
+        produced: 'human · polygen draft (reviewed)', consumed: 'everything' },
+      { id: 'next.cjs', kind: 'machine / spec', color: '#6a4b9c',
+        what: 'An executable model — a SAM v2 strict-profile module: { instance, init, actions, getState, setState }.',
+        produced: 'polygen · LLM spec generation', consumed: 'replay · model check · polyrun kernel' },
+      { id: 'invariants.mjs', kind: 'intent', color: '#b23b2e',
+        what: 'Intent, as plain JS predicates over states (and transitions). The one thing no tool derives.',
+        produced: 'human (polygen proposes, human confirms)', consumed: 'model check · deploy gate' },
+      { id: '*.ndjson', kind: 'traces / ground truth', color: '#3f7a54',
+        what: 'Ground-truth { pre, action, data, post } windows from the code actually executing.',
+        produced: 'instrumentation · harness · polyrun journal', consumed: 'replay · audit' },
+      { id: 'effects.cjs', kind: 'mapper + manifest', color: '#bc6a1e',
+        what: 'Pure effect mapper over transitions, plus the declared effect vocabulary and completion wiring.',
+        produced: 'polygen draft (reviewed)', consumed: 'polyrun kernel/workers · check-effects' },
+    ];
+    return { rows: data.map((r, i) => ({
+      ...r,
+      on: () => this.setState({ hover: i }),
+      off: () => this.setState({ hover: null }),
+      shadow: h === i ? '0 6px 18px rgba(27,29,31,0.13)' : '0 1px 0 #e9e4d5',
+      lift: h === i ? 'translateY(-1px)' : 'none',
+    })) };
+  }
+}
+</script>
+</body>
+</html>

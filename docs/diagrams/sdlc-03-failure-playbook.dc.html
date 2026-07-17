@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">SDLC · fig 3</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Failure playbook</div>
+    </div>
+    <div style="display: flex; gap: 15px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #71757c; padding-bottom: 4px;">
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#b8892b;margin-right:5px;"></span>process</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#2f6f8f;margin-right:5px;"></span>investigate</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#b23b2e;margin-right:5px;"></span>incident</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 250px 290px 1fr; gap: 18px; padding: 0 16px 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #a09a8c;">
+    <div>Signal</div><div>Meaning</div><div>Move</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 7px;">
+    <sc-for list="{{ rows }}" as="r" hint-placeholder-count="7">
+      <div onMouseEnter="{{ r.on }}" onMouseLeave="{{ r.off }}" style="display: grid; grid-template-columns: 250px 290px 1fr; gap: 18px; align-items: center; background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid {{ r.sev }}; border-radius: 11px; padding: 13px 16px; box-shadow: {{ r.shadow }}; transition: box-shadow .15s;">
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ r.sev }}; flex: none;"></span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600; color: #26292c;">{{ r.signal }}</span>
+        </div>
+        <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; line-height: 1.35; color: #6b6f76;">{{ r.meaning }}</div>
+        <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.4; color: #2b3033;">{{ r.move }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 560}}">
+class Component extends DCLogic {
+  state = { hover: null };
+  renderVals(){
+    const h = this.state.hover;
+    const P = '#b8892b', I = '#2f6f8f', X = '#b23b2e';
+    const rows = [
+      { signal: 'polygen NOT converged', sev: P, meaning: 'residual violation with a counterexample', move: 'Hand-repair at the counterexample + a REPAIR-NOTE, or raise --repair-max. Never ship as-is.' },
+      { signal: 'replay spec-errors cluster', sev: P, meaning: 'the LLM systematically misread a subtlety', move: 'Improve the contract\u2019s specialRules note; regenerate.' },
+      { signal: 'code-finding', sev: I, meaning: 'code disagrees with independent readings of itself', move: 'Investigate by hand. It is a lead, not a verdict.' },
+      { signal: 'check-effects BOUNDED', sev: P, meaning: 'exploration was truncated', move: 'Raise --depth / --max-paths; only pass --allow-bounded deliberately.' },
+      { signal: 'poisoned instance', sev: X, meaning: '"cannot happen" happened', move: 'Fix the module / mapper → deploy gate → resolve the instance deliberately.' },
+      { signal: 'audit drift', sev: X, meaning: 'production \u2260 verified model', move: 'Incident: find the hot patch, the manual DB edit, or the harness bug.' },
+      { signal: 'DLQ growth', sev: P, meaning: 'provider trouble beyond the retry budget', move: 'The machine already chose its onExhausted semantics; retry via dlq retry after the outage.' },
+    ];
+    return { rows: rows.map((r, i) => ({
+      ...r,
+      on: () => this.setState({ hover: i }), off: () => this.setState({ hover: null }),
+      shadow: h === i ? '0 6px 16px rgba(27,29,31,0.12)' : '0 1px 0 #e9e4d5',
+    })) };
+  }
+}
+</script>
+</body>
+</html>

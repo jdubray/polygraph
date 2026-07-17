@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #bc6a1e;">polyrun · fig 2</div>
+    <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Dispatch — one ACID transaction per step</div>
+  </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #bc6a1e; margin: 6px 0 20px;">There is no window in which the state says \u201Ccharging\u201D but no charge intent exists, or vice versa.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 320px; gap: 26px; align-items: start;">
+    <div style="display: flex;">
+      <div style="width: 30px; position: relative; flex: none;">
+        <div style="position: absolute; left: 9px; top: 8px; bottom: 8px; width: 2px; background: #d9b98a;"></div>
+        <div style="position: absolute; left: 0; top: 0; font-family:'JetBrains Mono',monospace; font-size: 10px; color: #a67c3d;">BEGIN</div>
+        <div style="position: absolute; left: 0; bottom: 0; font-family:'JetBrains Mono',monospace; font-size: 10px; color: #a67c3d;">COMMIT</div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 7px; padding: 20px 0;">
+        <sc-for list="{{ steps }}" as="s" hint-placeholder-count="6">
+          <div onMouseEnter="{{ s.on }}" style="background: {{ s.bg }}; border: 1px solid {{ s.border }}; border-radius: 10px; padding: 11px 15px; box-shadow: {{ s.ring }}; transition: box-shadow .16s, background .16s; cursor: default;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 20px; height: 20px; border-radius: 50%; background: {{ s.dot }}; color: #fff; font-family:'JetBrains Mono',monospace; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none;">{{ s.n }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size: 12.5px; color: #26292c;">{{ s.code }}</div>
+            </div>
+            <div style="display: {{ s.chipsShow }}; gap: 6px; flex-wrap: wrap; margin: 9px 0 2px 30px;">
+              <sc-for list="{{ s.chips }}" as="c" hint-placeholder-count="4">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;background:#bc6a1e;color:#fff;border-radius:6px;padding:3px 9px;">{{ c.t }}</span>
+              </sc-for>
+              <span style="font-family:'Newsreader',serif;font-style:italic;font-size:12.5px;color:#a67c3d;align-self:center;">…together, or not at all</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px; padding-top: 8px;">
+      <div style="background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid #bc6a1e; border-radius: 12px; padding: 16px 18px; min-height: 150px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:#bc6a1e;">Step {{ stepNo }} / 6 · {{ detName }}</div>
+        <div style="font-family: 'Newsreader', serif; font-size: 15.5px; line-height: 1.45; color: #33373c; margin-top: 7px;">{{ detBody }}</div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <button onClick="{{ prev }}" style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;background:#fffdf8;border:1px solid #cdc7b8;color:#33373c;border-radius:8px;padding:8px 15px;cursor:pointer;">‹ Prev</button>
+        <button onClick="{{ next }}" style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;background:#bc6a1e;border:1px solid #bc6a1e;color:#fff;border-radius:8px;padding:8px 15px;cursor:pointer;">Next ›</button>
+      </div>
+      <div style="background: #f7ecea; border: 1px solid #e3c5c0; border-radius: 11px; padding: 13px 16px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#b23b2e;margin-bottom:4px;">if anything throws here</div>
+        <div style="font-family:'Newsreader',serif;font-size:13.5px;line-height:1.4;color:#7a3a32;">The transaction aborts — the instance is untouched. A throw the strict profile says cannot happen poisons the instance, loudly.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 560}}">
+class Component extends DCLogic {
+  state = { step: 0 };
+  go(i){ this.setState({ step: i }); }
+  renderVals(){
+    const step = this.state.step, N = 6;
+    const steps = [
+      { code: 'SELECT … FOR UPDATE  — single writer', name: 'Lock',
+        body: 'The instance row is locked for the transaction: one writer at a time. Contention on a hot instance is inherent to serialized steps and bounded by step cost — a pure in-memory call, typically < 1 ms.' },
+      { code: 'dedupe · guard  — cached result | terminal reject', name: 'Dedupe & guard',
+        body: 'A redelivered (instanceId, actionId) returns the original step\u2019s result without re-executing — at-least-once becomes effectively-once. A non-active instance journals an observable rejected(terminal | poisoned), never an error.' },
+      { code: 'setState(row.state) → pre = project(getState())', name: 'Rehydrate',
+        body: 'Rehydration is snapshot-based: setState round-trips totally over the sealed shape — no event-sourced replay, no determinism sandbox. The observable projection pre is captured for the journal window.' },
+      { code: "actions[action](data) · lastStep() → post", name: 'Step',
+        body: 'The synchronized SAM step runs and is classified accepted / rejected / unhandled by lastStep(). Rejected and unhandled steps are legal, observable no-ops — they journal their reason but bump no state and emit no effects.' },
+      { code: 'effects(pre, action, data, post) · validate(manifest)', name: 'Derive effects',
+        body: 'On an accepted step the pure effect mapper derives effect intents from the transition; they are validated against the manifest (a belt over the checked braces) before anything is written.' },
+      { code: 'INSERT journal · snapshot · outbox · timers · COMMIT', name: 'Commit together', chips: ['journal row', 'snapshot', 'outbox intents', 'timers'],
+        body: 'The new snapshot, the journal row, all effect-intent rows, all timer creations/cancellations, and the dedupe record commit in one database transaction. Effects are emitted exactly once, executed at-least-once under idempotency keys.' },
+    ];
+    const cur = steps[step];
+    return {
+      steps: steps.map((s, i) => ({
+        n: i + 1, code: s.code, on: () => this.go(i),
+        dot: i <= step ? '#bc6a1e' : '#c3bdae',
+        bg: i === step ? '#fbf3e8' : '#fffdf8',
+        border: i === step ? '#e3c9a3' : '#e4dfcf',
+        ring: i === step ? '0 0 0 2px #bc6a1e' : '0 1px 0 #e9e4d5',
+        chipsShow: (i === 5) ? 'flex' : 'none',
+        chips: (s.chips || []).map(t => ({ t })),
+      })),
+      stepNo: step + 1, detName: cur.name, detBody: cur.body,
+      prev: () => this.setState(s => ({ step: Math.max(0, s.step - 1) })),
+      next: () => this.setState(s => ({ step: Math.min(N - 1, s.step + 1) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

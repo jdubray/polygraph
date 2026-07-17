@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6a4b9c;">Architecture · fig 4 · Engine 2 author</div>
+    <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">polygen — authoring verifiable code from intent</div>
+  </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #6a4b9c; margin: 6px 0 20px;">The repair loop fixes code, never invariants — an invariant encodes intent by definition.</div>
+
+  <div style="display: flex; align-items: stretch; gap: 0;">
+    <sc-for list="{{ stages }}" as="s" hint-placeholder-count="6">
+      <div style="display: flex; align-items: center; flex: 1;">
+        <div onMouseEnter="{{ s.on }}" style="flex: 1; background: #fffdf8; border: 1px solid #e4dfcf; border-radius: 12px; padding: 13px 13px; min-height: 138px; box-shadow: {{ s.ring }}; opacity: {{ s.op }}; transition: box-shadow .18s, opacity .18s; cursor: default; position: relative;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <div style="width: 22px; height: 22px; border-radius: 50%; background: {{ s.dot }}; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none;">{{ s.n }}</div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: {{ s.tagColor }};">{{ s.tag }}</div>
+          </div>
+          <div style="font-size: 14px; font-weight: 600; margin: 8px 0 5px; line-height: 1.2;">{{ s.title }}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.45; color: #6b6f76;">{{ s.sub }}</div>
+        </div>
+        <div style="width: 20px; text-align: center; color: #b9b3a4; font-size: 15px; flex: none; opacity: {{ s.arrow }};">›</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top: 18px; background: {{ capBg }}; border: 1px solid {{ capBorder }}; border-radius: 12px; padding: 16px 20px; min-height: 92px; transition: background .2s, border-color .2s;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: {{ capAccent }};">Step {{ stepNo }} / 6 · {{ capTitle }}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #2b3033; margin-top: 6px; max-width: 920px;">{{ caption }}</div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 14px; margin-top: 16px;">
+    <button onClick="{{ prev }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #fffdf8; border: 1px solid #cdc7b8; color: #33373c; border-radius: 8px; padding: 8px 16px; cursor: pointer;">‹ Prev</button>
+    <button onClick="{{ next }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #6a4b9c; border: 1px solid #6a4b9c; color: #fff; border-radius: 8px; padding: 8px 16px; cursor: pointer;">Next ›</button>
+    <div style="display: flex; gap: 7px; margin-left: 6px;">
+      <sc-for list="{{ dots }}" as="d" hint-placeholder-count="6">
+        <span onClick="{{ d.go }}" style="width: 9px; height: 9px; border-radius: 50%; background: {{ d.fill }}; cursor: pointer;"></span>
+      </sc-for>
+    </div>
+    <div style="margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #b23b2e;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#b23b2e;margin-right:6px;"></span>human gate</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 520}}">
+class Component extends DCLogic {
+  state = { step: 0 };
+  go(i){ this.setState({ step: i }); }
+  renderVals(){
+    const step = this.state.step, N = 6;
+    const stages = [
+      { title: 'Intent', sub: 'one paragraph: states, events, "never happens"', gate: false },
+      { title: 'Contract draft', sub: 'observable keys · domains · terminal states', gate: true },
+      { title: 'Author module', sub: 'gates: v2 surface · strict validate · DEAD-AT-INIT', gate: false },
+      { title: 'Propose invariants', sub: 'the model\u2019s reading of your intent', gate: true },
+      { title: 'Model check \u21ba repair', sub: 'violation → fix code, never invariants', gate: false },
+      { title: 'Cross-check + corpus', sub: '→ module · invariants · report · traces', gate: false },
+    ];
+    const captions = [
+      { t: 'Intent', c: 'Write one paragraph of intent: the states, the events, and anything you already know must never happen ("a customer is never charged twice").' },
+      { t: 'Contract draft · HUMAN GATE #1', c: 'polygen drafts contract.json. It is now the design spec every downstream check is built against — confirm the observable keys, populated data domains, and terminal states before continuing.' },
+      { t: 'Author module', c: 'polygen authors the SAM v2 module. Every stage boundary is gated: v2 surface, strict validate, and a DEAD-AT-INIT refusal — a module that validates clean but can never move is rejected with the diagnosis in the retry prompt.' },
+      { t: 'Propose invariants · HUMAN GATE #2', c: 'polygen proposes invariants.mjs — the model\u2019s reading of your intent, not ground truth. Add the rules only you know; never weaken one to make a check pass.' },
+      { t: 'Model check ⟲ self-repair', c: 'Exhaustive model check from init. On a violation the self-repair loop fixes the CODE, never the invariants, and re-checks — looping until clean or reporting NOT converged.' },
+      { t: 'Cross-check + corpus', c: 'Contract/code domain cross-checks catch enum-spelling and domain-reference gaps; then a replayed regression corpus is synthesized. Output: module + invariants + report + traces. A run that did not converge says so.' },
+    ];
+    const gateAccent = '#b23b2e', norm = '#6a4b9c';
+    return {
+      stages: stages.map((s, i) => ({
+        n: i + 1, title: s.title, sub: s.sub,
+        tag: s.gate ? '\u2691 human review' : (i === 4 ? '\u21ba self-repair' : 'agent'),
+        tagColor: s.gate ? gateAccent : (i === 4 ? '#6a4b9c' : '#a09a8c'),
+        on: () => this.go(i),
+        dot: i > step ? '#c3bdae' : (s.gate ? gateAccent : norm),
+        ring: i === step ? `0 0 0 2px ${s.gate ? gateAccent : norm}, 0 6px 16px rgba(106,75,156,0.16)` : '0 1px 0 #e9e4d5',
+        op: i <= step ? '1' : '0.5',
+        arrow: i < N - 1 ? (i < step ? '1' : '0.35') : '0',
+      })),
+      dots: Array.from({ length: N }, (_, i) => ({ go: () => this.go(i), fill: i === step ? '#6a4b9c' : '#cdc7b8' })),
+      stepNo: step + 1, capTitle: captions[step].t, caption: captions[step].c,
+      capAccent: stages[step].gate ? gateAccent : norm,
+      capBg: stages[step].gate ? '#f7ecea' : '#f1ecf6',
+      capBorder: stages[step].gate ? '#e3c5c0' : '#ddd1ec',
+      prev: () => this.setState(s => ({ step: Math.max(0, s.step - 1) })),
+      next: () => this.setState(s => ({ step: Math.min(N - 1, s.step + 1) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

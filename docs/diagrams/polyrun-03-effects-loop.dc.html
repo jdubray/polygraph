@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #bc6a1e;">polyrun · fig 3</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">The effect outbox &amp; completion loop</div>
+    </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #a09a8c; padding-bottom: 4px;">hover a stage ↗</div>
+  </div>
+
+  <div style="margin-top: 12px; background: #1b1d1f; border-radius: 11px; padding: 12px 18px; display: flex; align-items: center; gap: 18px;">
+    <div style="font-family:'Space Grotesk',sans-serif; font-size: 15px; font-weight: 600; color: #ffd9a8; white-space: nowrap;">at-least-once execution · exactly-once emission</div>
+    <div style="font-family:'JetBrains Mono',monospace; font-size: 11.5px; color: #b9b4a6;">idempotencyKey = hash(instanceId, seq, intentName, ordinal)</div>
+  </div>
+
+  <!-- top flow -->
+  <div style="display: flex; align-items: stretch; gap: 0; margin-top: 16px;">
+    <sc-for list="{{ flow }}" as="s" hint-placeholder-count="5">
+      <div style="display: flex; align-items: center; flex: 1;">
+        <div onMouseEnter="{{ s.on }}" style="flex: 1; background: {{ s.bg }}; border: 1px solid {{ s.border }}; border-radius: 11px; padding: 12px 13px; min-height: 92px; box-shadow: {{ s.ring }}; transition: box-shadow .16s; cursor: default;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:{{ s.accent }};">{{ s.kicker }}</div>
+          <div style="font-size: 14px; font-weight: 600; margin: 5px 0 4px; line-height: 1.15;">{{ s.name }}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;line-height:1.4;color:#6b6f76;">{{ s.sub }}</div>
+        </div>
+        <div style="width: 20px; text-align: center; color: #c9a877; font-size: 15px; flex: none; opacity: {{ s.arrow }};">→</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- outcomes -->
+  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px;">
+    <sc-for list="{{ outcomes }}" as="o" hint-placeholder-count="3">
+      <div onMouseEnter="{{ o.on }}" style="background: {{ o.bg }}; border: 1px solid {{ o.border }}; border-top: 3px solid {{ o.color }}; border-radius: 11px; padding: 13px 15px; box-shadow: {{ o.ring }}; transition: box-shadow .16s; cursor: default;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:#fff;background:{{ o.color }};border-radius:5px;padding:2px 7px;">{{ o.tag }}</span>
+          <span style="font-size: 14px; font-weight: 600;">{{ o.name }}</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.45;color:#5f636a;margin-top:7px;">{{ o.sub }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- return loop -->
+  <div style="margin-top: 14px; background: #f1ecf6; border: 1px solid #ddd1ec; border-radius: 11px; padding: 12px 18px; display: flex; align-items: center; gap: 12px;">
+    <span style="font-size: 20px; color: #6a4b9c;">↺</span>
+    <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.4; color: #33373c;">Completions (and timer fires) re-enter as <strong style="font-weight:600;">ordinary contract actions</strong> — deduped by derived actionIds — closing the loop into a new verified step. Timers run on the same worker loop; staleness is a verified reject, not a cancellation race.</div>
+  </div>
+
+  <!-- detail -->
+  <div style="margin-top: 14px; background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid {{ detColor }}; border-radius: 12px; padding: 15px 18px; min-height: 78px; transition: border-color .16s;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:{{ detColor }};">{{ detName }}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 15.5px; line-height: 1.45; color: #2b3033; margin-top: 6px; max-width: 940px;">{{ detBody }}</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 620}}">
+class Component extends DCLogic {
+  state = { active: 0 };
+  go(i){ this.setState({ active: i }); }
+  renderVals(){
+    const A = this.state.active, amber = '#bc6a1e';
+    const flow = [
+      { kicker: 'accepted step', name: 'Effect mapper', sub: 'pure · edge-triggered on the snapshot', accent: amber,
+        body: 'On an accepted step, the pure effect mapper derives effect intents from the (pre, action, data, post) transition. Deriving from state edges — not actions — keeps it total and checkable: the model checker already enumerates every reachable edge.' },
+      { kicker: 'transactional outbox', name: 'Outbox rows', sub: 'committed with the state (one txn)', accent: amber,
+        body: 'The mapper runs inside the dispatch transaction; its intent rows land in the outbox atomically with the new state. There is never a state that implies an effect without the intent row, or vice versa.' },
+      { kicker: 'worker loop', name: 'Effect runner', sub: 'FOR UPDATE SKIP LOCKED · lease', accent: amber,
+        body: 'The runner claims pending intents under a lease and marks them inflight. A crashed worker\u2019s inflight rows revert to pending when the lease expires — at-least-once by lease, the recovery model of a Temporal activity timeout minus the heartbeat protocol.' },
+      { kicker: 'YOUR code', name: 'Handler(payload, key)', sub: 'idempotent · outside the boundary', accent: '#b23b2e',
+        body: 'The handler performs the side effect with the stable idempotency key. Long-running work uses request/callback: initiate, return promptly, and let the result arrive as an external dispatch — keeping the wait inside the verified boundary.' },
+      { kicker: 'guarantee', name: 'exactly-once emission', sub: 'two same-kind intents → distinct keys', accent: amber,
+        body: 'The ordinal is a per-step counter over all manifest-declared intents, so two intents of the same kind in one step get distinct keys by construction. Emission is exactly-once; execution is at-least-once and the key makes handler idempotency tractable.' },
+    ];
+    const outcomes = [
+      { tag: 'success', name: 'onSuccess / onFailure', color: '#3f7a54', sub: 'result mapped into the action\u2019s schema · dispatched back · actionId = key + \u2019:done\u2019',
+        body: 'On success or failure the manifest\u2019s completion action is dispatched back into the instance, with the handler result mapped into the action\u2019s declared data schema. Completions use derived actionIds so redelivery is deduped.' },
+      { tag: 'retry', name: 'backoff + jitter', color: '#bc6a1e', sub: 'attempts++ · exponential backoff · up to maxAttempts',
+        body: 'A failed attempt increments the counter and re-queues with exponential backoff plus jitter, per the manifest\u2019s retry policy, until it succeeds or exhausts maxAttempts.' },
+      { tag: 'exhausted', name: 'DLQ + onExhausted', color: '#b23b2e', sub: 'mark dead · dispatch onExhausted → verified logic decides',
+        body: 'Exhausted intents go to the DLQ and, if declared, dispatch the onExhausted action into the instance — so the machine (verified logic) decides what "provider is down" means, not the infrastructure.' },
+    ];
+    const all = [...flow, ...outcomes];
+    const mkRing = i => A === i ? '0 0 0 2px ' + (all[i].color || amber) : '0 1px 0 #e9e4d5';
+    return {
+      flow: flow.map((s, i) => ({
+        ...s, on: () => this.go(i),
+        bg: A === i ? '#fbf3e8' : '#fffdf8', border: A === i ? '#e3c9a3' : '#e4dfcf',
+        ring: A === i ? '0 0 0 2px ' + amber : '0 1px 0 #e9e4d5',
+        arrow: i < flow.length - 1 ? '1' : '0',
+      })),
+      outcomes: outcomes.map((o, i) => ({
+        ...o, on: () => this.go(flow.length + i),
+        bg: A === flow.length + i ? '#fffdf8' : '#fffdf8',
+        border: '#e4dfcf',
+        ring: A === flow.length + i ? '0 0 0 2px ' + o.color : '0 1px 0 #e9e4d5',
+      })),
+      detName: all[A].name, detBody: all[A].body, detColor: all[A].color || amber,
+    };
+  }
+}
+</script>
+</body>
+</html>

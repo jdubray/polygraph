@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #bc6a1e;">polyrun · fig 1</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">The runtime — one write path, one dependency</div>
+    </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #a09a8c; padding-bottom: 4px;">hover a component ↗</div>
+  </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #bc6a1e; margin-bottom: 18px;">Everything above the kernel is verified; everything below it is Postgres.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 300px; gap: 22px; align-items: start;">
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <!-- inputs -->
+      <div onMouseEnter="{{ b0.on }}" style="background: #fbf3e8; border: 1px dashed #d9b98a; border-radius: 10px; padding: 11px 15px; box-shadow: {{ b0.ring }}; transition: box-shadow .16s;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #a67c3d; margin-bottom: 6px;">inbound actions — the only way state changes</div>
+        <div style="display: flex; gap: 7px; flex-wrap: wrap;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#fff;border:1px solid #e3cfa8;border-radius:6px;padding:4px 9px;">API / signals</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#fff;border:1px solid #e3cfa8;border-radius:6px;padding:4px 9px;">timer fires</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#fff;border:1px solid #e3cfa8;border-radius:6px;padding:4px 9px;">effect completions</span>
+        </div>
+      </div>
+      <div style="text-align: center; color: #c9a877; font-size: 15px; line-height: 1.1;">↓</div>
+
+      <!-- kernel + module -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div onMouseEnter="{{ b1.on }}" style="background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #bc6a1e; border-radius: 10px; padding: 13px 15px; box-shadow: {{ b1.ring }}; transition: box-shadow .16s;">
+          <div style="font-size: 15px; font-weight: 600;">dispatch kernel</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.4;color:#6b6f76;margin-top:4px;">rehydrate → step → classify → commit</div>
+        </div>
+        <div onMouseEnter="{{ b2.on }}" style="background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #6a4b9c; border-radius: 10px; padding: 13px 15px; box-shadow: {{ b2.ring }}; transition: box-shadow .16s;">
+          <div style="font-size: 15px; font-weight: 600;">SAM v2 module</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.4;color:#6b6f76;margin-top:4px;">polygen output · pure · verified</div>
+        </div>
+      </div>
+      <div style="text-align: center; font-family:'JetBrains Mono',monospace; font-size: 10px; color: #a67c3d; letter-spacing:0.08em; padding: 3px 0;">— one ACID transaction per step ↓ —</div>
+
+      <!-- store -->
+      <div onMouseEnter="{{ b3.on }}" style="background: #1b1d1f; border-radius: 10px; padding: 13px 16px; box-shadow: {{ b3.ring }}; transition: box-shadow .16s;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#a7a294;margin-bottom:8px;">store — SQLite (dev) / Postgres (prod) · the only stateful dependency</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#2b2e31;border:1px solid #3a3d40;border-radius:6px;padding:4px 9px;color:#f0ede3;">state snapshot</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#2b2e31;border:1px solid #3a3d40;border-radius:6px;padding:4px 9px;color:#f0ede3;">journal</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#2b2e31;border:1px solid #3a3d40;border-radius:6px;padding:4px 9px;color:#f0ede3;">outbox</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#2b2e31;border:1px solid #3a3d40;border-radius:6px;padding:4px 9px;color:#f0ede3;">timers</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#2b2e31;border:1px solid #3a3d40;border-radius:6px;padding:4px 9px;color:#f0ede3;">dedupe</span>
+        </div>
+      </div>
+      <div style="text-align: center; color: #c9a877; font-size: 15px; line-height: 1.1;">↓</div>
+
+      <!-- workers -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div onMouseEnter="{{ b4.on }}" style="background: #fffdf8; border: 1px solid #e4dfcf; border-radius: 10px; padding: 13px 15px; box-shadow: {{ b4.ring }}; transition: box-shadow .16s;">
+          <div style="font-size: 15px; font-weight: 600;">effect runner</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.4;color:#6b6f76;margin-top:4px;">leases · retries · DLQ</div>
+        </div>
+        <div onMouseEnter="{{ b5.on }}" style="background: #fffdf8; border: 1px solid #e4dfcf; border-radius: 10px; padding: 13px 15px; box-shadow: {{ b5.ring }}; transition: box-shadow .16s;">
+          <div style="font-size: 15px; font-weight: 600;">timer service</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.4;color:#6b6f76;margin-top:4px;">fires actions back into the machine</div>
+        </div>
+      </div>
+      <div style="text-align: center; color: #c9a877; font-size: 15px; line-height: 1.1;">↓</div>
+
+      <!-- fan-out -->
+      <div onMouseEnter="{{ b6.on }}" style="background: #eef4ef; border: 1px solid #cfe0d3; border-radius: 10px; padding: 12px 15px; box-shadow: {{ b6.ring }}; transition: box-shadow .16s;">
+        <div style="font-size: 14px; font-weight: 600; color: #2f5d3f;">journal fan-out → trace corpus</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.4;color:#5a7563;margin-top:4px;">events + journalSince cursor · read models · continuous audit</div>
+      </div>
+    </div>
+
+    <!-- right column: handlers + detail -->
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div onMouseEnter="{{ b7.on }}" style="background: #f7ecea; border: 1px dashed #d8a49c; border-radius: 12px; padding: 15px 17px; box-shadow: {{ b7.ring }}; transition: box-shadow .16s;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#b23b2e;">outside the verified boundary</div>
+        <div style="font-size: 16px; font-weight: 600; margin: 5px 0 4px;">effect handlers</div>
+        <div style="font-family: 'Newsreader', serif; font-size: 14px; line-height: 1.4; color: #6b4a45;">Idempotent, YOUR code — charge, ship, email. Same division as Temporal activities; the provided key makes idempotency tractable.</div>
+      </div>
+
+      <div style="background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid #bc6a1e; border-radius: 12px; padding: 15px 17px; min-height: 190px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:#bc6a1e;">{{ detName }}</div>
+        <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.45; color: #33373c; margin-top: 7px;">{{ detBody }}</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 640}}">
+class Component extends DCLogic {
+  state = { active: 1 };
+  go(i){ this.setState({ active: i }); }
+  renderVals(){
+    const A = this.state.active;
+    const items = [
+      { name: 'Inbound actions', body: 'Every stimulus is an ordinary contract action: API calls, signals, timer fires, and effect completions all enter through dispatch. There is no separate signal machinery — a "signal" is just dispatch() addressed by instanceId.' },
+      { name: 'Dispatch kernel', body: 'The sole state-mutation path. Rehydrate the snapshot, run the synchronized SAM step, classify it (accepted / rejected / unhandled), and commit — all in one transaction. ~500 LoC, logic-free, testable once for every machine.' },
+      { name: 'SAM v2 module', body: 'The polygen output, hosted unchanged: pure, sealed, model-checked before it ships. The kernel never reimplements it — it calls it. Modules are pooled per process; setState fully overwrites the sealed shape, so pooling is safe by the round-trip guarantee.' },
+      { name: 'Store', body: 'One database holds everything durable — the state snapshot, the append-only journal, the effect outbox, timers, and the dedupe record. No broker, no separate cluster: Postgres FOR UPDATE SKIP LOCKED queues suffice at the target scale.' },
+      { name: 'Effect runner', body: 'A worker loop that claims pending outbox intents under a lease and invokes the handler with (payload, idempotencyKey). At-least-once execution, exactly-once emission. A crashed worker\u2019s inflight rows revert when the lease expires.' },
+      { name: 'Timer service', body: 'The same loop over the timers table (fire_at <= now); its "handler" just dispatches the action back in. Staleness needs no coordination — the machine rejects what no longer applies. Horizons from seconds to years, fire within 5s at nominal load.' },
+      { name: 'Journal fan-out', body: 'Committed rows publish to a change stream (LISTEN/NOTIFY built-in, CDC-stable schema) for read models and projections. The journal stays the single source of truth; fan-out is strictly derived and a lost notification is recoverable by re-reading from a seq cursor. The same rows export as a Polygraph trace corpus.' },
+      { name: 'Effect handlers', body: 'The one part whose correctness is on you. They live outside the verified boundary; the idempotency key (hash of instanceId, seq, intent, ordinal) is stable across retries and crashes so you can pass it straight to Stripe or use it as a natural key.' },
+    ];
+    const mk = i => ({ on: () => this.go(i), ring: A === i ? '0 0 0 2px #bc6a1e' : 'none' });
+    return {
+      b0: mk(0), b1: mk(1), b2: mk(2), b3: mk(3), b4: mk(4), b5: mk(5), b6: mk(6), b7: mk(7),
+      detName: items[A].name, detBody: items[A].body,
+    };
+  }
+}
+</script>
+</body>
+</html>

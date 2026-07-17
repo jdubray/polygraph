@@ -33,6 +33,9 @@ is how most versioning schemes get into trouble: a "minor" semantic change
 can be far more dangerous to in-flight state than a "major" shape change
 with a clean migration.
 
+[![Four things called "a version"](diagrams/thumbs/versioning-02-four-versions.png)](diagrams/versioning-02-four-versions.dc.html)
+*Interactive diagram — [Four things called "a version"](diagrams/versioning-02-four-versions.dc.html)*
+
 **3. The dominant industrial answer creates permanent debt.** Event-sourced
 replay engines — Temporal is the best of them — reconstruct state by
 re-executing workflow code against recorded history. This has a real
@@ -63,6 +66,9 @@ production.
 
 The triad's answer starts by refusing to treat "compatible" as one
 question. It is five, and each has its own mechanical check:
+
+[![The compatibility taxonomy](diagrams/thumbs/versioning-01-taxonomy.png)](diagrams/versioning-01-taxonomy.dc.html)
+*Interactive diagram — [The compatibility taxonomy](diagrams/versioning-01-taxonomy.dc.html)*
 
 ### Shape compatibility — *does the new machine accept the old state?*
 
@@ -132,6 +138,9 @@ their history *is* the semantic changelog of the system — something no
 amount of code-diff reading reconstructs reliably.
 
 ## Migration as a verified, journaled, fenced artifact
+
+[![Migration is a verified, fenced, journaled artifact](diagrams/thumbs/versioning-03-migration.png)](diagrams/versioning-03-migration.dc.html)
+*Interactive diagram — [Migration is a verified, fenced, journaled artifact](diagrams/versioning-03-migration.dc.html)*
 
 When the shape genuinely must change, the migration function gets the same
 treatment as any other machine artifact, because it is one:

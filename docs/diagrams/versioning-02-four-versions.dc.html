@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">Versioning · fig 2</div>
+    <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Four things called \u201Ca version\u201D</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #4b4f55; margin-top: 8px; max-width: 900px;">Conflating them is how most versioning schemes get into trouble — a \u201Cminor\u201D semantic change can be far more dangerous to in-flight state than a \u201Cmajor\u201D shape change with a clean migration.</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px;">
+    <sc-for list="{{ cells }}" as="c" hint-placeholder-count="4">
+      <div onMouseEnter="{{ c.on }}" onMouseLeave="{{ c.off }}" style="background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid {{ c.color }}; border-radius: 13px; padding: 18px 22px; box-shadow: {{ c.shadow }}; transform: {{ c.lift }}; transition: box-shadow .16s, transform .16s;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: {{ c.color }};">{{ c.tag }}</span>
+          <span style="font-size: 21px; font-weight: 600;">{{ c.name }}</span>
+        </div>
+        <div style="font-family: 'Newsreader', serif; font-size: 15.5px; line-height: 1.45; color: #33373c; margin-top: 8px;">{{ c.what }}</div>
+        <div style="display: flex; gap: 9px; align-items: flex-start; margin-top: 13px; border-top: 1px dashed #e0dbca; padding-top: 11px;">
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #fff; background: {{ c.color }}; border-radius: 5px; padding: 3px 7px; flex: none; margin-top: 1px;">danger</span>
+          <span style="font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; line-height: 1.4; color: #6b6f76;">{{ c.danger }}</span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 500}}">
+class Component extends DCLogic {
+  state = { hover: null };
+  renderVals(){
+    const h = this.state.hover;
+    const cells = [
+      { name: 'Shape', tag: 'v.shape', color: '#2f6f8f',
+        what: 'The shape of the state — which keys, which types the sealed model declares.',
+        danger: 'A state reachable under v1 but unreachable under v3 is a landmine: no test written against v3 ever constructs it, yet production still holds it.' },
+      { name: 'Semantics', tag: 'v.rules', color: '#6a4b9c',
+        what: 'The semantics of the transitions — same shape, different rules for how state moves.',
+        danger: 'The most under-estimated axis: a small rule change can drive existing in-flight state somewhere the old rules never could.' },
+      { name: 'Vocabulary', tag: 'v.alphabet', color: '#3f7a54',
+        what: 'Which actions exist at all — and, for orchestration, which completion signals a parent and child exchange.',
+        danger: 'Cross-version delivery: a courier webhook scheduled under one vocabulary arrives under another — at-least-once delivery\u2019s evil twin.' },
+      { name: 'Intent', tag: 'v.invariants', color: '#b23b2e',
+        what: 'The invariants themselves, which can strengthen or weaken independently of any code change.',
+        danger: 'Semantic drift the invariants do not mention is invisible to every gate — versioning maturity is really invariant-writing maturity.' },
+    ];
+    return { cells: cells.map((c, i) => ({
+      ...c,
+      on: () => this.setState({ hover: i }), off: () => this.setState({ hover: null }),
+      shadow: h === i ? '0 8px 22px rgba(27,29,31,0.14)' : '0 1px 0 #e9e4d5',
+      lift: h === i ? 'translateY(-2px)' : 'none',
+    })) };
+  }
+}
+</script>
+</body>
+</html>

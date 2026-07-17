@@ -86,7 +86,9 @@ practical bug-finder.
 > [`docs/polyrun-spec.md`](docs/polyrun-spec.md) — the durable-execution
 > harness specification; [`docs/VERSIONING.md`](docs/VERSIONING.md) — an
 > essay on why versioning state machines is hard and how the gates here
-> make compatibility a checked property instead of a review vibe.
+> make compatibility a checked property instead of a review vibe. Each doc
+> has interactive diagrams inline; browse them all at
+> [`docs/diagrams/index.dc.html`](docs/diagrams/index.dc.html).
 
 ## How it works
 

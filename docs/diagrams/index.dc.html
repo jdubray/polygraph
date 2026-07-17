@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  a { color: #2f6f8f; text-decoration: none; }
+  a:hover { color: #1b1d1f; }
+</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 44px 48px 48px; width: 1040px; margin: 0 auto; min-height: 100vh;">
+
+  <div style="border-bottom: 1px solid #dcd7ca; padding-bottom: 20px; margin-bottom: 26px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">Documentation diagrams</div>
+    <div style="font-size: 32px; font-weight: 600; letter-spacing: -0.015em; margin-top: 6px;">Polygraph · polygen · polyrun</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16.5px; line-height: 1.5; color: #4b4f55; margin-top: 10px; max-width: 820px;">Thirteen interactive figures illustrating the four core documents. Each is a self-contained file — hover to highlight, step through the flows, and drop it back into its markdown doc. Colour is consistent throughout: <span style="color:#2f6f8f;font-weight:600;">Polygraph / audit</span>, <span style="color:#6a4b9c;font-weight:600;">polygen / author</span>, <span style="color:#bc6a1e;font-weight:600;">polyrun / execute</span>, <span style="color:#b23b2e;font-weight:600;">human judgment</span>.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 30px;">
+    <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="4">
+      <div>
+        <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 13px;">
+          <span style="width: 13px; height: 13px; border-radius: 3px; background: {{ sec.color }};"></span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 600; color: {{ sec.color }};">{{ sec.doc }}</span>
+          <span style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #71757c;">{{ sec.desc }}</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px;">
+          <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="3">
+            <a href="{{ it.href }}" style="display: block; background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid {{ sec.color }}; border-radius: 11px; padding: 15px 18px;" style-hover="background: #fffef9; border-color: #d6d0c0; box-shadow: 0 6px 18px rgba(27,29,31,0.10); transform: translateY(-1px);">
+              <div style="display: flex; align-items: baseline; gap: 9px;">
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: {{ sec.color }};">{{ it.n }}</span>
+                <span style="font-size: 16px; font-weight: 600; color: #1b1d1f;">{{ it.title }}</span>
+              </div>
+              <div style="font-family: 'Newsreader', serif; font-size: 14.5px; line-height: 1.4; color: #55595f; margin: 5px 0 7px;">{{ it.desc }}</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #a09a8c;">{{ it.file }}</div>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 900}}">
+class Component extends DCLogic {
+  renderVals(){
+    const S = (doc, color, desc, items) => ({ doc, color, desc, items: items.map((it, i) => ({
+      n: 'fig ' + (i + 1), title: it[0], desc: it[1], file: it[2], href: it[2],
+    })) });
+    return { sections: [
+      S('ARCHITECTURE.md', '#1b1d1f', 'three engines around one artifact family', [
+        ['Three engines, one artifact family', 'The audit \u2192 verification \u2192 production loop, with the shared artifact hub.', 'architecture-01-three-engines.dc.html'],
+        ['The artifact family', 'The five artifacts, who produces each and who consumes it.', 'architecture-02-artifact-family.dc.html'],
+        ['Polygraph \u2014 audit', 'Controls, N-way specs, replay and model check against existing code.', 'architecture-03-polygraph-audit.dc.html'],
+        ['polygen \u2014 author', 'Intent \u2192 contract \u2192 module \u2192 the repair loop that never touches invariants.', 'architecture-04-polygen-author.dc.html'],
+      ]),
+      S('SDLC.md', '#6a4b9c', 'threading the engines into an agentic lifecycle', [
+        ['A lifecycle for verified code', 'Phases 0\u20137 with the three human gates surfaced.', 'sdlc-01-lifecycle.dc.html'],
+        ['The division of labor', 'What the human, the agent, and CI each own \u2014 and the four things agents must not do alone.', 'sdlc-02-division-of-labor.dc.html'],
+        ['Failure playbook', 'Signal \u2192 meaning \u2192 move, across seven failure modes.', 'sdlc-03-failure-playbook.dc.html'],
+      ]),
+      S('VERSIONING.md', '#2f6f8f', 'the hardest problem the toolset touches', [
+        ['The compatibility taxonomy', 'Five kinds of \u201Ccompatible,\u201D each with its own mechanical check.', 'versioning-01-taxonomy.dc.html'],
+        ['Four things called \u201Ca version\u201D', 'Shape, semantics, vocabulary, intent \u2014 and the danger in each.', 'versioning-02-four-versions.dc.html'],
+        ['Migration as an artifact', 'Pure, two-phase, fenced, journaled \u2014 and a version-aware audit.', 'versioning-03-migration.dc.html'],
+      ]),
+      S('polyrun-spec.md', '#bc6a1e', 'durable execution for verified machines', [
+        ['The runtime', 'Kernel, module, store, workers, fan-out \u2014 and the verified boundary.', 'polyrun-01-runtime.dc.html'],
+        ['Dispatch \u2014 one ACID transaction', 'The single write path, step by step, committing everything together.', 'polyrun-02-dispatch.dc.html'],
+        ['The effect outbox &amp; completion loop', 'At-least-once execution, exactly-once emission, retries, DLQ, and the loop back.', 'polyrun-03-effects-loop.dc.html'],
+      ]),
+    ] };
+  }
+}
+</script>
+</body>
+</html>
