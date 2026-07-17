@@ -82,7 +82,9 @@ const control = instance({
         model.cancelReason = 'charge-timed-out';
       },
       CANCEL: (model) => (proposal, { reject }) => {
-        if (model.orderState === 'charging') return reject('charge-in-flight');
+        // Contract-anchored reason: the specialRule's name, per the polygraph
+        // convention (cf. turnstile's 'push-while-locked-is-noop').
+        if (model.orderState === 'charging') return reject('cancel-blocked-while-charging');
         if (!['pending', 'fraudCheck', 'awaitingAmend'].includes(model.orderState)) return reject('not-cancellable');
         model.orderState = 'cancelled';
         model.cancelReason = String(proposal.reason || 'cancelled');

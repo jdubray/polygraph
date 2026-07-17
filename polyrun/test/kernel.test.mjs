@@ -12,12 +12,22 @@ import { createRuntime, PoisonedError } from '../src/index.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const demo = join(here, '..', 'demo');
 
+// The machine under test is swappable: POLYRUN_MACHINE=<module path> runs
+// this same suite as a conformance harness against any module authored to
+// demo/contract.json (e.g. the polygen-authored one). Assertions pin exact
+// reject-reason strings only where the contract's specialRules pin them;
+// elsewhere they assert the classification, which is what the kernel
+// actually depends on.
+const machinePath = process.env.POLYRUN_MACHINE
+  ? join(process.cwd(), process.env.POLYRUN_MACHINE)
+  : join(demo, 'order-machine.cjs');
+
 function makeRuntime({ handlers = {}, worker = {}, now } = {}) {
   return createRuntime({
     dbPath: ':memory:',
     machines: [{
       machineId: 'order',
-      module: join(demo, 'order-machine.cjs'),
+      module: machinePath,
       contract: join(demo, 'contract.json'),
       effects: { mapper: join(demo, 'effects.cjs'), manifest: join(demo, 'effects.manifest.json') },
     }],
@@ -64,13 +74,30 @@ test('a not-applicable action is an observable rejected step: no state change, n
 
   const res = rt.dispatch(id, 'CANCEL', { reason: 'changed my mind' }, 'c1');
   assert.equal(res.stepKind, 'rejected');
-  assert.equal(res.rejectReason, 'charge-in-flight');
+  // contract-anchored reason: the specialRule's name
+  assert.equal(res.rejectReason, 'cancel-blocked-while-charging');
   assert.deepEqual(rt.getState(id).state, before);
   assert.equal(rt.store.getOutbox(id).length, outboxBefore);
   // ... but it IS journaled, with the reason
   const row = rt.getJournal(id).find((r) => r.action === 'CANCEL');
   assert.equal(row.step_kind, 'rejected');
-  assert.equal(row.reject_reason, 'charge-in-flight');
+  assert.equal(row.reject_reason, 'cancel-blocked-while-charging');
+});
+
+test('a schema-invalid payload is a caller error: observable reject, instance stays healthy', (t) => {
+  const rt = makeRuntime();
+  t.after(() => rt.close());
+  const id = driveToCharging(rt);
+
+  // CANCEL with an empty payload: on a machine with a required 'reason'
+  // field this is a SamSchemaError (strict profile); on a loose-schema
+  // machine it's an ordinary acceptor reject. Either way the kernel must
+  // journal a rejected step and must NOT poison the instance.
+  const res = rt.dispatch(id, 'CANCEL', {}, 'c-empty');
+  assert.equal(res.stepKind, 'rejected');
+  assert.ok(res.rejectReason);
+  assert.equal(rt.getState(id).status, 'active');
+  assert.equal(rt.getState(id).state.orderState, 'charging');
 });
 
 test('atomicity: a crash inside commitStep rolls back state, journal, outbox, and timers together', (t) => {
@@ -104,7 +131,7 @@ test('effect success dispatches the manifest completion action exactly once', as
   const rt = makeRuntime({
     handlers: {
       fraudCheck: async () => ({ itemsAvailable: true }),
-      chargeCard: async (payload, idemKey) => { calls += 1; return { txId: `tx-${idemKey.slice(0, 6)}` }; },
+      chargeCard: async (_payload, idemKey) => { calls += 1; return { txId: `tx-${idemKey.slice(0, 6)}` }; },
     },
   });
   t.after(() => rt.close());
@@ -193,7 +220,7 @@ test('timers: due timer dispatches its action; stale timer is a verified reject'
   assert.equal(rt.workers.tickTimers(now), 1);
   const stale = rt.getJournal('o1').find((r) => r.action === 'AMEND_WINDOW_EXPIRED');
   assert.equal(stale.step_kind, 'rejected');
-  assert.equal(stale.reject_reason, 'stale-timer');
+  assert.ok(stale.reject_reason, 'stale timer rejection must carry a reason');
   assert.equal(rt.getState('o1').state.orderState, 'charging');
 
   // the charge-timeout timer, fired while still charging, IS applicable
@@ -228,7 +255,7 @@ test('lease recovery: an inflight effect whose worker died is retried with the s
     now: () => now,
     worker: { leaseMs: 1000 },
     handlers: {
-      chargeCard: async (payload, idemKey) => {
+      chargeCard: async (_payload, idemKey) => {
         keys.push(idemKey);
         if (fail) { fail = false; await new Promise(() => {}); } // first call hangs forever ("crashed worker")
         return { txId: 'tx-recovered' };

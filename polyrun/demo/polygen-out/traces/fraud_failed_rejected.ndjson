@@ -1,0 +1,2 @@
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"SUBMIT","data":{"totalCents":2500},"post":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""},"action":"FRAUD_FAILED","data":{"reason":"suspicious"},"post":{"orderState":"rejected","totalCents":2500,"txId":"","cancelReason":"suspicious"}}

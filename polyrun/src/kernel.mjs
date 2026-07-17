@@ -216,6 +216,7 @@ export class Runtime {
     const handler = machine.mod.actions[action];
 
     let stepKind, rejectReason = null, post = pre;
+    let schemaRejected = false;
     if (typeof handler !== 'function') {
       stepKind = 'unhandled';
       rejectReason = `action '${action}' is not in the machine's action surface`;
@@ -223,12 +224,24 @@ export class Runtime {
       try {
         handler(data);
       } catch (err) {
-        // A strict-profile throw mid-step is FR-1.3 territory: by construction
-        // "cannot happen", so it must be loud and stop the instance.
-        this.store.setInstanceStatus(instanceId, 'poisoned', now);
-        throw new PoisonedError(instanceId, `action '${action}' threw: ${err && err.message}`);
+        if (err && err.name === 'SamSchemaError') {
+          // A schema-invalid payload is a CALLER error, not an internal
+          // impossibility: the strict profile rejected it before any mutation,
+          // so journal it as an observable reject and keep the instance
+          // healthy. Poisoning (below) is reserved for the module violating
+          // its own profile.
+          stepKind = 'rejected';
+          rejectReason = err.message;
+          schemaRejected = true;
+        } else {
+          // A strict-profile throw mid-step is FR-1.3 territory: by
+          // construction "cannot happen", so it must be loud and stop the
+          // instance.
+          this.store.setInstanceStatus(instanceId, 'poisoned', now);
+          throw new PoisonedError(instanceId, `action '${action}' threw: ${err && err.message}`);
+        }
       }
-      const step = this._lastStep(machine, action);
+      const step = schemaRejected ? null : this._lastStep(machine, action);
       if (step && step.classification === 'rejected') {
         stepKind = 'rejected';
         rejectReason = (step.rejections && step.rejections[0] && step.rejections[0].reason) || 'rejected';
@@ -240,7 +253,7 @@ export class Runtime {
       } else if (step && step.classification === 'unhandled') {
         stepKind = 'unhandled';
         rejectReason = `no acceptor handled '${action}'`;
-      } else {
+      } else if (!schemaRejected) {
         stepKind = 'accepted';
         post = this._snapshot(machine);
       }

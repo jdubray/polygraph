@@ -45,7 +45,9 @@ const rt = createRuntime({
   dbPath,
   machines: [{
     machineId: 'order',
-    module: join(here, 'order-machine.cjs'),
+    // POLYRUN_MACHINE swaps in an alternative module authored to the same
+    // contract (e.g. the polygen-authored one under polygen-out/).
+    module: process.env.POLYRUN_MACHINE || join(here, 'order-machine.cjs'),
     contract: join(here, 'contract.json'),
     effects: { mapper: join(here, 'effects.cjs'), manifest: join(here, 'effects.manifest.json') },
   }],

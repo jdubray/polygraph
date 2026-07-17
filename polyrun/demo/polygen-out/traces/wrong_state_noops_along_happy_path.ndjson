@@ -1,0 +1,11 @@
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"FRAUD_PASSED","data":{"itemsAvailable":true},"post":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"AMEND","data":{"totalCents":1900},"post":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"SUBMIT","data":{"totalCents":2500},"post":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""},"action":"SUBMIT","data":{"totalCents":2500},"post":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""},"action":"FRAUD_PASSED","data":{"itemsAvailable":true},"post":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""},"action":"FRAUD_PASSED","data":{"itemsAvailable":true},"post":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""},"action":"FRAUD_FAILED","data":{"reason":"suspicious"},"post":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""},"action":"AMEND","data":{"totalCents":1900},"post":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""},"action":"CHARGE_SUCCEEDED","data":{"txId":"tx-1"},"post":{"orderState":"shipping","totalCents":2500,"txId":"tx-1","cancelReason":""}}
+{"pre":{"orderState":"shipping","totalCents":2500,"txId":"tx-1","cancelReason":""},"action":"CANCEL","data":{"reason":"customer-request"},"post":{"orderState":"shipping","totalCents":2500,"txId":"tx-1","cancelReason":""}}
+{"pre":{"orderState":"shipping","totalCents":2500,"txId":"tx-1","cancelReason":""},"action":"SHIPMENT_DELIVERED","data":{},"post":{"orderState":"completed","totalCents":2500,"txId":"tx-1","cancelReason":""}}

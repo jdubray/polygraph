@@ -1,0 +1,5 @@
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"SUBMIT","data":{"totalCents":2500},"post":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""},"action":"FRAUD_FAILED","data":{"reason":"suspicious"},"post":{"orderState":"rejected","totalCents":2500,"txId":"","cancelReason":"suspicious"}}
+{"pre":{"orderState":"rejected","totalCents":2500,"txId":"","cancelReason":"suspicious"},"action":"CHARGE_FAILED","data":{"reason":"declined"},"post":{"orderState":"rejected","totalCents":2500,"txId":"","cancelReason":"suspicious"}}
+{"pre":{"orderState":"rejected","totalCents":2500,"txId":"","cancelReason":"suspicious"},"action":"AMEND_WINDOW_EXPIRED","data":{},"post":{"orderState":"rejected","totalCents":2500,"txId":"","cancelReason":"suspicious"}}
+{"pre":{"orderState":"rejected","totalCents":2500,"txId":"","cancelReason":"suspicious"},"action":"SHIPMENT_DELIVERED","data":{},"post":{"orderState":"rejected","totalCents":2500,"txId":"","cancelReason":"suspicious"}}

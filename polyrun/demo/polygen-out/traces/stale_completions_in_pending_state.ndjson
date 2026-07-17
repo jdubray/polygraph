@@ -1,0 +1,6 @@
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"CHARGE_SUCCEEDED","data":{"txId":"tx-1"},"post":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"CHARGE_FAILED","data":{"reason":"declined"},"post":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"CHARGE_TIMED_OUT","data":{},"post":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"AMEND_WINDOW_EXPIRED","data":{},"post":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"SHIPMENT_DELIVERED","data":{},"post":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"CANCEL","data":{"reason":"customer-request"},"post":{"orderState":"cancelled","totalCents":0,"txId":"","cancelReason":"customer-request"}}

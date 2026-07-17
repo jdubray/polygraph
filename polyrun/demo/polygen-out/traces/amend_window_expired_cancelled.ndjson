@@ -1,0 +1,3 @@
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"SUBMIT","data":{"totalCents":2500},"post":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""},"action":"FRAUD_PASSED","data":{"itemsAvailable":false},"post":{"orderState":"awaitingAmend","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"awaitingAmend","totalCents":2500,"txId":"","cancelReason":""},"action":"AMEND_WINDOW_EXPIRED","data":{},"post":{"orderState":"cancelled","totalCents":2500,"txId":"","cancelReason":"amend-window-expired"}}

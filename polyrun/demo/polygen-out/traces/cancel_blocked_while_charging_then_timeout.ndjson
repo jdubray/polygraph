@@ -1,0 +1,4 @@
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"SUBMIT","data":{"totalCents":2500},"post":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""},"action":"FRAUD_PASSED","data":{"itemsAvailable":true},"post":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""},"action":"CANCEL","data":{"reason":"customer-request"},"post":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"charging","totalCents":2500,"txId":"","cancelReason":""},"action":"CHARGE_TIMED_OUT","data":{},"post":{"orderState":"paymentFailed","totalCents":2500,"txId":"","cancelReason":"charge-timed-out"}}

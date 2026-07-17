@@ -1,0 +1,1 @@
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"CANCEL","data":{"reason":"customer-request"},"post":{"orderState":"cancelled","totalCents":0,"txId":"","cancelReason":"customer-request"}}

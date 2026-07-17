@@ -36,7 +36,7 @@
   "specialRules": [
     {
       "name": "cancel-blocked-while-charging",
-      "note": "CANCEL while orderState == 'charging' is rejected ('charge-in-flight'): a charge decision has been emitted and must resolve before the order can end.",
+      "note": "CANCEL while orderState == 'charging' is rejected (reason = this rule's name): a charge decision has been emitted and must resolve before the order can end.",
       "whenState": "orderState == 'charging'",
       "whenAction": "CANCEL"
     },

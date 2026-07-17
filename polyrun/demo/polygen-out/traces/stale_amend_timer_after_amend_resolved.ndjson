@@ -1,0 +1,6 @@
+{"pre":{"orderState":"pending","totalCents":0,"txId":"","cancelReason":""},"action":"SUBMIT","data":{"totalCents":2500},"post":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"fraudCheck","totalCents":2500,"txId":"","cancelReason":""},"action":"FRAUD_PASSED","data":{"itemsAvailable":false},"post":{"orderState":"awaitingAmend","totalCents":2500,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"awaitingAmend","totalCents":2500,"txId":"","cancelReason":""},"action":"AMEND","data":{"totalCents":1900},"post":{"orderState":"charging","totalCents":1900,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"charging","totalCents":1900,"txId":"","cancelReason":""},"action":"AMEND_WINDOW_EXPIRED","data":{},"post":{"orderState":"charging","totalCents":1900,"txId":"","cancelReason":""}}
+{"pre":{"orderState":"charging","totalCents":1900,"txId":"","cancelReason":""},"action":"CHARGE_SUCCEEDED","data":{"txId":"tx-1"},"post":{"orderState":"shipping","totalCents":1900,"txId":"tx-1","cancelReason":""}}
+{"pre":{"orderState":"shipping","totalCents":1900,"txId":"tx-1","cancelReason":""},"action":"SHIPMENT_DELIVERED","data":{},"post":{"orderState":"completed","totalCents":1900,"txId":"tx-1","cancelReason":""}}
