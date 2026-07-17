@@ -23,6 +23,8 @@
     "test:legacy": "node test/selftest.mjs",
     "test:v2": "node test/selftest-v2.mjs",
     "test:prompts": "node test/selftest-prompts.mjs",
+    "test:polyrun": "node --no-warnings --test polyrun/test/kernel.test.mjs",
+    "demo:polyrun": "node --no-warnings polyrun/demo/run-demo.mjs",
     "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --legacy-bare-next --out examples/turnstile/out",
     "verify:turnstile-v2": "node scripts/verify.mjs --contract examples/turnstile-v2/contract.json --traces examples/turnstile-v2/traces --specs examples/turnstile-v2/specs --out examples/turnstile-v2/out",
     "check": "node scripts/check.mjs",

@@ -1,0 +1,22 @@
+{
+  "effects": {
+    "fraudCheck": {
+      "payloadSchema": { "totalCents": "number" },
+      "onSuccess": { "action": "FRAUD_PASSED" },
+      "onFailure": { "action": "FRAUD_FAILED" },
+      "retry": { "maxAttempts": 3, "baseMs": 200, "timeoutMs": 5000 }
+    },
+    "chargeCard": {
+      "payloadSchema": { "amountCents": "number" },
+      "onSuccess": { "action": "CHARGE_SUCCEEDED" },
+      "onFailure": { "action": "CHARGE_FAILED" },
+      "onExhausted": { "action": "CHARGE_FAILED", "data": { "reason": "provider-unavailable" } },
+      "retry": { "maxAttempts": 6, "baseMs": 300, "timeoutMs": 10000 }
+    },
+    "dispatchShipment": {
+      "payloadSchema": { "txId": "string", "totalCents": "number" },
+      "onSuccess": { "action": "SHIPMENT_DELIVERED" },
+      "retry": { "maxAttempts": 5, "baseMs": 300, "timeoutMs": 5000 }
+    }
+  }
+}

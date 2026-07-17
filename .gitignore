@@ -14,6 +14,9 @@ test/.tmp-v2/
 .memsearch/
 .puffin/
 
+# polyrun demo — regenerated on every run
+polyrun/demo/.demo-state/
+
 # Eval — traces, generated specs, and results are regenerated on demand
 eval/machines/*/traces/
 eval/machines/*/.ab-specs/
