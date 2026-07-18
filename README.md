@@ -217,8 +217,10 @@ const dispatch = withTracing(rawDispatch, project, 'traces/s1_normal.ndjson');
 
 ## When an API key is required
 
-Only spec **generation** and code **authoring** call the Anthropic API.
-Everything that checks, replays, or explores runs locally on Node ≥ 20.
+Only spec **generation**, code **authoring**, and polynv's optional
+**headless `--llm` harvest** call the Anthropic API. Everything that
+checks, replays, explores, elicits, grades, or drift-checks runs locally
+on Node ≥ 20.
 
 | task | command | API key? | why |
 |---|---|---|---|
@@ -227,8 +229,10 @@ Everything that checks, replays, or explores runs locally on Node ≥ 20.
 | Replay saved specs against traces | `verify.mjs --specs …` | **no** | pure local execution |
 | Model-check a spec against invariants | `check.mjs` | **no** | exhaustive local exploration |
 | Escalate to TLA+/TLC | `verify.mjs --tla` | **no** | mechanical transpile + local TLC (needs Java + `tla2tools.jar` via `POLYGRAPH_JAVA` / `POLYGRAPH_TLA_JAR`) |
+| Elicit / grade / drift-check invariants (polynv) | `polynv/bin/polynv.mjs harvest\|grade\|drift…` | **no** | templates, miners, pre-checks, mutation grade — all local exploration |
 | **Generate specs from source** | `verify.mjs --source … --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM writes the specs |
 | **Author new code (polygen)** | `polygen.mjs --intent … --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM drafts contract, code, and invariants |
+| **Headless LLM harvest (polynv)** | `polynv … harvest --llm --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM proposes domain priors + code-reading candidates (in a Claude Code session this source needs no key — the assistant supplies it) |
 
 This applies inside Claude Code too: the skills and subagents shell out to
 these same scripts, so the generate and polygen steps need
@@ -248,7 +252,8 @@ Or clone directly: `git clone https://github.com/jdubray/polygraph ~/.claude/plu
 Update later with `/plugin marketplace update polygraph`. Requires **Node ≥ 20**.
 
 Then just ask in plain language — *"verify this state machine"*, *"does this
-code do what I think it does?"*, *"write a verifiable checkout flow"* — or use
+code do what I think it does?"*, *"write a verifiable checkout flow"*,
+*"what invariants should this machine have?"* — or use
 the entry points directly:
 
 | you type | what it is | when to use it |
@@ -260,6 +265,8 @@ the entry points directly:
 | `polygen` | author **subagent** | hand off the whole authoring loop |
 | `/polygraph:polyvers` | version **skill / command** | gate a machine version change against the fleet: lanes, migrations, stimuli, seeded model check (no API key) |
 | `polyvers` | version **subagent** | hand off the whole compatibility check + migration scaffold |
+| `/polygraph:polynv` | elicit **skill / command** | find the invariants themselves: harvested + pre-checked candidates, domain priors, a plugin-led interview, a mutation grade of the result (no API key) |
+| `polynv` | elicit **subagent** | prepare the interview autonomously (harvest, pre-check, grade, ranked questions) — the interview itself stays with you |
 
 ## Use it as a plain CLI (no Claude Code)
 
@@ -277,6 +284,11 @@ node scripts/validate_corpus.mjs contract.json traces/
 # escalate the winning spec to TLC (no API key; needs Java toolchain)
 POLYGRAPH_JAVA=/path/to/java POLYGRAPH_TLA_JAR=/path/to/tla2tools.jar \
   node scripts/verify.mjs --contract contract.json --traces traces/ --specs specs/ --tla --out out/
+
+# elicit invariants: harvest candidates, then grade the confirmed set (no API key)
+node polynv/bin/polynv.mjs harvest --artifacts <machine-dir> --traces traces/
+node polynv/bin/polynv.mjs questions --artifacts <machine-dir>   # ranked, pre-checked; answer via `record`
+node polynv/bin/polynv.mjs grade --artifacts <machine-dir> --include-invariants
 
 # author NEW verifiable code (needs ANTHROPIC_API_KEY)
 node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/

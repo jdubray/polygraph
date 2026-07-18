@@ -173,6 +173,13 @@ and the model check *seeded from live states*), scaffold the migration when
 the shape changed, and gate the deploy on the compat-report — exit 0 is the
 gate, no API key. Worked example: `examples/polyvers-oms/`.
 
+The machine changing also moves the ground truth under your recorded
+intent answers: run **`polynv drift`** on the new version — it re-checks
+every ledger answer against the machine as it is now, names every verdict
+that moved (a confirmed rule now violated is a finding; a rejected
+candidate whose behavior changed gets re-asked under `--reopen`), and the
+compat-report's adequacy line goes STALE until you re-grade.
+
 ## Versioning best practices
 
 The long-form argument is [`docs/VERSIONING.md`](VERSIONING.md); this is
@@ -233,6 +240,8 @@ has a lane with mechanical gates.
 - node scripts/verify.mjs --specs <saved> ...   # replay saved specs vs committed traces
 # on release
 - polyvers check --old <prev> --new <next> --snapshots <archive> --out out/compat   # compatibility gate (lanes → gates)
+- polynv drift --artifacts <machine dir>        # recorded intent answers still true? (exit 1 on moved verdicts)
+- polynv report --artifacts <machine dir>       # elicitation converged + graded? (exit 1 on PARTIAL)
 - polyrun deploy --config <cfg>                 # against a staging copy of live state
 # nightly / scheduled agent
 - polyrun audit --config <cfg>                  # drift detector
@@ -251,13 +260,15 @@ invariant sets, zero-window corpora).
 | "does this code do what I think?" → `/polygraph:polygraph` | Phase 4 end-to-end: the agent designs the contract, instruments, runs controls, triages with you |
 | `/polygraph:verify` | Phase 4 when contract + traces already exist |
 | "can I ship this change?" → `/polygraph:polyvers` | Phase 7: classify the version change, run the compatibility gates against fleet snapshots, scaffold the migration |
-| `polygen` / `polygraph-verifier` / `polyvers` subagents | the same, handed off autonomously; review the returned report at the human gates |
+| "what invariants should this machine have?" → `/polygraph:polynv` | Human gate #2, mechanized: harvest + domain priors → the interview (one pre-checked question at a time) → the mutation grade; the ledger records who confirmed what and why |
+| `polygen` / `polygraph-verifier` / `polyvers` / `polynv` subagents | the same, handed off autonomously; review the returned report at the human gates (the `polynv` agent only PREPARES the interview — it never answers intent questions) |
 | scheduled agent (cron/routine) | Phase 6: audit + DLQ review + "regenerate and diff" |
 
 **What agents must not do alone** (encode this in your team norms): approve
-contracts, approve invariants, dismiss code-findings, or weaken a rule to
-make a check pass. Those four are the human's whole job in this lifecycle —
-small in hours, decisive in outcome.
+contracts, approve invariants, disposition elicitation questions in the
+polynv ledger, dismiss code-findings, or weaken a rule to make a check
+pass. Those are the human's whole job in this lifecycle — small in hours,
+decisive in outcome.
 
 ## Failure playbook
 
