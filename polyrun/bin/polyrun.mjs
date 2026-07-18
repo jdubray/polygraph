@@ -5,7 +5,7 @@
 //   polyrun migrate       --config <cfg> [--machine <id>] [--apply]   pure migrate.cjs over live snapshots
 //   polyrun archive       --config <cfg> --before <ms|ISO date> --out <dir> [--apply]
 //   polyrun check-effects --config <cfg> [--machine <id>] [--depth N] [--max-paths N] [--allow-bounded]
-//   polyrun check-product --config <cfg> --parent <machineId> --invariants <compose.mjs> [--max-states N] [--allow-bounded] [--json <out>]
+//   polyrun check-product --config <cfg> --parent <machineId> --invariants <compose.mjs> [--max-states N] [--allow-bounded] [--abstract-child <id[,id]> [--abstract-max-states N]] [--pct N [--pct-depth D] [--pct-steps L] [--seed S] [--allow-sampled]] [--json <out>]
 //   polyrun audit         --config <cfg> [--machine <id>] [--instance <id>] [--since <ms-epoch>]
 //   polyrun export-traces --config <cfg> --instance <id> [--out <file>]
 //   polyrun dlq ls        --config <cfg>
@@ -20,13 +20,20 @@ import { pathToFileURL } from 'node:url';
 import { createRuntime } from '../src/index.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { checkEffects, renderReport } from '../src/check-effects.mjs';
-import { checkProduct, renderProduct } from '../src/check-product.mjs';
+import { checkProduct, pctSample, renderProduct } from '../src/check-product.mjs';
 import { auditMachine, renderAudit } from '../src/audit.mjs';
 import { stable } from '../../scripts/load-spec.mjs';
 
 const args = process.argv.slice(2);
 const command = args[0] === 'dlq' ? `dlq-${args[1]}` : args[0];
 const flag = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
+const numFlag = (name, dflt, min = 1) => {
+  const raw = flag(name);
+  if (raw === undefined) return dflt;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < min) { console.error(`invalid --${name} '${raw}'`); process.exit(2); }
+  return n;
+};
 
 const usage = () => {
   console.error('usage: polyrun <deploy|export-traces|dlq ls|dlq retry|dlq discard> --config <polyrun.config.mjs> [--instance <id>] [--intent <intentId>] [--out <file>]');
@@ -37,6 +44,77 @@ const configPath = flag('config');
 if (!configPath || !command) usage();
 
 const config = await loadConfig(configPath);
+
+// check-product is a PURE static model check: it loads modules from the
+// config paths itself (loadProduct's own gates) and never touches the store —
+// so it dispatches BEFORE the runtime is built. Opening the store here would
+// both double the module loads and make an unreachable production DB fail a
+// check that needs no DB at all.
+if (command === 'check-product') {
+  const parentId = flag('parent');
+  const invariantsPath = flag('invariants');
+  if (!parentId || !invariantsPath) {
+    console.error('check-product requires --parent <machineId> and --invariants <compose.mjs>');
+    process.exit(2);
+  }
+  const pm = (config.machines ?? []).find((m) => m.machineId === parentId);
+  if (!pm) { console.error(`check-product: no machine '${parentId}' in the config`); process.exit(2); }
+  if (!pm.effects || !pm.contract) {
+    console.error(`check-product: machine '${parentId}' needs a contract and an effects mapper in the config (the cascade IS the mapper's output)`);
+    process.exit(2);
+  }
+  // Every other configured machine is a candidate spawn target. A machine
+  // without a contract cannot enter the product model (no projection, no
+  // terminal metadata) — disclose the exclusion loudly instead of silently
+  // reporting its spawns as 'not registered'. A child WITH its own mapper
+  // is passed through so checkProduct refuses (v1 models only the parent's
+  // cascades — a silent drop would certify an unexplored fleet).
+  const children = [];
+  for (const m of config.machines ?? []) {
+    if (m.machineId === parentId) continue;
+    if (!m.contract) {
+      console.error(`check-product: machine '${m.machineId}' has no contract — it cannot enter the product model, and a spawnChild targeting it will be reported as unregistered (add a contract to include it)`);
+      continue;
+    }
+    children.push({ machineId: m.machineId, module: m.module, contract: m.contract, mapper: m.effects?.mapper });
+  }
+  // CP-M2 surfaces: --abstract-child <id[,id]> collapses those children to
+  // running + terminal outcomes (refinement-checked, own cap via
+  // --abstract-max-states); --pct N switches to seeded PCT sampling
+  // (--pct-depth, --pct-steps, --seed — seed 0 is legal) — a sampler is
+  // never a pass without --allow-sampled (BOUNDED doctrine).
+  const productOpts = {
+    parent: { machineId: pm.machineId, module: pm.module, contract: pm.contract, mapper: pm.effects.mapper, manifest: pm.effects.manifest },
+    children,
+    invariants: invariantsPath,
+    abstractChildren: (flag('abstract-child') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    maxStates: numFlag('max-states', undefined),
+    abstractMaxStates: numFlag('abstract-max-states', undefined),
+  };
+  let productExit = 0;
+  try {
+    const pct = numFlag('pct', undefined);
+    const result = pct !== undefined
+      ? await pctSample({ ...productOpts, schedules: pct, pctDepth: numFlag('pct-depth', undefined), pctSteps: numFlag('pct-steps', undefined), seed: numFlag('seed', undefined, 0) })
+      : await checkProduct(productOpts);
+    console.log(renderProduct(result));
+    if (result.violations.length > 0) productExit = 1;
+    if (result.capHit && !args.includes('--allow-bounded')) {
+      console.error('check-product: BOUNDED exploration is not a full pass (use --allow-bounded to accept)');
+      productExit = productExit || 1;
+    }
+    if (result.sampled && result.violations.length === 0 && !args.includes('--allow-sampled')) {
+      console.error('check-product: a clean SAMPLED run is not a proof of absence (use --allow-sampled to accept, or run exhaustively)');
+      productExit = productExit || 1;
+    }
+    const jsonOut = flag('json');
+    if (jsonOut) writeFileSync(jsonOut, JSON.stringify(result, null, 2));
+  } catch (err) {
+    console.error(String(err && err.message));
+    productExit = 1;
+  }
+  process.exit(productExit);
+}
 
 // The runtime constructor IS the first half of the deploy gate: module loads,
 // validate() strict-clean, manifest/contract cross-checks, observable-is-total.
@@ -125,13 +203,6 @@ try {
     // §6.2: explore the machine ∘ mapper composition against effect-emission
     // invariants (machine config key: effectInvariants).
     const only = flag('machine');
-    const numFlag = (name, dflt) => {
-      const raw = flag(name);
-      if (raw === undefined) return dflt;
-      const n = Number(raw);
-      if (!Number.isFinite(n) || n < 1) { console.error(`invalid --${name} '${raw}'`); process.exit(2); }
-      return n;
-    };
     const maxDepth = numFlag('depth', undefined);
     const maxPaths = numFlag('max-paths', undefined);
     let ran = 0;
@@ -162,62 +233,10 @@ try {
       }
     }
     if (ran === 0) { console.error('check-effects: nothing to check'); exitCode = 1; }
-  } else if (command === 'check-product') {
-    // Composition plan CP-M1 (docs/composition-semantics.md): joint
-    // parent×child exploration against cross-machine invariants. The parent
-    // is named; every OTHER configured machine is a candidate spawn target.
-    const parentId = flag('parent');
-    const invariantsPath = flag('invariants');
-    if (!parentId || !invariantsPath) {
-      console.error('check-product requires --parent <machineId> and --invariants <compose.mjs>');
-      process.exit(2);
-    }
-    const pm = (config.machines ?? []).find((m) => m.machineId === parentId);
-    if (!pm) { console.error(`check-product: no machine '${parentId}' in the config`); process.exit(2); }
-    if (!pm.effects || !pm.contract) {
-      console.error(`check-product: machine '${parentId}' needs a contract and an effects mapper in the config (the cascade IS the mapper's output)`);
-      process.exit(2);
-    }
-    const maxStatesRaw = flag('max-states');
-    const maxStates = maxStatesRaw === undefined ? undefined : Number(maxStatesRaw);
-    if (maxStates !== undefined && (!Number.isFinite(maxStates) || maxStates < 1)) {
-      console.error(`invalid --max-states '${maxStatesRaw}'`); process.exit(2);
-    }
-    // Every other configured machine is a candidate spawn target. A machine
-    // without a contract cannot enter the product model (no projection, no
-    // terminal metadata) — disclose the exclusion loudly instead of silently
-    // reporting its spawns as 'not registered'. A child WITH its own mapper
-    // is passed through so checkProduct refuses (v1 models only the parent's
-    // cascades — a silent drop would certify an unexplored fleet).
-    const children = [];
-    for (const m of config.machines ?? []) {
-      if (m.machineId === parentId) continue;
-      if (!m.contract) {
-        console.error(`check-product: machine '${m.machineId}' has no contract — it cannot enter the product model, and a spawnChild targeting it will be reported as unregistered (add a contract to include it)`);
-        continue;
-      }
-      children.push({ machineId: m.machineId, module: m.module, contract: m.contract, mapper: m.effects?.mapper });
-    }
-    const result = await checkProduct({
-      parent: { machineId: pm.machineId, module: pm.module, contract: pm.contract, mapper: pm.effects.mapper, manifest: pm.effects.manifest },
-      children,
-      invariants: invariantsPath,
-      ...(maxStates !== undefined ? { maxStates } : {}),
-    });
-    console.log(renderProduct(result));
-    if (result.violations.length > 0) exitCode = 1;
-    if (result.capHit && !args.includes('--allow-bounded')) {
-      console.error('check-product: BOUNDED exploration is not a full pass (use --allow-bounded to accept)');
-      exitCode = exitCode || 1;
-    }
-    const jsonOut = flag('json');
-    if (jsonOut) writeFileSync(jsonOut, JSON.stringify(result, null, 2));
   } else if (command === 'audit') {
     // FR-7.2: replay the production journal through the module — drift report.
     const only = flag('machine');
-    const sinceRaw = flag('since');
-    const sinceMs = sinceRaw === undefined ? 0 : Number(sinceRaw);
-    if (!Number.isFinite(sinceMs) || sinceMs < 0) { console.error(`invalid --since '${sinceRaw}'`); process.exit(2); }
+    const sinceMs = numFlag('since', 0, 0);
     for (const [machineId] of rt.machines) {
       if (only && machineId !== only) continue;
       const result = await auditMachine({ runtime: rt, machineId, sinceMs, instanceId: flag('instance') });

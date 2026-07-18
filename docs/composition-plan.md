@@ -8,7 +8,26 @@ One recorded deviation from the plan below: CP-M1 did NOT extract a shared
 `cascadeStep()` from the kernel — the checker mirrors `_dispatchInTxn` and
 parity is enforced by tests that replay counterexamples through the real
 kernel; the extraction remains a follow-up (with polyvers' `classifyStep()`
-note). CP-M2..M4 remain open.
+note).
+
+CP-M2 LANDED (2026-07-18): contract-derived child abstraction
+(`--abstract-child`, refinement-checked by exhaustive child BFS with
+determinism double-pass + concrete cancel summary, own `--abstract-max-states`
+cap, semantics §7) and seeded PCT sampling (`--pct`, semantics §8; the depth
+guarantee is scoped to inter-target orderings). Second recorded deviation:
+**POR is dropped, not deferred** — user-supplied invariants read the whole
+joint state and cascade journal, making every reachable state and transition
+property-visible, so any interleaving-pruning reduction would be UNSOUND
+here and a sound one degenerates to full exploration (analysis in semantics
+§9). A high-effort review pass (17 confirmed findings, all fixed) hardened
+the abstraction: `$resolve` is provenance-flagged (unforgeable), poison-class
+cancels surface as reachable-poison findings, unchecked deliveries raise
+`abstract-unchecked-delivery`, and sampled results carry `ok: false`.
+Remaining recorded follow-ups beyond cascadeStep()/classifyStep(): a shared
+delivery ladder for check-product's deliver() and polyvers' stimulusOutcome()
+(they have drifted on unnamed-reject/mutate-then-reject details), and a
+shared seeded-BFS driver in scripts/ for the four hand-rolled reachability
+walks. CP-M3..M4 remain open.
 Addresses: the reviewer comment that "real fleets fail in the interleavings" — the
 parent×child product model check declared open in `docs/polyrun-spec.md` FR-8.3,
 `docs/VERSIONING.md` ("What remains genuinely open"), `polyrun/README.md` scope

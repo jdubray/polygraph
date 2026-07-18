@@ -169,3 +169,97 @@ unhandled cascade deliveries, unnamed rejects, and `childkey-collision`.
   (`docs/composition-plan.md`, with polyvers' `classifyStep()` note).
 - Version pairings (parent-vN × child-vM over the polyvers matrix) are CP-M3;
   until then this closes the product check for the versions given to it.
+
+## 7. Child abstraction (CP-M2)
+
+`--abstract-child <machineId>` collapses a child to `{ running } ∪ its
+reachable terminal outcomes`, shrinking the product from `P × M^K` toward
+`P × (1+T)^K`. The **refinement check is the construction itself**: an
+exhaustive standalone BFS of the concrete child over its declared domain
+discovers every reachable state and terminal — truncation refuses, a
+reachable poison/unhandled delivery refuses (the abstraction assumes every
+delivery lands accepted-or-named-reject), and zero reachable terminals
+refuses. Given that, every concrete behavior is covered: the child is either
+non-terminal (abstract `running`) or at a terminal in the discovered set,
+reached by the abstraction's one nondeterministic move — `$resolve(t)` for
+each discovered terminal `t`, which fires the completion cascade concretely.
+
+The refinement walk carries the pipeline's determinism double-pass (two
+identical explorations must reach the same state set, or the abstraction is
+refused — a nondeterministic child would silently vary the `$resolve`
+alphabet), and its cap is a **separate knob** (`--abstract-max-states`) from
+the joint cap: the joint cap's overflow is a survivable BOUNDED verdict, the
+child walk's overflow is a hard refusal, and one knob for both would let a
+deliberately lowered joint cap spuriously refuse a healthy abstraction.
+
+The `$resolve` move is minted only by the checker's own alphabet builder and
+carried as a provenance flag on the stimulus — never inferred from the
+action name — so a mapper signal (or a real machine action) named
+`$resolve` can neither forge a terminal nor be shadowed.
+
+The parent-terminal cancel is summarized **concretely**: the cancel action
+(with the kernel's exact FR-8.4 payload) is delivered to every reachable
+non-terminal child state. If it always lands on one single terminal, the
+abstract cancel is deterministic and precise. If it poisons anywhere, that
+is a **reachable-poison finding**, exactly as the concrete path reports it —
+never a silent over-approximation; unhandled and unnamed-reject cancels
+surface as the same doctrine findings the concrete path raises. Any other
+shape (rejects somewhere, stays non-terminal, multiple terminal outcomes) is
+over-approximated as stays-running with `$resolve` still enabled — disclosed
+in the cascade as `abstract-noop`. **Consequence, stated plainly**: for a
+child whose cancel is total but multi-outcome, parent-terminal-quiescence
+invariants ("no active child once the parent is terminal") will FAIL as
+abstract witnesses by construction — run such pairs concretely; the
+summary's `why` string says so at the point of failure. The cancel summary
+applies ONLY to the cancel the closure itself issues; a mapper signal
+reusing the same action name is not assumed to behave like the cancel.
+
+Deliveries into an abstracted child that the refinement walk never exercised
+(creation actions, mapper signals with payloads outside the declared domain)
+are NOT covered by the refinement claim — each such delivery raises an
+`abstract-unchecked-delivery` finding rather than being silently absorbed.
+
+Soundness boundary, disclosed in every report: an abstracted child never
+exhibits its non-terminal concrete states, so invariants that read them are
+not checked against it. A PASS is sound for invariants that read abstracted
+children only through `status` and terminal states; a FAIL is an **abstract
+witness** — confirm it with a concrete run before acting on it.
+
+## 8. PCT sampling (CP-M2)
+
+`--pct N [--pct-depth D] [--pct-steps L] [--seed S]` switches from exhaustive
+BFS to seeded random priority schedules over the same stimulus space —
+Burckhardt et al.'s PCT discipline: each target stream draws a random
+priority, the highest-priority enabled stream fires, and D−1 pre-chosen
+points demote a random stream. **Scope of the depth guarantee**: streams are
+keyed per target instance, so the discipline orders stimuli BETWEEN targets
+(the completion-races-cancel class — the headline product bug — is exactly
+inter-target); two actions of the SAME target share a stream and interleave
+uniform-randomly, so raising D does not help same-machine ordering bugs.
+D−1 must not exceed L (the demotion points are distinct steps; the sampler
+refuses otherwise). Every schedule replays exactly under its seed. A sampler
+falsifies — it never proves: the report says SAMPLED, `ok` is `false` even
+when nothing was found (machine-readable BOUNDED doctrine — `--json`
+consumers must not greenlight an unproven fleet), and a clean sampled run
+exits nonzero unless explicitly accepted with `--allow-sampled`.
+
+## 9. Partial-order reduction: dropped, not deferred (CP-M2 deviation)
+
+The plan named POR as a CP-M2 scaling lever. The reason it is dropped is
+**soundness, not redundancy**: POR prunes interleavings whose intermediate
+states are invisible to the property being checked (for independent stimuli
+`a`, `b` from state `s`, it explores one order and never generates the
+intermediate joint state of the other). This checker's properties are
+**user-supplied predicates over the whole joint state and the cascade
+journal** — any reachable joint state may be exactly the one a state
+invariant rejects, and any transition the one a transition invariant
+rejects. With every state and transition property-visible, the ample-set
+condition forces the full exploration: a sound POR here degenerates to no
+reduction, and an unsound one could silently skip a reachable violating
+state — a checker that certifies fleets with reachable violations. (BFS
+dedup of converging paths is a separate, already-present economy; it merges
+endpoints but still visits every reachable state, which is what soundness
+requires.) The genuine explosion is the product itself (`M^K`), which
+abstraction (§7) attacks directly and sampling (§8) falls back on. Recorded
+here so a future maintainer facing product blow-up does not re-derive POR
+and ship the unsound variant.

@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { checkProduct } from '../src/check-product.mjs';
+import { checkProduct, pctSample } from '../src/check-product.mjs';
 import { createRuntime } from '../src/index.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -135,4 +135,115 @@ test('a bounded exploration is not a pass', async () => {
   const result = await checkProduct({ parent: parentArtifacts, children: [shipGood], invariants, maxStates: 2 });
   assert.equal(result.capHit, true);
   assert.equal(result.ok, false);
+});
+
+// ── CP-M2: child abstraction (semantics §7) ────────────────────────────────
+
+test('abstraction: the composition-safe pair still passes, on a smaller product', async () => {
+  const concrete = await checkProduct({ parent: parentArtifacts, children: [shipGood], invariants });
+  const abstract = await checkProduct({ parent: parentArtifacts, children: [shipGood], invariants, abstractChildren: ['shipment'] });
+  assert.equal(abstract.ok, true, JSON.stringify(abstract.violations, null, 2));
+  assert.deepEqual(abstract.abstracted, ['shipment']);
+  // The good child's cancel is deterministic (always cancelledShipment), so
+  // the abstraction stays precise — no spurious stays-running branch.
+  assert.ok(abstract.statesExplored <= concrete.statesExplored);
+  // The soundness boundary must be DISCLOSED (non-terminal states unchecked).
+  assert.ok(abstract.notes.some((n) => n.includes("child 'shipment' is ABSTRACTED")));
+});
+
+test('abstraction: the lag child still fails — abstract witnesses of both violations', async () => {
+  const result = await checkProduct({ parent: parentArtifacts, children: [shipLag], invariants, abstractChildren: ['shipment'] });
+  assert.equal(result.ok, false);
+  const names = new Set(result.violations.map((v) => v.invariant));
+  // Cancel is partial for the lag child (inTransit rejects), so the abstract
+  // child stays running under a terminal parent and can still $resolve to
+  // 'delivered' — both invariants fire, as abstract witnesses.
+  assert.ok(names.has('terminal-parent-leaves-no-active-children'));
+  assert.ok(names.has('no-delivered-shipment-under-cancelled-order'));
+});
+
+test('abstraction refuses a truncated child state space (its OWN cap, not the joint cap)', async () => {
+  await assert.rejects(
+    checkProduct({ parent: parentArtifacts, children: [shipGood], invariants, abstractChildren: ['shipment'], abstractMaxStates: 2 }),
+    /abstraction refused .* TRUNCATED/,
+  );
+  // The joint cap must NOT truncate the child walk: a bounded joint sweep
+  // with a healthy child is a capHit verdict, never an abstraction refusal.
+  const bounded = await checkProduct({ parent: parentArtifacts, children: [shipGood], invariants, abstractChildren: ['shipment'], maxStates: 2 });
+  assert.equal(bounded.capHit, true);
+});
+
+test('a child state space exactly AT the cap is a full exploration, not a truncation', async () => {
+  // ship-good has exactly 4 reachable states (preparing, inTransit,
+  // delivered, cancelledShipment) — check.mjs cap semantics.
+  const result = await checkProduct({ parent: parentArtifacts, children: [shipGood], invariants, abstractChildren: ['shipment'], abstractMaxStates: 4 });
+  assert.equal(result.ok, true, JSON.stringify(result.violations, null, 2));
+});
+
+test('a poisoning cancel is a reachable-poison finding under abstraction, never an over-approximation', async () => {
+  // The cancel mutates-then-rejects (FR-2.5 poison) only on the kernel's
+  // FR-8.4 payload while inTransit — invisible to the domain walk, caught
+  // only by cancelFor's concrete probe.
+  const shipPoison = { machineId: 'shipment', module: join(compose, 'ship-cancel-poison.cjs'), contract: join(compose, 'ship-good.contract.json') };
+  const result = await checkProduct({ parent: parentArtifacts, children: [shipPoison], invariants, abstractChildren: ['shipment'] });
+  assert.equal(result.ok, false);
+  assert.ok(result.violations.some((v) => v.kind === 'poison' && v.detail.includes('POISONS in a reachable state')),
+    JSON.stringify(result.violations.map((v) => ({ invariant: v.invariant, detail: v.detail })), null, 2));
+  // And the concrete run agrees — abstraction must not flip this verdict.
+  const concrete = await checkProduct({ parent: parentArtifacts, children: [shipPoison], invariants });
+  assert.ok(concrete.violations.some((v) => v.kind === 'poison'));
+});
+
+test("a mapper cannot forge the abstraction's $resolve move", async () => {
+  const forgeParent = { ...parentArtifacts, mapper: join(compose, 'parent-po.forge-resolve.effects.cjs') };
+  const result = await checkProduct({ parent: forgeParent, children: [shipGood], invariants, abstractChildren: ['shipment'] });
+  // The signal lands as an UNCHECKED delivery finding — not as a resolve: no
+  // fabricated 'delivered' terminal, so the delivered-under-cancelled
+  // invariant must not fire off the forged state.
+  assert.ok(result.violations.some((v) => v.invariant.startsWith('abstract-unchecked-delivery')),
+    JSON.stringify(result.violations.map((v) => v.invariant)));
+  assert.ok(!result.violations.some((v) => v.invariant === 'no-delivered-shipment-under-cancelled-order'));
+});
+
+test('abstraction refuses an unknown child id', async () => {
+  await assert.rejects(
+    checkProduct({ parent: parentArtifacts, children: [shipGood], invariants, abstractChildren: ['nope'] }),
+    /not among the given child machines/,
+  );
+});
+
+// ── CP-M2: PCT sampling (semantics §8) ─────────────────────────────────────
+
+test('PCT sampling finds the lag-child violation and reproduces exactly under the same seed', async () => {
+  const opts = { parent: parentArtifacts, children: [shipLag], invariants, schedules: 400, pctDepth: 2, pctSteps: 12, seed: 42 };
+  const run1 = await pctSample(opts);
+  assert.equal(run1.sampled, true);
+  assert.equal(run1.ok, false);
+  const names = new Set(run1.violations.map((v) => v.invariant));
+  assert.ok(names.has('no-delivered-shipment-under-cancelled-order'), JSON.stringify([...names]));
+  // Same seed → byte-identical findings (the whole point of seeded sampling).
+  const run2 = await pctSample(opts);
+  assert.deepEqual(
+    run2.violations.map((v) => ({ invariant: v.invariant, kind: v.kind, detail: v.detail })),
+    run1.violations.map((v) => ({ invariant: v.invariant, kind: v.kind, detail: v.detail })),
+  );
+});
+
+test('a clean PCT run reports sampled, never an exhaustive pass', async () => {
+  const result = await pctSample({ parent: parentArtifacts, children: [shipGood], invariants, schedules: 50, pctSteps: 8, seed: 7 });
+  assert.equal(result.sampled, true);
+  assert.equal(result.violations.length, 0);
+  // BOUNDED doctrine, machine-readable: --json consumers gating on .ok must
+  // never see a sampled run as a pass.
+  assert.equal(result.ok, false);
+  // The alphabet-boundary disclosure reaches sampled reports too.
+  assert.ok(Array.isArray(result.excludedActions) && result.excludedActions.includes('CHILD_DONE'));
+  assert.ok(result.notes.some((n) => n.includes('a SAMPLER falsifies, it never proves')));
+});
+
+test('PCT refuses unsatisfiable depth bounds instead of hanging', async () => {
+  await assert.rejects(
+    pctSample({ parent: parentArtifacts, children: [shipGood], invariants, schedules: 1, pctDepth: 10, pctSteps: 5 }),
+    /distinct demotion steps/,
+  );
 });

@@ -58,7 +58,17 @@ M2 (verification flywheel + composition) provides:
   kernel (poison/doctrine classes rely on the mirrored dispatch ladder until
   the shared `cascadeStep()` extraction lands — a recorded follow-up).
   Bounded runs fail unless `--allow-bounded`; an empty invariant set refuses.
-  Fixture pair: `test/fixtures/compose/`.
+  Fixture pair: `test/fixtures/compose/`. For products beyond exhaustive
+  reach (CP-M2): `--abstract-child <id>` collapses a child to running +
+  terminal outcomes (refinement-checked by an exhaustive, double-passed
+  child BFS with its own `--abstract-max-states` cap — a PASS stays sound
+  for status/terminal-reading invariants, a FAIL is an abstract witness to
+  confirm concretely; poison-class cancels and refinement-unchecked
+  deliveries surface as findings, never as silent over-approximation), and
+  `--pct N --seed S` switches to seeded PCT sampling (random priority
+  schedules; `--pct-depth` orders inter-target stimuli) — a sampler
+  falsifies reproducibly but never proves, so a sampled result carries
+  `ok: false` and a clean run fails unless `--allow-sampled`.
 - **Continuous audit** (`src/audit.mjs`, `polyrun audit`) — replays the
   production journal (which IS a Polygraph trace corpus) through the module:
   post-state mismatches and journaled-rejections-the-module-now-accepts
