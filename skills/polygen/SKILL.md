@@ -29,7 +29,9 @@ artifact instead. (House rule from sam-lib #29, fixed in 2.0.0-alpha.2: never re
 > **Same disclosure as `polygraph`.** This is experimental, unproven
 > technology and a *consistency check, not a proof*. A converged run means the
 > authored code satisfies its OWN stated invariants over a bounded, explored
-> state space — nothing more. The contract and the invariants are the model's
+> state space — nothing more, and that space is finite only because the
+> contract declares finite action/data domains; behavior at values outside
+> the declared representatives is unchecked. The contract and the invariants are the model's
 > reading of your intent; they need your review before either is trusted.
 
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. `polygen.mjs` needs

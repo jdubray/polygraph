@@ -14,6 +14,15 @@ the fleet snapshots are the versioning gate's initial states.
 > Scope disclosure (repo-wide): everything here is a **consistency check,
 > not a proof**. A clean run means observable behavior matches an
 > independent reading of the code within explored bounds — nothing more.
+> And "exhaustive" is always exhaustive **over the finite (action, data)
+> domains the contract or module declares**, never over unbounded real
+> data. The precise coverage claim is *state machines expressible in the
+> SAM v2 strict profile with finite declared domains* — control-dominated
+> logic with finitizable data — not "arbitrary state machines". Behavior
+> that depends on unbounded counters, amounts, or strings is checked only
+> at the declared representative values (the standard model-bounding move,
+> as in TLA+), and the abstraction gap between declared domain and real
+> data is not measured by any gate.
 
 [![Four engines, one artifact family](diagrams/thumbs/architecture-01-three-engines.png)](diagrams/architecture-01-three-engines.dc.html)
 *Interactive diagram — [Four engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine)*
@@ -236,7 +245,8 @@ milestones: `docs/polyvers-plan.md`; worked example:
 
 | layer | correctness argument |
 |---|---|
-| machine logic | exhaustive model check vs invariants (per machine) |
+| machine logic | exhaustive model check vs invariants (per machine, over its declared finite action/data domains) |
+| data abstraction (declared domain vs real data) | **human judgment** — someone picks the representative values; no gate measures whether they exercise every boundary the code branches on |
 | machine ∘ mapper composition | check-effects path exploration incl. emissions, spawns, timer validity |
 | version compatibility | polyvers lanes/gates over fleet snapshots — exactly as good as the stated invariants and the corpus tier (both disclosed in the report) |
 | kernel + stores + workers | conventional: fault-injection tests, soak, adversarial review — small, fixed, logic-free by design |

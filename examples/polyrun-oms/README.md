@@ -30,7 +30,8 @@ model-checked before it ever ran.**
   distinct warehouses = fulfillments (the OMS order-splitting behavior).
 
 The composition is verified beyond the machines themselves:
-`effect-invariants.mjs` proves over every reachable path that the order
+`effect-invariants.mjs` checks over every path reachable within the
+declared action/data domains that the order
 never emits two charges, **spawns exactly its fulfillment count of shipment
 children**, and never spawns before a successful charge
 (`polyrun check-effects --config examples/polyrun-oms/polyrun.config.mjs`).
@@ -95,7 +96,7 @@ The difference is **where correctness comes from**:
 | | Temporal reference app | this folder |
 |---|---|---|
 | workflow logic written by | engineers, in Go | **polygen** (an LLM), from a pinned contract |
-| correctness argument | the tests someone wrote | **exhaustive model check** of every reachable state, before first run |
+| correctness argument | the tests someone wrote | **exhaustive model check** of every state reachable over the declared domains, before first run |
 | "never charged twice" | convention: an idempotency key, hoped to be used right | a checked **emission invariant**: no reachable path emits `chargeCard` twice |
 | "one shipment per fulfillment" | code review | a checked invariant: every path **spawns exactly `fulfillments` children**, never before a successful charge |
 | stale signal / duplicate webhook | whatever the workflow code happens to do | a **verified `reject(reason)`** — an observable no-op by construction |

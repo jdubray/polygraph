@@ -101,8 +101,9 @@ have constructed the state; it cares what v3 will *do* with it.
 Semantic compatibility thus gets a precise definition the industry has
 lacked: **v(n+1) is semantically compatible with v(n)'s fleet iff every
 live v(n) state satisfies the invariants and cannot be driven to a
-violation under v(n+1)'s transition function.** That's a computable
-property, not a review checkbox.
+violation under v(n+1)'s transition function, over the declared (action,
+data) domains.** That's a computable property, not a review checkbox —
+computable precisely *because* the domains are finite and declared.
 
 ### Behavioral compatibility — *what happens to in-flight stimuli?*
 
@@ -208,7 +209,7 @@ know they are choosing the migration lane more often.
 
 ## What remains genuinely open
 
-Three things, stated plainly. **Cross-machine version products**: parent v2
+Four things, stated plainly. **Cross-machine version products**: parent v2
 orchestrating child v1 is protocol- and delivery-checked per version pairing
 (`polyvers matrix`: spawn wiring, child terminal outcomes delivered into
 parent fleet states, parent-terminal cancels into child fleet states — the
@@ -224,7 +225,15 @@ migration**: when v2's state space has no honest image for some v1 state
 gate will fail loudly, and a human decides what those instances *mean* now.
 The toolset's contribution is that this decision arrives before the
 deploy, attached to a named list of instances, instead of after it,
-attached to a pager.
+attached to a pager. **Domain abstraction**: every "exhaustive" gate above
+is exhaustive over the finite (action, data) domains the contract declares,
+so the machines actually covered are those expressible in the SAM v2 strict
+profile with finitizable data — control-dominated logic, not machines whose
+behavior turns on unbounded counters, amounts, or strings, which are
+checked only at the declared representative values. That is the standard
+model-bounding move (it is what TLA+ users do with model bounds), but the
+gap between the declared domain and real data is where bugs hide, and no
+gate currently measures it.
 
 ## Where this sits in the literature
 
@@ -257,9 +266,10 @@ none of which ships the combination:
   fixture exploits: a change that passes every pointwise and syntactic
   check, caught only by the model check seeded from fleet state.
 
-The specific combination here — *semantic* compatibility of arbitrary
-machines checked not for all possible states (intractable) but for **the
-states the fleet actually holds** (a finite, checkable set, seeded into an
+The specific combination here — *semantic* compatibility of
+strict-profile machines with finite declared domains, checked not for all
+possible states (intractable) but for **the states the fleet actually
+holds** (a finite, checkable set, seeded into an
 exhaustive bounded exploration) — appears closer to bounded model checking
 over runtime state than to full refinement checking, and we have not found
 published work framing it exactly that way. Novel in framing, then, while

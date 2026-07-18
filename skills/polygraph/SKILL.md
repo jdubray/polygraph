@@ -15,7 +15,10 @@ replaying, and classifying.
 > not peer-reviewed, unproven technology — newly published and highly
 > speculative. It is a *consistency check, not a proof*:
 > a clean run means the code's observable behavior matches an independent
-> reading of its source, nothing more. Every finding is a lead to investigate by
+> reading of its source, nothing more. "Exhaustive" means exhaustive over the
+> finite (action, data) domains the contract/module declares — data-dependent
+> behavior beyond those representative values is unchecked, and that
+> abstraction gap is not measured by any gate. Every finding is a lead to investigate by
 > hand, not an established result. Do not present it as a guarantee, and do not
 > let it be the only safeguard for correctness- or safety-critical code.
 

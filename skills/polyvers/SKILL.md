@@ -19,7 +19,9 @@ dir holds `contract.json` + the SAM v2 module + optional `invariants.mjs`,
 > **Disclosure (same as the whole plugin).** This is experimental, unproven
 > technology, and these gates are consistency checks, not proofs. They are
 > exactly as good as the invariants the artifacts state — semantic drift the
-> invariants do not mention is invisible to every gate. Versioning maturity
+> invariants do not mention is invisible to every gate — and every
+> "exhaustive" gate is exhaustive over the declared finite (action, data)
+> domains, not over unbounded real data. Versioning maturity
 > is invariant-writing maturity.
 
 ## Step 1 — Classify before running anything

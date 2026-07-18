@@ -54,5 +54,6 @@ corpus/replay summary, and the standing handoff instructions — wire `next()`
 into the real handler (call it, do not reimplement the logic inline), then
 capture real traces post-integration and run `/polygraph:verify` to catch
 drift. End with the same honest caveat `polygraph-verifier` uses: this is a
-consistency check against the code's OWN stated invariants, not a proof, and
+consistency check against the code's OWN stated invariants over its OWN
+declared finite action/data domains, not a proof, and
 the contract/invariants are the model's reading of intent, not ground truth.

@@ -16,7 +16,7 @@ with every fleet snapshot seeded alongside `init()` — the essay's precise
 compatibility definition, executable **for changes that touch the module or
 the invariants** (the semantic and intent lanes): *v(n+1) is compatible with
 the fleet iff no live v(n) state can be driven to an invariant violation
-under v(n+1)'s rules.* Seeds are exempt from the exploration cap (the cap
+under v(n+1)'s rules, over the declared (action, data) domains.* Seeds are exempt from the exploration cap (the cap
 bounds what the BFS discovers, not how many snapshots the fleet holds), and
 a FAIL names one witness per violated rule — a compatibility verdict, not
 the affected-instance list. The landmine fixture (`test/fixtures/order-v2-landmine/`)

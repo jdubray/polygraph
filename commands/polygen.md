@@ -56,6 +56,7 @@ Steps to perform:
    catch drift between this pure model and the glue code around it.
 
 Always state that this is a consistency check, not a proof — the code has
-been model-checked against its OWN stated invariants and independently
+been model-checked against its OWN stated invariants, over its OWN declared
+finite action/data domains, and independently
 replayed, which is not the same as being correct. The contract and invariants
 are the model's reading of intent; they need human review.

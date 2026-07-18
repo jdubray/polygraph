@@ -9,8 +9,9 @@
 Polygraph is a Claude Code plugin (and standalone CLI) that finds bugs in
 **stateful code** — workflows, reducers, protocol handlers, checkout flows,
 session managers — by exhaustively exploring every state the code can reach
-and flagging the ones that break rules you care about, like *"a customer is
-never charged twice."*
+over a finite, declared domain of actions and payloads, and flagging the
+ones that break rules you care about, like *"a customer is never charged
+twice."*
 
 You don't need to know anything about formal verification to use it. You
 write the rules as plain JavaScript predicates. The heavy lifting — deriving a
@@ -20,7 +21,11 @@ path to each violation — is done for you.
 > **Disclosure — read this first.** Polygraph is **experimental, not
 > peer-reviewed, unproven technology.** It is a **consistency check, not a
 > proof**: a clean run means the code's observable behavior matches an
-> independent reading of its own source, and nothing more. Every finding is a
+> independent reading of its own source, and nothing more. "Exhaustive"
+> always means exhaustive **over the finite (action, data) domains declared
+> in the contract** — not over unbounded real-world data (see
+> [What "exhaustive" means](#what-exhaustive-means--and-what-it-doesnt)).
+> Every finding is a
 > *lead to investigate by hand*, not an established result. Do not rely on it
 > as your only safeguard for correctness- or safety-critical code.
 
@@ -38,8 +43,8 @@ Polygraph attacks that gap in two ways:
   writes an independent, executable specification of it — a second opinion on
   what the code does. Polygraph then (1) replays real execution traces
   against that spec to confirm it's faithful, and (2) **model-checks** it:
-  starting from the initial state, it tries every action with every relevant
-  payload, visits every reachable state, and reports any state that violates
+  starting from the initial state, it tries every action with every declared
+  payload value, visits every state reachable that way, and reports any state that violates
   one of your rules — with the shortest sequence of actions that gets there.
   That counterexample path is a ready-made repro for the bug.
 
@@ -131,6 +136,27 @@ that finds what tests miss: replay can only flag a bug when spec and code
 *disagree*, and a faithful spec reproduces the bug right along with the code.
 Model checking reaches the bad state anyway and prints the shortest path to
 it. Every check also runs a determinism double-pass for free.
+
+### What "exhaustive" means — and what it doesn't
+
+The checker enumerates a **finite (action, data) domain** declared in the
+contract (or inferred from traces) and visits every state reachable from
+`init` over that domain. So the precise coverage claim is: **state machines
+expressible in the SAM v2 strict profile with finite declared domains** —
+control-dominated logic (order workflows, auth lockouts, approval flows)
+whose data can be finitized to representative values. It is *not* "arbitrary
+state machines": a machine whose behavior depends on unbounded counters,
+amounts, or strings is checked only at the representative values someone
+declared. Finitizing data this way is the classic, defensible modeling move —
+it is exactly what TLA+ users do with model bounds — but the abstraction gap
+between the declared domain and real data is where bugs can hide, and **no
+current gate measures that gap**. Choosing domain values that exercise every
+boundary the code branches on (and re-checking the contract when the code
+grows a new branch) is human judgment, on the same footing as writing the
+invariants. One mitigation is built in: the domain cross-check that catches
+contract/code vocabulary mismatches
+([`examples/case-study-polygen-domain-gap.md`](examples/case-study-polygen-domain-gap.md))
+— but it checks *spelling agreement*, not *representativeness*.
 
 **polygen** runs the same machinery in reverse: draft contract → author
 module → propose invariants → model-check → self-repair on violations (capped

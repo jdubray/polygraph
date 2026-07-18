@@ -61,5 +61,6 @@ Steps to perform:
    classes; `unhandled` (the spec neither acted nor rejected) is itself a
    finding.
 
-Always state that this is a consistency check, not a proof, and that findings
-are leads to investigate by hand.
+Always state that this is a consistency check, not a proof — exhaustive only
+over the declared finite (action, data) domains, not unbounded real data —
+and that findings are leads to investigate by hand.

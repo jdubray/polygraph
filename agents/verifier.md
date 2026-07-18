@@ -50,4 +50,5 @@ Return: the summary counts, a ranked list of code-findings with the exact
 (scenario, window, pre-state, action) and your reading of the source, the
 spec-errors with the missed rule named, and a one-line honest caveat that this
 is a consistency check, not a proof. Do not overstate: a clean run means
-observable behavior matches an independent reading of the source, nothing more.
+observable behavior matches an independent reading of the source, over the
+declared finite (action, data) domains only — nothing more.
