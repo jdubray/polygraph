@@ -1,0 +1,21 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "shipState", "type": "enum: 'preparing' | 'inTransit' | 'delivered' | 'cancelledShipment'" }
+  ],
+  "initState": { "shipState": "preparing" },
+  "actions": {
+    "SHIP": { "dataFields": {} },
+    "DELIVER": { "dataFields": {} },
+    "CANCEL_SHIPMENT": { "dataFields": {} }
+  },
+  "dataDomain": { "SHIP": {}, "DELIVER": {}, "CANCEL_SHIPMENT": {} },
+  "terminalKey": "shipState",
+  "terminalStates": ["delivered", "cancelledShipment"],
+  "specialRules": [
+    { "name": "already-shipped", "note": "SHIP outside 'preparing' is an observable rejection.", "whenState": "shipState != 'preparing'", "whenAction": "SHIP" },
+    { "name": "not-in-transit", "note": "DELIVER outside 'inTransit' is an observable rejection.", "whenState": "shipState != 'inTransit'", "whenAction": "DELIVER" },
+    { "name": "cancel-too-late", "note": "CANCEL_SHIPMENT is applicable from 'preparing' AND 'inTransit' — the whole non-terminal window — so the parent's terminal cancel always lands.", "whenState": "shipState in ('delivered','cancelledShipment')", "whenAction": "CANCEL_SHIPMENT" }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason)."
+}

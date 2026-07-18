@@ -5,6 +5,7 @@
 //   polyrun migrate       --config <cfg> [--machine <id>] [--apply]   pure migrate.cjs over live snapshots
 //   polyrun archive       --config <cfg> --before <ms|ISO date> --out <dir> [--apply]
 //   polyrun check-effects --config <cfg> [--machine <id>] [--depth N] [--max-paths N] [--allow-bounded]
+//   polyrun check-product --config <cfg> --parent <machineId> --invariants <compose.mjs> [--max-states N] [--allow-bounded] [--json <out>]
 //   polyrun audit         --config <cfg> [--machine <id>] [--instance <id>] [--since <ms-epoch>]
 //   polyrun export-traces --config <cfg> --instance <id> [--out <file>]
 //   polyrun dlq ls        --config <cfg>
@@ -19,6 +20,7 @@ import { pathToFileURL } from 'node:url';
 import { createRuntime } from '../src/index.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { checkEffects, renderReport } from '../src/check-effects.mjs';
+import { checkProduct, renderProduct } from '../src/check-product.mjs';
 import { auditMachine, renderAudit } from '../src/audit.mjs';
 import { stable } from '../../scripts/load-spec.mjs';
 
@@ -160,6 +162,56 @@ try {
       }
     }
     if (ran === 0) { console.error('check-effects: nothing to check'); exitCode = 1; }
+  } else if (command === 'check-product') {
+    // Composition plan CP-M1 (docs/composition-semantics.md): joint
+    // parent×child exploration against cross-machine invariants. The parent
+    // is named; every OTHER configured machine is a candidate spawn target.
+    const parentId = flag('parent');
+    const invariantsPath = flag('invariants');
+    if (!parentId || !invariantsPath) {
+      console.error('check-product requires --parent <machineId> and --invariants <compose.mjs>');
+      process.exit(2);
+    }
+    const pm = (config.machines ?? []).find((m) => m.machineId === parentId);
+    if (!pm) { console.error(`check-product: no machine '${parentId}' in the config`); process.exit(2); }
+    if (!pm.effects || !pm.contract) {
+      console.error(`check-product: machine '${parentId}' needs a contract and an effects mapper in the config (the cascade IS the mapper's output)`);
+      process.exit(2);
+    }
+    const maxStatesRaw = flag('max-states');
+    const maxStates = maxStatesRaw === undefined ? undefined : Number(maxStatesRaw);
+    if (maxStates !== undefined && (!Number.isFinite(maxStates) || maxStates < 1)) {
+      console.error(`invalid --max-states '${maxStatesRaw}'`); process.exit(2);
+    }
+    // Every other configured machine is a candidate spawn target. A machine
+    // without a contract cannot enter the product model (no projection, no
+    // terminal metadata) — disclose the exclusion loudly instead of silently
+    // reporting its spawns as 'not registered'. A child WITH its own mapper
+    // is passed through so checkProduct refuses (v1 models only the parent's
+    // cascades — a silent drop would certify an unexplored fleet).
+    const children = [];
+    for (const m of config.machines ?? []) {
+      if (m.machineId === parentId) continue;
+      if (!m.contract) {
+        console.error(`check-product: machine '${m.machineId}' has no contract — it cannot enter the product model, and a spawnChild targeting it will be reported as unregistered (add a contract to include it)`);
+        continue;
+      }
+      children.push({ machineId: m.machineId, module: m.module, contract: m.contract, mapper: m.effects?.mapper });
+    }
+    const result = await checkProduct({
+      parent: { machineId: pm.machineId, module: pm.module, contract: pm.contract, mapper: pm.effects.mapper, manifest: pm.effects.manifest },
+      children,
+      invariants: invariantsPath,
+      ...(maxStates !== undefined ? { maxStates } : {}),
+    });
+    console.log(renderProduct(result));
+    if (result.violations.length > 0) exitCode = 1;
+    if (result.capHit && !args.includes('--allow-bounded')) {
+      console.error('check-product: BOUNDED exploration is not a full pass (use --allow-bounded to accept)');
+      exitCode = exitCode || 1;
+    }
+    const jsonOut = flag('json');
+    if (jsonOut) writeFileSync(jsonOut, JSON.stringify(result, null, 2));
   } else if (command === 'audit') {
     // FR-7.2: replay the production journal through the module — drift report.
     const only = flag('machine');

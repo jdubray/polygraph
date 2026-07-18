@@ -1,0 +1,20 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "poState", "type": "enum: 'pending' | 'fulfilling' | 'completed' | 'cancelled'" }
+  ],
+  "initState": { "poState": "pending" },
+  "actions": {
+    "START": { "dataFields": {} },
+    "CHILD_DONE": { "dataFields": { "childKey": "string", "childState": "object — the child's terminal state" } },
+    "CANCEL": { "dataFields": {} }
+  },
+  "dataDomain": { "CHILD_DONE": { "childKey": ["c1"], "childState": [{ "shipState": "delivered" }] } },
+  "terminalKey": "poState",
+  "terminalStates": ["completed", "cancelled"],
+  "specialRules": [
+    { "name": "stale-completion", "note": "CHILD_DONE outside 'fulfilling' is an observable rejection.", "whenState": "poState != 'fulfilling'", "whenAction": "CHILD_DONE" },
+    { "name": "not-cancellable", "note": "CANCEL outside pending|fulfilling is an observable rejection.", "whenState": "poState in ('completed','cancelled')", "whenAction": "CANCEL" }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason)."
+}

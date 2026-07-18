@@ -12,8 +12,9 @@ check-effects, audit, migrate, archive, DLQ), child machines, journal
 fan-out, soak + benchmarks (`npm run test:polyrun`, `npm run demo:polyrun`,
 `npm run bench:polyrun`). Each milestone shipped with an adversarial
 multi-agent review; all confirmed findings are fixed. See the polyrun README
-for the two recorded scope notes (in-loop polygen integration; parent∘child
-product checking).
+for the recorded scope notes (in-loop polygen integration; the parent∘child
+product check landed at head versions via `polyrun check-product` — its
+remaining edges are tracked in docs/composition-plan.md).
 **Audience:** contributors to Polygraph/polygen; developers evaluating polyrun
 against workflow engines (Temporal, Step Functions, Restate).
 
@@ -319,10 +320,15 @@ SAM's parent/child instance model maps directly onto workflow decomposition
   `machineId` must be deployed, every completion/signal action must exist in
   the target contract with a compatible schema. Compositional model checking
   of the parent∘child product (e.g. "no shipment dispatches after order
-  cancel" as a cross-machine invariant) is future work beyond M2; until then
-  the cross-machine surface is covered by the domain gate plus the continuous
-  audit (FR-7.2), and v0.x guidance is to keep cross-machine rules expressible
-  as single-machine invariants over completion actions where possible.
+  cancel" as a cross-machine invariant) is available at head versions via
+  `polyrun check-product` (docs/composition-semantics.md: one stimulus + its
+  atomic cascade closure = one joint transition, so stimulus order is the
+  only nondeterminism to explore). The check is opt-in (it needs authored
+  cross-machine invariants); the domain gate plus the continuous audit
+  (FR-7.2) remain the always-on backstop for fleets without them, and
+  cross-machine rules expressible as single-machine invariants over
+  completion actions remain the cheaper first resort. Version-pairing
+  products and grandchildren remain open per docs/composition-plan.md.
 - **FR-8.4** Terminal parents cancel their non-terminal children by
   dispatching a manifest-declared cancel action into each (never by deleting
   state); a child that rejects it is journaled and surfaced, not forced.

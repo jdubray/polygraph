@@ -42,6 +42,23 @@ M2 (verification flywheel + composition) provides:
   reachable path", "no charge after cancel". Bounded runs are reported,
   never silent; an empty invariant set refuses to run (a vacuous pass is not
   a pass). Demo invariants: `demo/effect-invariants.mjs`.
+- **Parent×child product checker** (`src/check-product.mjs`, `polyrun
+  check-product --parent <machineId> --invariants <compose.mjs>`) — the
+  composition plan's CP-M1 (docs/composition-plan.md,
+  docs/composition-semantics.md): exhaustive BFS over the JOINT
+  parent×children state space against cross-machine invariants ("no delivered
+  shipment under a cancelled order"). Each transition is one external
+  stimulus plus its full kernel cascade closure — sound because the kernel
+  runs cascades atomically in the dispatching step's transaction, so stimulus
+  order is the fleet's only nondeterminism. Reports author invariants plus
+  the built-in doctrine classes (reachable poison, unhandled cascade
+  delivery, unnamed rejects, childKey collisions); counterexamples are
+  shortest stimulus sequences with the cascade journal inline; the test suite
+  replays the invariant-violation counterexample class through the real
+  kernel (poison/doctrine classes rely on the mirrored dispatch ladder until
+  the shared `cascadeStep()` extraction lands — a recorded follow-up).
+  Bounded runs fail unless `--allow-bounded`; an empty invariant set refuses.
+  Fixture pair: `test/fixtures/compose/`.
 - **Continuous audit** (`src/audit.mjs`, `polyrun audit`) — replays the
   production journal (which IS a Polygraph trace corpus) through the module:
   post-state mismatches and journaled-rejections-the-module-now-accepts
@@ -115,9 +132,18 @@ a Polygraph trace corpus (`rt.exportTraces()`).
   implemented shape keeps polygen untouched and runs the same check as a
   post-authoring gate (`polyrun check-effects`) — the polygen pipeline can
   adopt it in-loop later without changes to the checker.
-- Compositional model checking of the parent∘child product (cross-machine
-  invariants) remains future work beyond the spec's M2/M3; the domain gate,
-  per-machine checks, and the continuous audit cover that surface today.
+- Compositional model checking of the parent∘child product is now available
+  at HEAD versions via `polyrun check-product` (composition plan CP-M1: one
+  parent, its direct children, exhaustive within declared domains or loudly
+  BOUNDED). It is opt-in — it runs only when invoked with authored
+  cross-machine invariants; for fleets without them, the always-on backstop
+  is unchanged: the domain gate, per-machine checks, and the continuous
+  audit cover the cross-machine surface as before. Still open, per
+  docs/composition-plan.md: version-pairing products (parent-vN × child-vM
+  over the polyvers matrix, CP-M3), grandchildren (children with their own
+  mappers — check-product refuses such configs rather than certifying an
+  unmodeled fleet), and contract-derived child abstractions for large
+  products (CP-M2).
 
 The demo machine is hand-authored in the exact shape polygen emits; the M0
 follow-up is to re-author it with polygen and diff.

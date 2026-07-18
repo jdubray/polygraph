@@ -29,10 +29,13 @@ import { resolveFireAt } from './duration.mjs';
 
 const CREATE_ACTION = '$create';
 // FR-8: dispatch cascades (parent → child signal → grandchild …) are capped;
-// a deeper chain is a wiring cycle, which is a mapper defect.
-const MAX_CASCADE_DEPTH = 8;
+// a deeper chain is a wiring cycle, which is a mapper defect. Exported (with
+// sanitizeReplacer) so check-product.mjs models the SAME cap and projection —
+// a drifted copy would report poisons production never hits, or miss ones it
+// does.
+export const MAX_CASCADE_DEPTH = 8;
 
-const sanitizeReplacer = (key, value) => {
+export const sanitizeReplacer = (key, value) => {
   if (typeof key === 'string' && key.startsWith('__')) return undefined;
   if (typeof value === 'function') return undefined;
   return value;
