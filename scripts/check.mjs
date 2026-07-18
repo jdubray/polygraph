@@ -86,7 +86,14 @@ export function buildDomain(contract, windows = []) {
  * digests differ add a 'deterministic-exploration' violation (kind
  * 'nondeterminism') and set result.nondeterministic.
  */
-export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000, legacyBareNext = false }) {
+// initialStates: additional states seeded into the BFS frontier alongside
+// init() — the versioning use (docs/VERSIONING.md, polyvers): explore the
+// machine's rules FROM live fleet snapshots, so "can any currently existing
+// instance be driven to a violation" becomes the same exhaustive check as
+// "is the machine correct from init". Seeds dedupe against init and each
+// other by stable(); counterexample paths record whether they start at init
+// or at a seed.
+export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000, legacyBareNext = false, initialStates = [] }) {
   // ── Engine selection ──────────────────────────────────────────────────────
   // A v2 SAM strict-profile module is driven through the {init,next} adapter
   // (rejections return the input state — a legal, observable no-op) with the
@@ -155,23 +162,31 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
     try { init = mod.init(); }
     catch (e) { return { error: `init() threw: ${e && e.message}`, parent: new Map(), violations, capHit }; }
     const initKey = stable(init);
-    const parent = new Map([[initKey, { prev: null, action: null, data: null, state: init }]]);
+    const parent = new Map([[initKey, { prev: null, action: null, data: null, state: init, origin: 'init' }]]);
     const queue = [init];
+    // Seed the frontier with the provided initial states (deduped against
+    // init and each other) — each is explored exactly like init.
+    for (const s of initialStates) {
+      const k = stable(s);
+      if (!parent.has(k)) { parent.set(k, { prev: null, action: null, data: null, state: s, origin: 'seed' }); queue.push(s); }
+    }
 
     const pathTo = (key) => {
       const chain = [];
       let k = key;
-      while (k !== null && parent.has(k)) { const n = parent.get(k); chain.push({ action: n.action, data: n.data, state: n.state }); k = n.prev; }
+      while (k !== null && parent.has(k)) { const n = parent.get(k); chain.push({ action: n.action, data: n.data, state: n.state, ...(n.origin ? { origin: n.origin } : {}) }); k = n.prev; }
       return chain.reverse();
     };
     // Dedup by (kind, name): a state invariant and a transition invariant may
     // legitimately share a name; keying on the name alone would hide one.
     const record = (name, kind, path, detail) => { const k = `${kind}:${name}`; if (seen.has(k)) return; seen.add(k); violations.push({ invariant: name, kind, path, detail }); };
 
-    // invariants on the initial state
-    for (const inv of stateInv) {
-      let ok; try { ok = inv.pred(init); } catch { ok = false; }
-      if (!ok) record(inv.name, 'state', pathTo(initKey), 'violated in the initial state');
+    // invariants on every root of the exploration (init + seeds)
+    for (const [rk, node] of parent) {
+      for (const inv of stateInv) {
+        let ok; try { ok = inv.pred(node.state); } catch { ok = false; }
+        if (!ok) record(inv.name, 'state', pathTo(rk), node.origin === 'seed' ? 'violated in a seeded initial state' : 'violated in the initial state');
+      }
     }
 
     let head = 0; // index cursor — Array.shift() is O(n) per pop, O(n²) overall
@@ -255,10 +270,11 @@ export function render(result) {
   for (const v of result.violations) {
     L.push(`\n  ✗ ${v.invariant} [${v.kind}] — ${v.detail}`);
     if (!v.path.length) continue; // e.g. a nondeterminism finding has no single counterexample path
-    L.push('    counterexample (shortest path from init):');
+    const fromSeed = v.path[0] && v.path[0].origin === 'seed';
+    L.push(`    counterexample (shortest path from ${fromSeed ? 'a seeded state' : 'init'}):`);
     v.path.forEach((step, i) => {
       const st = typeof step.state === 'string' ? step.state : JSON.stringify(step.state);
-      if (i === 0 && step.action === null) L.push(`      init            ${st}`);
+      if (i === 0 && step.action === null) L.push(`      ${fromSeed ? 'seed' : 'init'}            ${st}`);
       else L.push(`      ${step.action}(${JSON.stringify(step.data)}) -> ${st}`);
     });
   }
@@ -275,12 +291,20 @@ async function loadInvariants(path) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = {};
   for (let i = 2; i < process.argv.length; i++) if (process.argv[i].startsWith('--')) { args[process.argv[i].slice(2)] = process.argv[i + 1]; i++; }
-  if (!args.spec || !args.contract) { console.error('usage: node check.mjs --spec <mod.js> --contract <c.json> [--invariants <inv.mjs>] [--traces <dir>] [--max-states N] [--json out]'); process.exit(2); }
+  if (!args.spec || !args.contract) { console.error('usage: node check.mjs --spec <mod.js> --contract <c.json> [--invariants <inv.mjs>] [--traces <dir>] [--initial-states <states.json>] [--max-states N] [--json out]'); process.exit(2); }
   const contract = JSON.parse(readFileSync(args.contract, 'utf-8'));
   const invariants = await loadInvariants(args.invariants);
   const windows = args.traces ? loadWindows(args.traces) : [];
   const specModule = loadSpec(args.spec);
-  const result = check({ specModule, contract, invariants, windows, maxStates: Number(args['max-states'] || 100000) });
+  // --initial-states: a .json array of state objects seeded into the BFS
+  // alongside init() — the versioning check "can any of THESE states be
+  // driven to a violation under these rules".
+  let initialStates = [];
+  if (args['initial-states']) {
+    initialStates = JSON.parse(readFileSync(args['initial-states'], 'utf-8'));
+    if (!Array.isArray(initialStates)) { console.error(`--initial-states '${args['initial-states']}' must be a JSON array of states`); process.exit(2); }
+  }
+  const result = check({ specModule, contract, invariants, windows, maxStates: Number(args['max-states'] || 100000), initialStates });
   console.log(render(result));
   if (args.json) { const { writeFileSync } = await import('node:fs'); writeFileSync(args.json, JSON.stringify(result, null, 2)); }
   process.exit(result.ok ? 0 : 1);

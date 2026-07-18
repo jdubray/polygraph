@@ -1,0 +1,5 @@
+[
+  { "orderState": "charging", "totalCents": 500, "txId": "" },
+  { "orderState": "pending", "totalCents": 0, "txId": "" },
+  { "orderState": "completed", "totalCents": 2500, "txId": "tx-1" }
+]

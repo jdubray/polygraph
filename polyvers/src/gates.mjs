@@ -26,6 +26,7 @@
 
 import { stable } from '../../scripts/load-spec.mjs';
 import samAdapter from '../../scripts/sam-adapter.cjs';
+import { check } from '../../scripts/check.mjs';
 import { observableKeys } from './artifacts.mjs';
 
 const { isSamV2Module } = samAdapter;
@@ -204,6 +205,45 @@ export function invariantsPointwiseGate(newA, corpus) {
   return done('invariants-pointwise', failures, summary);
 }
 
+// ── semantic-model-check (M1) ───────────────────────────────────────────────
+// The essay's compatibility definition, executable: v(n+1) is semantically
+// compatible with the fleet iff no corpus snapshot can be driven to an
+// invariant violation under the NEW machine's rules. One shared checker
+// (scripts/check.mjs) runs the exhaustive BFS with the corpus states seeded
+// as initial states alongside init() — the v1-reachable/v3-unreachable
+// landmine is exactly what the seeds find and the from-init check cannot.
+export function semanticModelCheckGate(newA, corpus, { maxStates = 100000, allowBounded = false } = {}) {
+  const failures = [];
+  const idByKey = new Map(corpus.map((e) => [e.key ?? stable(e.state), e.id]));
+  const result = check({
+    specModule: newA.module,
+    contract: newA.contract,
+    invariants: { stateInvariants: newA.invariants ?? [], transitionInvariants: newA.transitionInvariants ?? [] },
+    maxStates,
+    initialStates: corpus.map((e) => e.state),
+  });
+  if (result.error) {
+    failures.push({ message: `model check could not run: ${result.error}` });
+    return done('semantic-model-check', failures, 'exhaustive check from fleet snapshots as initial states');
+  }
+  for (const v of result.violations) {
+    const root = v.path[0];
+    const seedId = root && root.origin === 'seed' ? (idByKey.get(stable(root.state)) ?? 'seeded state') : null;
+    const steps = v.path.filter((s) => s.action !== null).map((s) => s.action);
+    failures.push({
+      id: seedId ?? 'init',
+      message: `'${v.invariant}' [${v.kind}] — ${v.detail}; shortest counterexample from ${seedId ? `snapshot ${seedId}` : 'init'}: ${steps.length ? steps.join(' → ') : '(violated at the root state)'}`,
+    });
+  }
+  // BOUNDED is not a pass (check-effects doctrine): "0 violations over almost
+  // nothing" must not gate a deploy unless the operator explicitly accepts it.
+  if (result.capHit && !allowBounded) {
+    failures.push({ message: `exploration BOUNDED at ${result.statesExplored} states — a clean result over a truncated space is not a pass; raise --max-states or accept explicitly with --allow-bounded` });
+  }
+  const summary = `exhaustive check from ${corpus.length} fleet snapshot(s) + init, ${result.statesExplored} state(s) explored${result.capHit ? ' (BOUNDED)' : ''}`;
+  return done('semantic-model-check', failures, summary);
+}
+
 function done(gate, failures, summary) {
   return { gate, ok: failures.length === 0, summary, failures };
 }
@@ -213,7 +253,7 @@ function done(gate, failures, summary) {
 // demand MUST have a runner here; the CLI iterates classification.gates over
 // this map and reports a missing runner as a failing gate result — a wanted
 // gate can never silently not run.
-export const NEEDS_CORPUS = new Set(['shape-roundtrip', 'invariants-pointwise']);
+export const NEEDS_CORPUS = new Set(['shape-roundtrip', 'invariants-pointwise', 'semantic-model-check']);
 
 export const GATE_RUNNERS = {
   'load': ({ newA }) => loadGate(newA),
@@ -221,4 +261,5 @@ export const GATE_RUNNERS = {
   'vocabulary': ({ oldA, newA, diffs }) => vocabularyGate(oldA, newA, diffs),
   'invariant-diff': ({ diffs }) => invariantDiffGate(diffs),
   'invariants-pointwise': ({ newA, corpus }) => invariantsPointwiseGate(newA, corpus),
+  'semantic-model-check': ({ newA, corpus, opts }) => semanticModelCheckGate(newA, corpus, opts),
 };

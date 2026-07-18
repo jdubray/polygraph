@@ -19,8 +19,8 @@ import { terminalKeyOf } from './artifacts.mjs';
 export const LANES = {
   semantic: {
     description: 'same shape, same vocabulary, new transition rules',
-    gates: ['load', 'shape-roundtrip', 'invariants-pointwise'],
-    deferred: [{ gate: 'semantic-model-check', milestone: 'M1', why: 'model check with corpus snapshots as initial states (the landmine hunt)' }],
+    gates: ['load', 'shape-roundtrip', 'invariants-pointwise', 'semantic-model-check'],
+    deferred: [],
   },
   shape: {
     description: 'the sealed state shape changed',
@@ -34,8 +34,8 @@ export const LANES = {
   },
   intent: {
     description: 'the invariants themselves changed',
-    gates: ['load', 'invariant-diff', 'invariants-pointwise'],
-    deferred: [{ gate: 'semantic-model-check', milestone: 'M1', why: 'whether a strengthened rule is merely not-yet-violated or actually unreachable' }],
+    gates: ['load', 'invariant-diff', 'invariants-pointwise', 'semantic-model-check'],
+    deferred: [],
   },
 };
 

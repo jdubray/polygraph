@@ -13,8 +13,9 @@ import { dirname, join } from 'node:path';
 import { loadArtifacts } from '../src/artifacts.mjs';
 import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
-import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate } from '../src/gates.mjs';
+import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate, semanticModelCheckGate } from '../src/gates.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
+import { check } from '../../scripts/check.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fix = (name) => join(here, 'fixtures', name);
@@ -43,7 +44,7 @@ test('classify: rule-only module edit → semantic lane only', async () => {
   const c = classify(await load('order-v1'), await load('order-v2-rules'));
   assert.deepEqual(c.lanes, ['semantic']);
   assert.ok(c.gates.includes('shape-roundtrip'));
-  assert.ok(c.deferred.some((d) => d.gate === 'semantic-model-check' && d.milestone === 'M1'));
+  assert.ok(c.gates.includes('semantic-model-check')); // live as of M1, no longer deferred
 });
 
 test('classify: renamed action → vocabulary + semantic, rename flagged', async () => {
@@ -129,17 +130,16 @@ test('classify: deleting a transition invariant is a removal, never a mere edit'
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('classify: deferred gates are deduped across lanes', async () => {
-  // module + invariants change → semantic AND intent lanes, both deferring
-  // semantic-model-check; the classification must list it once.
+test('classify: gates demanded by several lanes are deduped', async () => {
+  // module + invariants change → semantic AND intent lanes; both demand
+  // semantic-model-check, the classification must list it once.
   const dir = scratchCopy('order-v2-rules');
   try {
     cpSync(fix('order-v2-stricter/invariants.mjs'), join(dir, 'invariants.mjs'));
     const cls = classify(await load('order-v1'), await loadArtifacts(dir));
     assert.deepEqual(cls.lanes.sort(), ['intent', 'semantic']);
-    const rows = cls.deferred.filter((d) => d.gate === 'semantic-model-check');
-    assert.equal(rows.length, 1);
-    assert.deepEqual(rows[0].lanes.sort(), ['intent', 'semantic']);
+    assert.equal(cls.gates.filter((g) => g === 'semantic-model-check').length, 1);
+    assert.deepEqual(cls.deferred, []); // nothing deferred for these lanes as of M1
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -345,6 +345,58 @@ test('cli: a cosmetic contract edit reports "no lane fired", never a PASS over z
     assert.ok(r.stdout.includes('no lane fired'));
     assert.ok(!r.stdout.includes('Verdict'));
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ── M1: the semantic gate (model check from fleet snapshots) ────────────────
+
+test('m1: rule-only change passes the semantic gate over the old fleet', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-rules')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  const g = semanticModelCheckGate(newA, corpus);
+  assert.equal(g.ok, true);
+  assert.ok(g.summary.includes('fleet snapshot'));
+});
+
+test('m1: THE LANDMINE — pointwise passes, from-init check passes, only the seeded check catches it', async () => {
+  const newA = await load('order-v2-landmine');
+  const corpus = loadCorpus(fix('landmine-fleet.json'));
+
+  // The old-fleet snapshot {charging, totalCents: 500} satisfies every
+  // invariant pointwise (it is not fulfilling)...
+  assert.equal(invariantsPointwiseGate(newA, corpus).ok, true);
+
+  // ...and the NEW machine is clean when explored from init() alone — SUBMIT
+  // now floors totals at 1000, so no low-total state is init-reachable...
+  const invariants = { stateInvariants: newA.invariants, transitionInvariants: newA.transitionInvariants };
+  const fromInit = check({ specModule: newA.module, contract: newA.contract, invariants });
+  assert.equal(fromInit.ok, true);
+
+  // ...but seeding the fleet states finds CHARGE_OK driving the old
+  // charging-500 snapshot into 'fulfilling' below the new minimum.
+  const g = semanticModelCheckGate(newA, corpus);
+  assert.equal(g.ok, false);
+  const f = g.failures.find((x) => x.message.includes("'fulfilling-total-minimum'"));
+  assert.ok(f, 'the strengthened rule must be the violation');
+  assert.ok(f.message.includes('CHARGE_OK'), 'counterexample names the driving action');
+  assert.ok(f.id.includes('landmine-fleet.json#0'), 'failure names the seeding snapshot');
+});
+
+test('m1: BOUNDED exploration is a failure unless explicitly accepted', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-rules')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  const bounded = semanticModelCheckGate(newA, corpus, { maxStates: 3 });
+  assert.equal(bounded.ok, false);
+  assert.ok(bounded.failures.some((f) => f.message.includes('BOUNDED')));
+  const accepted = semanticModelCheckGate(newA, corpus, { maxStates: 3, allowBounded: true });
+  assert.equal(accepted.ok, true); // no violations in the truncated space, and the operator accepted the bound
+});
+
+test('m1: cli end-to-end — the landmine pair fails check with the semantic gate', () => {
+  const r = runCli(['check', '--old', fix('order-v1'), '--new', fix('order-v2-landmine'), '--snapshots', fix('landmine-fleet.json')]);
+  assert.equal(r.code, 1);
+  assert.ok(r.stdout.includes('semantic-model-check | **FAIL**'));
+  assert.ok(r.stdout.includes('fulfilling-total-minimum'));
+  assert.ok(!r.stdout.includes('NOT RUN (M1)')); // the gate is live, not deferred
 });
 
 test('cli: a vocabulary-only change needs no corpus (no --snapshots/--synthesize required)', () => {

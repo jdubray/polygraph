@@ -1,8 +1,12 @@
 # polyvers — plan for the fourth engine (version)
 
-**Status: PLAN v0.2 — M0 implemented** under [`polyvers/`](../polyvers/README.md)
-(classifier, shape/vocabulary/intent gates, archive + synthesized corpora,
-CLI, fixtures, `npm run test:polyvers`). M1–M3 remain as planned below.
+**Status: PLAN v0.3 — M0 and M1 implemented** under
+[`polyvers/`](../polyvers/README.md): classifier, shape/vocabulary/intent
+gates, archive + synthesized corpora, CLI, fixtures (M0, hardened by an
+adversarial multi-agent review — ~30 confirmed findings fixed), and the
+semantic model-check gate via `check.mjs --initial-states` with the landmine
+fixture proving the seeded check catches what the from-init check cannot
+(M1). `npm run test:polyvers`. M2–M3 remain as planned below.
 **Thesis:** `docs/VERSIONING.md` argues that "compatible" decomposes into five
 mechanically checkable questions. Today those checks are scattered — some live
 in `polyrun deploy`/`migrate`, some exist only as prose in the essay, and the

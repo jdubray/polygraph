@@ -27,7 +27,7 @@ const flag = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? ar
 const has = (name) => args.includes(`--${name}`);
 
 const usage = () => {
-  console.error('usage: polyvers <classify|check> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--max-states N] [--out <dir>] [--json]');
+  console.error('usage: polyvers <classify|check> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--max-states N] [--allow-bounded] [--out <dir>] [--json]');
   process.exit(2);
 };
 
@@ -68,6 +68,9 @@ try {
       console.log('polyvers check: no lane fired — the artifacts differ, but only in ways no compatibility lane classifies (cosmetic edit); zero gates apply');
     } else {
       const wanted = classification.gates;
+      const rawMax = flag('max-states');
+      const maxStates = rawMax === undefined ? undefined : Number(rawMax);
+      if (rawMax !== undefined && (!Number.isFinite(maxStates) || maxStates < 1)) { console.error(`invalid --max-states '${rawMax}'`); process.exit(2); }
 
       // ── corpus (only if a wanted gate consumes one) ──
       const needsCorpus = wanted.some((g) => NEEDS_CORPUS.has(g));
@@ -81,10 +84,7 @@ try {
           // the machine or working directory the check ran from.
           corpusInfo = { source: `archive (${basename(snapshotsPath)})`, count: corpus.length };
         } else if (has('synthesize')) {
-          const rawMax = flag('max-states');
-          const maxStates = Number(rawMax ?? 20000);
-          if (!Number.isFinite(maxStates) || maxStates < 1) { console.error(`invalid --max-states '${rawMax}'`); process.exit(2); }
-          const { entries, truncated, notes } = synthesizeCorpus(oldA.module, { maxStates });
+          const { entries, truncated, notes } = synthesizeCorpus(oldA.module, { maxStates: maxStates ?? 20000 });
           corpus = entries;
           corpusInfo = { source: 'synthesized (BFS-reachable states of the OLD machine — the weakest tier; prefer live or archived snapshots)', count: corpus.length, truncated, notes };
         } else {
@@ -100,7 +100,10 @@ try {
       // ── gates: iterate the classification's demands over the registry —
       // a wanted gate with no runner is a failing result, never a silent
       // omission the verdict overlooks. ──
-      const ctx = { oldA, newA, corpus, diffs: classification.diffs };
+      const ctx = {
+        oldA, newA, corpus, diffs: classification.diffs,
+        opts: { ...(maxStates !== undefined ? { maxStates } : {}), allowBounded: has('allow-bounded') },
+      };
       const gateResults = wanted.map((name) => {
         const run = GATE_RUNNERS[name];
         if (!run) return { gate: name, ok: false, summary: 'required by the classified lanes but NOT IMPLEMENTED in this build', failures: [{ message: `no runner registered for gate '${name}' — the verdict below cannot be trusted until it runs` }] };

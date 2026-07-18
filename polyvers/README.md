@@ -1,4 +1,4 @@
-# polyvers — the versioning engine (M0)
+# polyvers — the versioning engine (M0 + M1)
 
 The fourth engine of the triad-now-quartet: Polygraph **audits**, polygen
 **authors**, polyrun **executes**, polyvers **evolves**. It makes
@@ -8,11 +8,20 @@ the change into the essay's compatibility lanes, runs exactly the gates
 that lane requires, and emits a compatibility report a deploy can be gated
 on. Plan: [`docs/polyvers-plan.md`](../docs/polyvers-plan.md).
 
-**M0 status (implemented):** classifier + shape / vocabulary / intent gates
-over archived or synthesized snapshot corpora. Deterministic, no API key.
-The semantic model-check gate (live snapshots as initial states) is M1; the
-migration lane and the in-flight-stimuli gate are M2 — reports disclose
-deferred gates as NOT RUN rather than silently passing.
+**Status:** M0 (classifier + shape / vocabulary / intent gates) and M1 (the
+**semantic model-check gate**) are implemented. Deterministic, no API key.
+The M1 gate is the headline: `scripts/check.mjs` gained an `initialStates`
+option (CLI: `--initial-states <states.json>`), so the exhaustive BFS runs
+with every fleet snapshot seeded alongside `init()` — the essay's precise
+compatibility definition, executable: *v(n+1) is compatible with the fleet
+iff no live v(n) state can be driven to an invariant violation under
+v(n+1)'s rules.* The landmine fixture (`test/fixtures/order-v2-landmine/`)
+proves the point: its violation passes the pointwise gate AND the from-init
+model check, and only the seeded check finds it. A BOUNDED exploration is a
+failing gate unless accepted explicitly with `--allow-bounded`
+(check-effects doctrine). The migration lane and the in-flight-stimuli gate
+are M2 — reports disclose deferred gates as NOT RUN rather than silently
+passing.
 
 ## Usage
 
@@ -43,10 +52,10 @@ refused, never a vacuous PASS.
 
 | lane | fires when | M0 gates | deferred |
 |---|---|---|---|
-| semantic | the module changed | load · shape-roundtrip · invariants-pointwise | semantic model check (M1) |
+| semantic | the module changed | load · shape-roundtrip · invariants-pointwise · semantic-model-check | — |
 | shape | contract `stateKeys` changed | load · shape-roundtrip | migrate (M2) |
 | vocabulary | actions / reject reasons / effect kinds / terminal states changed | load · vocabulary | stimuli (M2) |
-| intent | `invariants.mjs` changed (state or transition invariants) | load · invariant-diff · invariants-pointwise | semantic model check (M1) |
+| intent | `invariants.mjs` changed (state or transition invariants) | load · invariant-diff · invariants-pointwise · semantic-model-check | — |
 
 Gate doctrine, from the SDLC best-practices: a removed action fails the
 vocabulary gate (deprecate, don't delete — in-flight stimuli still arrive);
