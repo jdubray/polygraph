@@ -49,19 +49,25 @@ not misclassified — full fix would need acceptor-aware donors) and the
 per-candidate BFS cost in harvest (efficiency backlog).
 **M3 is implemented**: `commands/polynv.md` (`/polygraph:polynv`),
 `agents/polynv.md` (the autonomous half only — harvest/pre-check/grade/
-question prep; the interview is never delegated), quartet integration
+question prep; the interview is never delegated), quintet integration
 (ARCHITECTURE five engines + Engine 5 section + intent-ledger artifact
 row + invariant-strength trust-boundary row; SDLC human gate #2 gains
 the elicit path; README names the grade as the partial adequacy
 measure; plugin/marketplace manifests updated), and polyvers' intent
 lane consumes ledger provenance — the compat-report's intent diff
 annotates each added invariant as elicited-and-confirmed-by, ledger:
-<status>, or no-ledger-record/unelicited. **Recorded follow-ups:** the
+<status>, or the bare fact "(no ledger record)" (never a verdict — a
+hand-written rule may be well-reviewed outside polynv). M3's own
+adversarial review fixed a lookup-key mismatch (diff names are
+'state:'/'transition:'-prefixed; ledger ids are bare), the
+partial-provenance-on-parse-failure inconsistency, and the
+polynv-unavailable misdiagnosis (RECORDED BUT UNVERIFIED, not
+UNREADABLE). **Recorded follow-ups:** the
 re-interview diff on a version bump (old dialog answers vs new
 behavior/priors, plan §10.6's drift design) and the harvest
 per-candidate BFS reuse (efficiency).
 
-**Thesis:** every gate in the quartet is exactly as good as
+**Thesis:** every gate in the other four engines is exactly as good as
 `invariants.mjs`, and the repo says so itself — *"unstated intent is
 invisible to every gate"* (VERSIONING.md), *"a converged run against wrong
 intent proves nothing"* (ARCHITECTURE.md trust boundaries). The ceiling of

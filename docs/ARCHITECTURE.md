@@ -27,8 +27,8 @@ the fleet snapshots are the versioning gate's initial states.
 > as in TLA+), and the abstraction gap between declared domain and real
 > data is not measured by any gate.
 
-[![Four engines, one artifact family](diagrams/thumbs/architecture-01-three-engines.png)](diagrams/architecture-01-three-engines.dc.html)
-*Interactive diagram — [Four engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine)*
+[![Five engines, one artifact family](diagrams/thumbs/architecture-01-three-engines.png)](diagrams/architecture-01-three-engines.dc.html)
+*Interactive diagram — [Five engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine; the rendered diagram predates polynv — a refresh is a recorded follow-up)*
 
 ## The artifact family
 
@@ -57,7 +57,7 @@ state-equality definition every consumer shares.
 
 ## The SAM v2 strict profile — why it is the common substrate
 
-All four engines depend on the same code shape
+All five engines depend on the same code shape
 (`@cognitive-fab/sam-pattern`, vendored at `scripts/vendor/`): named intents
 with schemas and **finite declared domains**, acceptors keyed per action, a
 **sealed model** (no hidden bookkeeping state), and first-class
@@ -255,8 +255,10 @@ anchoring: `docs/polynv-plan.md`; worked example + calibration:
 `polynv/README.md`). The essence:
 
 - **Harvest before asking**: contract-vocabulary templates (the source that
-  can propose rules the code violates), state-property and temporal
-  precedence miners over traces/snapshots/journal (fixed SAM-tuned grammar,
+  can propose rules the code violates), state-property mining over
+  snapshots and trace states plus precedence mining over ordered event
+  streams — traces and the polyrun journal; never snapshots, which carry
+  no order — (fixed SAM-tuned grammar,
   statistical confidence thresholds), frontier-model domain priors
   (payments lore asked about *this* machine), LLM code-reading — every
   candidate pre-checked so the question arrives as "rule or coincidence?"

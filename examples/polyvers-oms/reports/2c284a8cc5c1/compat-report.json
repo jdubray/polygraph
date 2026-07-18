@@ -68,6 +68,7 @@
   "adequacy": {
     "measured": false
   },
+  "intentProvenance": null,
   "gates": [
     {
       "gate": "load",

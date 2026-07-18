@@ -100,6 +100,13 @@ House rules:
   designer's revision goes through `--disposition modify`, which re-runs
   the pre-check; a revision the machine reachably violates stays open with
   its counterexample and must earn its own confirmation.
+- **Know the two special revision shapes.** A temporal (precedence) record
+  is revised STRUCTURALLY — `--js
+  '{"kind":"precedence","first":"<ACTION>","then":"<ACTION>"}'` — and is
+  confirmable only after its graph check ran; free-form js is refused. A
+  mutation-survivor record has no predicate yet: the answering `modify`
+  supplies the rule AND its shape via `--target state|transition`, then a
+  separate `confirm` (which reports the rule's consequences).
 - **Never answer an intent question yourself.** You propose and frame; the
   designer dispositions. If they are unsure, offer `defer` with `--assign`
   and `--concern` — elicitation is multi-person and ongoing by design; a

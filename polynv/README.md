@@ -38,7 +38,7 @@ priors + code-reading via the pipeline's existing Anthropic call; strict
 parser, drops-with-notes). Deterministic except `--llm`; no API key
 otherwise. `npm run test:polynv`.
 
-**M3** ships the surfaces and the quartet integration: the
+**M3** ships the surfaces and the quintet integration: the
 `/polygraph:polynv` command, the `polynv` agent (autonomous half only —
 harvest, pre-check, grade, question prep; **the interview is never
 delegated**: intent dispositions belong to the designer, in-session), the

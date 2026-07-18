@@ -1,6 +1,6 @@
 ---
 description: Run polynv — elicit the invariants for a state machine. Harvest candidates from the contract's vocabulary, traces, and fleet snapshots; contribute frontier-model domain priors; pre-check every candidate (HOLDS or a concrete counterexample); drive a plugin-led interview into an append-only intent ledger; grade invariant-set strength by mutation. No API key (except --llm).
-argument-hint: --artifacts <dir> [--traces <path>] [--snapshots <path>] — or — <harvest|questions|add|record|grade|report> with that subcommand's flags
+argument-hint: <harvest|questions|add|record|grade|report> --artifacts <dir> [subcommand flags] — start with: harvest --artifacts <dir> [--traces <path>] [--snapshots <path>]
 allowed-tools: Bash, Read, Write
 ---
 
@@ -17,11 +17,22 @@ product. The CLI is `${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs`:
 ```
 node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs harvest   --artifacts <dir> [--traces <p>] [--snapshots <p>] [--min-obs N] [--llm --model <id>]
 node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs questions --artifacts <dir> [--next] [--for <name>] [--json]
-node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs add       --artifacts <dir> --id prior:<slug> --target state|transition --question "…" --js "…" --author <you> --source domain-prior --domain <d> --norm "…" --model <id>
+node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs add       --artifacts <dir> --id prior:<slug> --target state|transition --question "…" --js "…" --author <you> [--source domain-prior --domain <d> --norm "…" --model <id>]
 node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs record    --artifacts <dir> --id <id> --disposition confirm|reject|abandon|defer|modify --author <designer>
+                                                           [--js "…"] [--concern "…"] [--assign <name>] [--target state|transition] [--out <path>] [--force]
 node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs grade     --artifacts <dir> [--include-invariants]
 node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs report    --artifacts <dir> [--log]
 ```
+
+Disposition flags that trip the unprepared: a **temporal** (precedence)
+record's revision is STRUCTURED — `--disposition modify
+--js '{"kind":"precedence","first":"<ACTION>","then":"<ACTION>"}'` —
+free-form js is refused (there is no checker for it). A **mutation-survivor**
+record arrives with no predicate: your answering `modify` supplies both the
+rule and its shape (`--target state|transition`), then a separate `confirm`.
+And `--source domain-prior` is what routes `--domain/--norm/--model` into
+the record's provenance — omit it and a model-drafted prior is silently
+recorded as designer-sourced; never omit it when adding YOUR priors.
 
 Workflow (the skill has the full protocol — these are the fixed points):
 

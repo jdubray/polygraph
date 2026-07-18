@@ -1,7 +1,9 @@
 # polyvers — the versioning engine (M0–M3)
 
-The fourth engine of the triad-now-quartet: Polygraph **audits**, polygen
-**authors**, polyrun **executes**, polyvers **evolves**. It makes
+The fourth engine: Polygraph **audits**, polygen **authors**, polyrun
+**executes**, polyvers **evolves**, polynv **elicits** the invariants these
+gates run against (polyvers consumes its ledger: the compat-report's
+invariant-adequacy trust tier and intent-diff provenance annotations). It makes
 [`docs/VERSIONING.md`](../docs/VERSIONING.md) executable: given two versions
 of a machine's artifact family and a source of fleet state, it classifies
 the change into the essay's compatibility lanes, runs exactly the gates

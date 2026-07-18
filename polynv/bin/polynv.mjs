@@ -64,7 +64,7 @@ const numFlag = (name, { min = 1 } = {}) => {
 };
 
 const usage = () => {
-  console.error('usage: polynv <harvest|questions|add|record|report> --artifacts <dir> [options] — see the header of polynv/bin/polynv.mjs');
+  console.error('usage: polynv <harvest|questions|add|record|grade|report> --artifacts <dir> [options] — see the header of polynv/bin/polynv.mjs');
   process.exit(2);
 };
 

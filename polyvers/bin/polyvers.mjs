@@ -220,28 +220,44 @@ try {
       let intentProvenance = null;
       const lp = join(newDir, 'intent-ledger.json');
       if (existsSync(lp)) {
+        // The polynv import gets its OWN failure mode: a polyvers checkout
+        // without the sibling polynv/ must not misreport a perfectly
+        // readable ledger as UNREADABLE (review finding, M3).
+        let polynvLedger = null;
+        try { polynvLedger = await import('../../polynv/src/ledger.mjs'); } catch { /* polynv unavailable */ }
         try {
           const ledger = JSON.parse(readFileSync(lp, 'utf-8'));
+          if (!Array.isArray(ledger.records)) throw new Error('no records array — not a polynv ledger');
           // Intent-lane provenance (polynv M3): a changed invariant that was
           // CONFIRMED through an elicitation dialog reads differently from
-          // one that appeared with no ledger record — the report says which.
-          intentProvenance = {};
-          for (const r of ledger.records ?? []) {
-            const confirmEvent = [...(r.events ?? [])].reverse().find((e) => e.type === 'disposition' && e.disposition === 'confirm');
-            intentProvenance[r.id] = { status: r.status, by: confirmEvent?.author ?? null };
+          // one that has no ledger record — the report says which. Built into
+          // a local and PUBLISHED only after the whole read succeeds, so a
+          // mid-parse failure can never pair UNREADABLE adequacy with
+          // partial provenance annotations. An empty ledger publishes
+          // nothing: zero records are not evidence about any rule.
+          const prov = {};
+          for (const r of ledger.records) {
+            if (typeof r.id !== 'string') continue;
+            const confirmEvent = [...(r.events ?? [])].reverse().find((e) => e && e.type === 'disposition' && e.disposition === 'confirm');
+            prov[r.id] = { status: r.status, by: confirmEvent?.author ?? null };
           }
           const g = ledger.grade;
           if (g) {
-            const { oracleHashOf } = await import('../../polynv/src/ledger.mjs');
-            const stale =
-              (g.ledgerOracleHash && oracleHashOf(ledger) !== g.ledgerOracleHash) ||
-              (g.invariantsFileHash && newA.invariantsHash && g.invariantsFileHash !== newA.invariantsHash);
-            adequacy = stale
-              ? { measured: false, stale: true }
-              : { measured: true, killed: g.killed, distinct: g.distinct, survivors: g.survivors?.length ?? 0 };
+            if (!polynvLedger) {
+              adequacy = { measured: false, unverifiable: 'polynv is unavailable to recompute the grade\'s oracle hash' };
+            } else {
+              const stale =
+                (g.ledgerOracleHash && polynvLedger.oracleHashOf(ledger) !== g.ledgerOracleHash) ||
+                (g.invariantsFileHash && newA.invariantsHash && g.invariantsFileHash !== newA.invariantsHash);
+              adequacy = stale
+                ? { measured: false, stale: true }
+                : { measured: true, killed: g.killed, distinct: g.distinct, survivors: g.survivors?.length ?? 0 };
+            }
           }
+          if (Object.keys(prov).length) intentProvenance = prov;
         } catch (e) {
           adequacy = { measured: false, unreadable: String(e && e.message) };
+          intentProvenance = null;
         }
       }
       const report = buildReport({ classification, corpusInfo, gateResults, adequacy, intentProvenance });

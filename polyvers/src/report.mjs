@@ -54,7 +54,9 @@ export function renderReport(r) {
       ? `**Invariant adequacy:** STALE — the invariants changed after the last \`polynv grade\`; the recorded score no longer describes this intent artifact (regrade to restore the disclosure)`
       : r.adequacy?.unreadable
         ? `**Invariant adequacy:** UNREADABLE — an intent-ledger.json is present but could not be parsed (${r.adequacy.unreadable}); fix or regenerate it — this is not the same as never graded`
-        : `**Invariant adequacy:** NOT MEASURED — invariant-set strength unknown; a PASS against weak invariants is weaker than it looks (\`polynv grade\` measures it)`);
+        : r.adequacy?.unverifiable
+          ? `**Invariant adequacy:** RECORDED BUT UNVERIFIED — a grade is present but ${r.adequacy.unverifiable}; treat as unmeasured`
+          : `**Invariant adequacy:** NOT MEASURED — invariant-set strength unknown; a PASS against weak invariants is weaker than it looks (\`polynv grade\` measures it)`);
   lines.push('');
   lines.push('| gate | verdict | summary |');
   lines.push('|---|---|---|');
@@ -108,12 +110,16 @@ export function renderReport(r) {
   const i = r.diffs.intent;
   if (i.changed) {
     lines.push('## Intent diff');
-    // provenance annotation only when the new version carries a ledger —
-    // absence of a ledger is not evidence of anything and stays silent
+    // provenance annotation only when the new version carries a ledger with
+    // records — absence of a ledger (or an empty one) is not evidence and
+    // stays silent. Diff names are prefixed 'state:'/'transition:' by the
+    // classifier; ledger record ids are bare — strip before lookup. A miss
+    // states the FACT (no ledger record), never a verdict like "unelicited":
+    // a hand-written rule may be thoroughly reviewed outside polynv.
     const prov = (name) => {
       if (!r.intentProvenance) return '';
-      const p = r.intentProvenance[name];
-      if (!p) return ' (no ledger record — unelicited)';
+      const p = r.intentProvenance[name.replace(/^(state|transition):/, '')];
+      if (!p) return ' (no ledger record)';
       return p.status === 'confirmed' ? ` (elicited: confirmed${p.by ? ` by ${p.by}` : ''})` : ` (ledger: ${p.status})`;
     };
     if (i.added.length) lines.push(`- invariants added: ${i.added.map((n) => n + prov(n)).join(', ')}`);

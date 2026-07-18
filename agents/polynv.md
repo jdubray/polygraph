@@ -15,7 +15,11 @@ harvested candidates are behavior, not intent, and an agent answering intent
 questions is the exact failure the engine's design rule forbids
 (docs/polynv-plan.md §1: the generation role never holds the acceptance
 role). `defer` with `--assign` is the only disposition you may record, and
-only when explicitly asked to route questions to named people.
+only when explicitly asked to route questions to named people. Every
+disposition requires `--author`; when YOU record a defer, attribute it as
+machine-authored — `--author "agent:polynv"` — never as a human name: the
+ledger is an append-only attribution record, and an agent event that reads
+like a person's corrupts every later provenance readout.
 
 Procedure:
 

@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, existsSync, cpSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -162,20 +162,50 @@ test('compat-report: STALE and UNREADABLE adequacy variants render distinctly', 
 // ── M3: intent-diff provenance annotation in the compat-report ──────────────
 
 test('compat-report: intent diff annotates elicitation provenance when a ledger exists', () => {
+  // diff names carry the classifier's 'state:'/'transition:' prefixes;
+  // ledger record ids are bare — the render must bridge them (review fix)
   const classification = {
     changeId: 'c1', oldVersion: 'a', newVersion: 'b', lanes: ['intent'], deferred: [],
-    diffs: { vocabulary: { changed: false }, shape: { changed: false }, intent: { changed: true, added: ['terminal-absorbing:completed', 'hand-added-rule'], removed: [], renamed: [], edited: false } },
+    diffs: { vocabulary: { changed: false }, shape: { changed: false }, intent: { changed: true, added: ['transition:terminal-absorbing:completed', 'state:hand-added-rule'], removed: [], renamed: [], edited: false } },
   };
   const base = { classification, corpusInfo: { source: 'test', count: 1 }, gateResults: [{ gate: 'g', ok: true, summary: 's', failures: [] }] };
   const intentProvenance = { 'terminal-absorbing:completed': { status: 'confirmed', by: 'jj' } };
 
   const withLedger = renderReport(buildReport({ ...base, intentProvenance }));
-  assert.match(withLedger, /terminal-absorbing:completed \(elicited: confirmed by jj\)/);
-  assert.match(withLedger, /hand-added-rule \(no ledger record — unelicited\)/);
+  assert.match(withLedger, /transition:terminal-absorbing:completed \(elicited: confirmed by jj\)/);
+  // the miss states the FACT, never a verdict like "unelicited"
+  assert.match(withLedger, /state:hand-added-rule \(no ledger record\)/);
+  assert.ok(!withLedger.includes('unelicited'));
 
   // no ledger → no annotation (absence of a ledger is not evidence)
   const withoutLedger = renderReport(buildReport(base));
-  assert.match(withoutLedger, /invariants added: terminal-absorbing:completed, hand-added-rule\n/);
+  assert.match(withoutLedger, /invariants added: transition:terminal-absorbing:completed, state:hand-added-rule\n/);
+});
+
+test('polyvers cli: real ledger drives provenance + STALE adequacy end-to-end', () => {
+  // order-v1 → order-v2 adds invariant 'amend-count-nonnegative' (diffed as
+  // 'state:amend-count-nonnegative'); a ledger in the NEW dir with that bare
+  // record id must annotate it, and a grade whose oracle hash no longer
+  // matches the ledger must disclose STALE, not a score.
+  const dir = mkdtempSync(join(tmpdir(), 'polynv-e2e-'));
+  cpSync(join(orderV1, '..', 'order-v2'), dir, { recursive: true });
+  const ledger = {
+    format: 'polynv-ledger/1',
+    records: [{
+      id: 'amend-count-nonnegative', source: 'designer', target: 'state', question: 'q', evidence: null,
+      status: 'confirmed', assign: null,
+      versions: [{ nf: { kind: 'js', target: 'state', js: '(s) => true' }, js: '(s) => true', date: DATE, author: 'kd' }],
+      precheck: null,
+      events: [{ type: 'disposition', disposition: 'confirm', date: DATE, author: 'kd' }],
+    }],
+    grade: { milestone: 'M2', killed: 9, distinct: 10, survivors: [], ledgerOracleHash: 'not-the-real-hash' },
+  };
+  writeFileSync(join(dir, 'intent-ledger.json'), JSON.stringify(ledger, null, 2));
+  const polyversCli = join(here, '..', '..', 'polyvers', 'bin', 'polyvers.mjs');
+  const out = execFileSync(process.execPath, [polyversCli, 'check', '--old', orderV1, '--new', dir, '--synthesize'], { encoding: 'utf-8' });
+  assert.match(out, /state:amend-count-nonnegative \(elicited: confirmed by kd\)/);
+  assert.match(out, /Invariant adequacy:\*\* STALE/);
+  rmSync(dir, { recursive: true, force: true });
 });
 
 // ── findings via CLI: stale-file cleanup, flag guard ────────────────────────
