@@ -159,6 +159,25 @@ test('compat-report: STALE and UNREADABLE adequacy variants render distinctly', 
   assert.match(renderReport(buildReport({ ...base, adequacy: { measured: false, unreadable: 'Unexpected token' } })), /UNREADABLE — an intent-ledger\.json is present but could not be parsed/);
 });
 
+// ── M3: intent-diff provenance annotation in the compat-report ──────────────
+
+test('compat-report: intent diff annotates elicitation provenance when a ledger exists', () => {
+  const classification = {
+    changeId: 'c1', oldVersion: 'a', newVersion: 'b', lanes: ['intent'], deferred: [],
+    diffs: { vocabulary: { changed: false }, shape: { changed: false }, intent: { changed: true, added: ['terminal-absorbing:completed', 'hand-added-rule'], removed: [], renamed: [], edited: false } },
+  };
+  const base = { classification, corpusInfo: { source: 'test', count: 1 }, gateResults: [{ gate: 'g', ok: true, summary: 's', failures: [] }] };
+  const intentProvenance = { 'terminal-absorbing:completed': { status: 'confirmed', by: 'jj' } };
+
+  const withLedger = renderReport(buildReport({ ...base, intentProvenance }));
+  assert.match(withLedger, /terminal-absorbing:completed \(elicited: confirmed by jj\)/);
+  assert.match(withLedger, /hand-added-rule \(no ledger record — unelicited\)/);
+
+  // no ledger → no annotation (absence of a ledger is not evidence)
+  const withoutLedger = renderReport(buildReport(base));
+  assert.match(withoutLedger, /invariants added: terminal-absorbing:completed, hand-added-rule\n/);
+});
+
 // ── findings via CLI: stale-file cleanup, flag guard ────────────────────────
 
 test('cli: reopening the last confirmed rule REMOVES the generated invariants.mjs; a value-less flag errors instead of swallowing', () => {

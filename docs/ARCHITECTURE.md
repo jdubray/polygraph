@@ -1,10 +1,13 @@
-# Polygraph · polygen · polyrun · polyvers — system architecture
+# Polygraph · polygen · polyrun · polyvers · polynv — system architecture
 
-Four engines around one artifact family. **Polygraph audits** stateful code
+Five engines around one artifact family. **Polygraph audits** stateful code
 that already exists. **polygen authors** new stateful code so it is
 verifiable from the moment it is written. **polyrun executes** verified
 machines durably. **polyvers evolves** them — gating every new version
-against the live fleet, because state outlives code. Each is useful alone;
+against the live fleet, because state outlives code. **polynv elicits**
+the invariants every other engine's guarantee is relative to — a
+plugin-led interview over machine-harvested, pre-checked candidates,
+graded for strength by mutation. Each is useful alone;
 together they put TWO verification gates between authoring and execution —
 the first version of a machine takes the correctness path (Polygraph),
 every later version takes the compatibility path (polyvers) — and
@@ -40,7 +43,8 @@ diffable artifacts:
 | traces (`*.ndjson`) | ground truth: `{pre, action, data, post}` windows from the code actually executing | instrumentation, test harnesses, **the polyrun journal** | replay, audit |
 | `effects.cjs` + `effects.manifest.json` | pure effect mapper over transitions + the declared effect vocabulary/completion wiring | polygen draft (human-reviewed) | polyrun kernel/workers, check-effects, polyvers matrix |
 | `migrate.cjs` | the pure shape migration for a version: `migrate(oldState) → newState` | polyvers scaffold (human fills the holes) | polyvers migrate gate, `polyrun migrate` |
-| `compat-report.{json,md}` | the versioning verdict: lanes fired, gates run, corpus provenance, one witness per violated rule — deterministic, PR-gateable | polyvers check | CI, humans, the deploy decision |
+| `compat-report.{json,md}` | the versioning verdict: lanes fired, gates run, corpus provenance, invariant-adequacy trust tier, one witness per violated rule — deterministic, PR-gateable | polyvers check | CI, humans, the deploy decision |
+| `intent-ledger.json` | the elicitation system of record: every invariant ever considered (incl. rejected/abandoned), predicate versions, attributed dispositions, the adequacy grade with its oracle hash | polynv (dialog + grade) | polynv sessions, invariants.mjs generation, polyvers' adequacy + provenance disclosures |
 
 The `{pre, action, data, post}` **window** is the universal currency: the
 replayer scores specs against it, the harness captures it, the polyrun
@@ -241,17 +245,46 @@ milestones: `docs/polyvers-plan.md`; worked example:
   unreadable stimulus set, BOUNDED exploration — each is a failing verdict
   with the reason named, never a silent green. No API key anywhere.
 
+## Engine 5 — polynv (elicit)
+
+The engine that attacks the ceiling the trust-boundaries table below names:
+every gate is exactly as good as `invariants.mjs`, and invariant-writing is
+a scarce skill. polynv converts it into a common one — judging concrete
+stories — via a plugin-led interview (full plan and the literature
+anchoring: `docs/polynv-plan.md`; worked example + calibration:
+`polynv/README.md`). The essence:
+
+- **Harvest before asking**: contract-vocabulary templates (the source that
+  can propose rules the code violates), state-property and temporal
+  precedence miners over traces/snapshots/journal (fixed SAM-tuned grammar,
+  statistical confidence thresholds), frontier-model domain priors
+  (payments lore asked about *this* machine), LLM code-reading — every
+  candidate pre-checked so the question arrives as "rule or coincidence?"
+  (HOLDS) or "this concrete sequence is possible today — acceptable?"
+  (shortest counterexample).
+- **The plugin leads; the designer dispositions**: confirm / reject /
+  modify (re-checked, consequence-diffed) / defer (to a named person) —
+  attributed, append-only, in `intent-ledger.json`. Generation never holds
+  acceptance; a model may propose, only the designer confirms.
+- **The adequacy grade**: mutate the machine (four operator families),
+  discard behaviorally-equivalent mutants by graph comparison (decidable
+  here — the finite-domain restriction paying the toolset back), and grade
+  the confirmed set by kill ratio; survivors become the next questions,
+  and polyvers disclosures carry the score (or STALE once the invariants
+  drift from the graded oracle).
+
 ## Trust boundaries
 
 | layer | correctness argument |
 |---|---|
 | machine logic | exhaustive model check vs invariants (per machine, over its declared finite action/data domains) |
 | data abstraction (declared domain vs real data) | **human judgment** — someone picks the representative values; no gate measures whether they exercise every boundary the code branches on |
+| invariant-set strength | **partially measured**: polynv's mutation adequacy grade (kill ratio over behaviorally distinct machine mutants, equivalents discarded by graph comparison, disclosed in the compat-report) — with its blind spot stated: behavior-REMOVING mutants largely evade safety invariants |
 | machine ∘ mapper composition | check-effects path exploration incl. emissions, spawns, timer validity |
 | version compatibility | polyvers lanes/gates over fleet snapshots — exactly as good as the stated invariants and the corpus tier (both disclosed in the report) |
 | kernel + stores + workers | conventional: fault-injection tests, soak, adversarial review — small, fixed, logic-free by design |
 | effect handlers | **yours**: must be idempotent under the provided key (same division as Temporal activities) |
-| contract & invariants | **human judgment** — the one thing no tool derives; a converged run against wrong intent proves nothing |
+| contract & invariants | **human judgment** — the one thing no tool derives; a converged run against wrong intent proves nothing. polynv makes the judgment cheaper to exercise (harvested, pre-checked candidates; consequence-anchored questions; an attributed ledger) — the designer's disposition remains the gate |
 
 ## Design doctrines (recurring, load-bearing)
 

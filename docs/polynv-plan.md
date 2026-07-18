@@ -1,6 +1,6 @@
 # polynv — plan for the fifth engine (invariants)
 
-**Status: PLAN v0.3 — M0–M2 implemented, design revised by literature review** under
+**Status: PLAN v0.3 — M0–M3 implemented, design revised by literature review** under
 [`polynv/`](../polynv/README.md): the contract-structure template
 generator, per-candidate pre-check through `scripts/check.mjs` (HOLDS /
 FAILS-with-counterexample / BOUNDED / ERROR / NOT-RUN), the append-only
@@ -46,8 +46,20 @@ vacuity covers every guarded kind and is skipped over unsound graphs;
 miners tolerate old-shape snapshots. Recorded non-fixes: the widen
 operator's chimera fragility on stricter acceptors (now harness-killed,
 not misclassified — full fix would need acceptor-aware donors) and the
-per-candidate BFS cost in harvest (efficiency backlog, M3).
-M3 (plugin surfaces + quartet integration) is next.
+per-candidate BFS cost in harvest (efficiency backlog).
+**M3 is implemented**: `commands/polynv.md` (`/polygraph:polynv`),
+`agents/polynv.md` (the autonomous half only — harvest/pre-check/grade/
+question prep; the interview is never delegated), quartet integration
+(ARCHITECTURE five engines + Engine 5 section + intent-ledger artifact
+row + invariant-strength trust-boundary row; SDLC human gate #2 gains
+the elicit path; README names the grade as the partial adequacy
+measure; plugin/marketplace manifests updated), and polyvers' intent
+lane consumes ledger provenance — the compat-report's intent diff
+annotates each added invariant as elicited-and-confirmed-by, ledger:
+<status>, or no-ledger-record/unelicited. **Recorded follow-ups:** the
+re-interview diff on a version bump (old dialog answers vs new
+behavior/priors, plan §10.6's drift design) and the harvest
+per-candidate BFS reuse (efficiency).
 
 **Thesis:** every gate in the quartet is exactly as good as
 `invariants.mjs`, and the repo says so itself — *"unstated intent is

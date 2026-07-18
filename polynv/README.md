@@ -36,8 +36,18 @@ the safety checker cannot decide it), a graph-BFS **precedence pre-check**
 **pruning + vacuity** filtering, and the headless `--llm` path (domain
 priors + code-reading via the pipeline's existing Anthropic call; strict
 parser, drops-with-notes). Deterministic except `--llm`; no API key
-otherwise. `npm run test:polynv`. M3 (the `/polygraph:polynv` command, the
-autonomous-half agent, docs integration) is next.
+otherwise. `npm run test:polynv`.
+
+**M3** ships the surfaces and the quartet integration: the
+`/polygraph:polynv` command, the `polynv` agent (autonomous half only —
+harvest, pre-check, grade, question prep; **the interview is never
+delegated**: intent dispositions belong to the designer, in-session), the
+five-engine docs (ARCHITECTURE Engine 5, SDLC human gate #2's elicit
+path), and polyvers consuming the ledger both ways — the compat-report's
+adequacy trust tier (measured / STALE / UNREADABLE / NOT MEASURED) and
+intent-diff provenance annotations (elicited-and-confirmed-by vs
+no-ledger-record). Recorded follow-ups: the version-bump re-interview
+diff and harvest's per-candidate BFS reuse.
 
 The one design rule (plan §1): **harvested candidates are behavior, not
 intent** — nothing enters `invariants.mjs` without an explicit, attributed

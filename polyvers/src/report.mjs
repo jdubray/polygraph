@@ -12,7 +12,7 @@
 // copy — this constant plus its test is the enforcement).
 export const MILESTONE = 'M3';
 
-export function buildReport({ classification, corpusInfo, gateResults, adequacy }) {
+export function buildReport({ classification, corpusInfo, gateResults, adequacy, intentProvenance }) {
   const ok = gateResults.every((g) => g.ok);
   return {
     tool: 'polyvers',
@@ -29,6 +29,10 @@ export function buildReport({ classification, corpusInfo, gateResults, adequacy 
     // says which one the reader is holding (polynv grade; not a gate — the
     // verdict is unchanged, the trust tier is named).
     adequacy: adequacy ?? { measured: false },
+    // record-id → {status, by} from the new version's intent ledger (null
+    // when no ledger exists) — annotates the intent diff with elicitation
+    // provenance: a rule confirmed through the dialog vs one with no record.
+    intentProvenance: intentProvenance ?? null,
     gates: gateResults,
     deferred: classification.deferred,
     verdict: ok ? 'PASS' : 'FAIL',
@@ -104,7 +108,15 @@ export function renderReport(r) {
   const i = r.diffs.intent;
   if (i.changed) {
     lines.push('## Intent diff');
-    if (i.added.length) lines.push(`- invariants added: ${i.added.join(', ')}`);
+    // provenance annotation only when the new version carries a ledger —
+    // absence of a ledger is not evidence of anything and stays silent
+    const prov = (name) => {
+      if (!r.intentProvenance) return '';
+      const p = r.intentProvenance[name];
+      if (!p) return ' (no ledger record — unelicited)';
+      return p.status === 'confirmed' ? ` (elicited: confirmed${p.by ? ` by ${p.by}` : ''})` : ` (ledger: ${p.status})`;
+    };
+    if (i.added.length) lines.push(`- invariants added: ${i.added.map((n) => n + prov(n)).join(', ')}`);
     if (i.removed.length) lines.push(`- invariants removed: ${i.removed.join(', ')}`);
     if (i.renamed.length) lines.push(`- invariants renamed (identical predicate): ${i.renamed.map((x) => `${x.from} → ${x.to}`).join(', ')}`);
     if (i.edited) lines.push('- edited in place (same names, new predicates)');

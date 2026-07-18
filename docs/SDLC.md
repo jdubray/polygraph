@@ -53,9 +53,13 @@ corpus. For machines that will run on polyrun, it also drafts the effect
 mapper + manifest.
 
 **Human gate #2 — review the invariants.** They are the model's reading of
-your intent, not ground truth. Add the rules only you know. If a
-"violation" during repair was actually a misunderstanding of intent, fix
-the contract/invariants and re-run — never weaken a rule to make it pass.
+your intent, not ground truth. Add the rules only you know — or elicit
+them: `/polygraph:polynv` runs the interview (harvested, pre-checked
+candidates with counterexamples; domain priors; a mutation grade of the
+resulting set), and its ledger records who confirmed what and why. The
+gate stays human either way. If a "violation" during repair was actually a
+misunderstanding of intent, fix the contract/invariants and re-run — never
+weaken a rule to make it pass.
 
 **Read the report's verdict literally.** `Converged` means the code
 satisfies *its stated* invariants over the explored space. `NOT converged`

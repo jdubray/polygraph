@@ -217,10 +217,19 @@ try {
       // no longer matches the ledger's confirmed rules or the dir's
       // invariants.mjs is disclosed as STALE, never as current.
       let adequacy;
+      let intentProvenance = null;
       const lp = join(newDir, 'intent-ledger.json');
       if (existsSync(lp)) {
         try {
           const ledger = JSON.parse(readFileSync(lp, 'utf-8'));
+          // Intent-lane provenance (polynv M3): a changed invariant that was
+          // CONFIRMED through an elicitation dialog reads differently from
+          // one that appeared with no ledger record — the report says which.
+          intentProvenance = {};
+          for (const r of ledger.records ?? []) {
+            const confirmEvent = [...(r.events ?? [])].reverse().find((e) => e.type === 'disposition' && e.disposition === 'confirm');
+            intentProvenance[r.id] = { status: r.status, by: confirmEvent?.author ?? null };
+          }
           const g = ledger.grade;
           if (g) {
             const { oracleHashOf } = await import('../../polynv/src/ledger.mjs');
@@ -235,7 +244,7 @@ try {
           adequacy = { measured: false, unreadable: String(e && e.message) };
         }
       }
-      const report = buildReport({ classification, corpusInfo, gateResults, adequacy });
+      const report = buildReport({ classification, corpusInfo, gateResults, adequacy, intentProvenance });
       if (has('json')) console.log(JSON.stringify(report, null, 2));
       else console.log(renderReport(report));
 

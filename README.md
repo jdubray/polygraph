@@ -85,7 +85,8 @@ but an LLM *held accountable by a model checker and trace validation* is a
 practical bug-finder.
 
 > **Deep dives:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the
-> three engines (Polygraph audits, polygen authors, polyrun executes) share
+> five engines (Polygraph audits, polygen authors, polyrun executes,
+> polyvers evolves, polynv elicits) share
 > one artifact family; [`docs/SDLC.md`](docs/SDLC.md) — a team lifecycle for
 > integrating them into agentic workflows, with the human gates spelled out;
 > [`docs/polyrun-spec.md`](docs/polyrun-spec.md) — the durable-execution
@@ -156,7 +157,13 @@ grows a new branch) is human judgment, on the same footing as writing the
 invariants. One mitigation is built in: the domain cross-check that catches
 contract/code vocabulary mismatches
 ([`examples/case-study-polygen-domain-gap.md`](examples/case-study-polygen-domain-gap.md))
-— but it checks *spelling agreement*, not *representativeness*.
+— but it checks *spelling agreement*, not *representativeness*. The other
+half of the judgment — whether the invariants you wrote are *strong* — now
+has a partial measure: polynv's mutation adequacy grade
+([`polynv/README.md`](polynv/README.md)) reports how many behaviorally
+distinct machine mutations your rule set kills, with its own blind spot
+stated (behavior-*removing* mutations largely evade safety invariants).
+The domain-representativeness gap itself remains unmeasured.
 
 **polygen** runs the same machinery in reverse: draft contract → author
 module → propose invariants → model-check → self-repair on violations (capped
