@@ -53,14 +53,18 @@ child fleet state, all under the accepted-or-named-reject doctrine. This
 closes the undefined-behavior class across the version boundary. The full
 product-space model check the matrix report used to record as open is now
 **`polyvers product`** (composition plan CP-M3): the joint parent×child
-state space explored exhaustively per pairing against cross-machine
+state space explored exhaustively per pairing — from genesis under each
+version pair, within the declared domains — against cross-machine
 invariants (`invariants.compose.mjs`), with shortest counterexample
 stimulus sequences — the interleaving class the protocol matrix cannot see
 (e.g. a child whose cancel window narrowed between versions still passes
 delivery, but the product check finds "shipment delivers under a cancelled
-order"). Identical pairings are explored once; `--abstract-child` scales
-large children (docs/composition-semantics.md §7); joint mid-flight seeding
-is the recorded follow-up. A changed `effects.cjs` fires the
+order"). Identical pairings (by the canonical versionHash) are explored
+once; `--abstract-child` scales large children
+(docs/composition-semantics.md §7). Still open, recorded in
+docs/composition-plan.md: joint mid-flight seeding (parent + linked-children
+snapshots as BFS seeds) and grandchildren — a child with its own
+`effects.cjs` is refused rather than certified unmodeled. A changed `effects.cjs` fires the
 **composition** lane, whose real gate is `polyrun check-effects` — the
 report says so as a NOT RUN row.
 
@@ -89,8 +93,8 @@ npm run polyvers -- matrix --parent-old machines/order-v1 --parent-new machines/
 
 # …and the JOINT product model check per pairing (cross-machine invariants)
 npm run polyvers -- product --parent-old machines/order-v1 --parent-new machines/order-v2 \
-  --child-old machines/shipment-v1 --child-new machines/shipment-v1 --child-id shipment \
-  --invariants machines/invariants.compose.mjs
+  --child-old machines/shipment-v1 --child-new machines/shipment-v1 \
+  --parent-id order --child-id shipment --invariants machines/invariants.compose.mjs
 
 npm run test:polyvers
 ```

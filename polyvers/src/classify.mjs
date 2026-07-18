@@ -56,7 +56,14 @@ export const LANES = {
     // RUN row, exactly which tool gates it.
     description: 'the effect mapper changed (new or edited effects.cjs)',
     gates: ['load'],
-    deferred: [{ gate: 'check-effects', milestone: 'polyrun', why: 'the machine∘mapper composition is gated by `polyrun check-effects` (effect-emission invariants over every reachable path) — not YET by polyvers (a mapper-emission walk cross-checking kinds against the manifest is a recorded follow-up)' }],
+    deferred: [
+      { gate: 'check-effects', milestone: 'polyrun', why: 'the machine∘mapper composition is gated by `polyrun check-effects` (effect-emission invariants over every reachable path) — not YET by polyvers (a mapper-emission walk cross-checking kinds against the manifest is a recorded follow-up)' },
+      // A mapper change also rewires the CROSS-MACHINE surface (spawns,
+      // signals, completion/cancel wiring) — the per-emission gate above
+      // cannot see joint interleavings, so the report must name the
+      // rollout-window gates too (review finding, CP-M3).
+      { gate: 'matrix + product', milestone: 'polyvers', why: 'for parent/child fleets a mapper change rewires the cross-machine surface — run `polyvers matrix` (spawn/completion protocol + delivery per rollout pairing) and `polyvers product` (joint interleavings against cross-machine invariants); a delivery-clean pairing can still fail the product check' },
+    ],
   },
 };
 

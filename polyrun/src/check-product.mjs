@@ -65,7 +65,10 @@ import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { loadSpec, stable } from '../../scripts/load-spec.mjs';
 import { resolveFireAt } from './duration.mjs';
-import { MAX_CASCADE_DEPTH, sanitizeReplacer } from './kernel.mjs';
+// constants.mjs, NOT kernel.mjs: the kernel's graph pulls store.mjs →
+// node:sqlite, which breaks pure consumers (polyvers product, and through
+// its CLI import every polyvers command) on Node without node:sqlite.
+import { MAX_CASCADE_DEPTH, sanitizeReplacer } from './constants.mjs';
 
 const require_ = createRequire(import.meta.url);
 const { isSamV2Module, domainFromManifest } = require_('../../scripts/sam-adapter.cjs');
@@ -437,6 +440,16 @@ export function productStep(joint, stim, ctx) {
         if (intent.kind === 'spawnChild') {
           if (!machineDefs.has(intent.machineId)) throw new PoisonDefect(tgt, `spawnChild: machine '${intent.machineId}' is not registered`);
           if (typeof intent.childKey !== 'string' || !intent.childKey) throw new PoisonDefect(tgt, 'spawnChild: childKey is required');
+          if (intent.childKey === 'parent') {
+            // MODEL limitation, not a production defect: 'parent' is this
+            // model's reserved joint-space target key, so deliveries to a
+            // child under that key would silently route to the parent
+            // machine (production, keying by sha(parent, childKey, seq),
+            // routes correctly). A wrong-routing model must REFUSE — a
+            // plain Error, never a PoisonDefect, because claiming production
+            // poisons here would be false.
+            throw new Error(`check-product cannot model this fleet: the mapper spawns childKey 'parent', which collides with the joint model's reserved parent target key — deliveries would be misrouted in the model (production is unaffected); rename the childKey or run without check-product`);
+          }
           const childDef = machineDefs.get(intent.machineId);
           if (intent.onComplete && typeof parentDef.mod.actions[intent.onComplete] !== 'function') {
             throw new PoisonDefect(tgt, `spawnChild: onComplete action '${intent.onComplete}' is not in the parent's action surface`);

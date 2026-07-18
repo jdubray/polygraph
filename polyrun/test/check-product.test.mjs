@@ -194,6 +194,17 @@ test('a poisoning cancel is a reachable-poison finding under abstraction, never 
   assert.ok(concrete.violations.some((v) => v.kind === 'poison'));
 });
 
+test("a childKey of 'parent' is a model refusal — never silent misrouting", async () => {
+  // Production routes this fine (instances key by sha(parent, childKey, seq));
+  // the model's joint space reserves 'parent' as the parent target key, so it
+  // must refuse rather than deliver the child's stimuli to the parent machine.
+  const collideParent = { ...parentArtifacts, mapper: join(compose, 'parent-po.parent-key.effects.cjs') };
+  await assert.rejects(
+    checkProduct({ parent: collideParent, children: [shipGood], invariants }),
+    /childKey 'parent'.*reserved parent target key/,
+  );
+});
+
 test("a mapper cannot forge the abstraction's $resolve move", async () => {
   const forgeParent = { ...parentArtifacts, mapper: join(compose, 'parent-po.forge-resolve.effects.cjs') };
   const result = await checkProduct({ parent: forgeParent, children: [shipGood], invariants, abstractChildren: ['shipment'] });

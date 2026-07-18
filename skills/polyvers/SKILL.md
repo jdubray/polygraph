@@ -34,9 +34,10 @@ The lanes and what fires them: **shape** (contract stateKeys), **vocabulary**
 (actions, reject reasons, effect kinds, terminal states), **intent**
 (invariants — state or transition), **semantic** (the module changed),
 **migration** (migrate.cjs added/edited), **composition** (effects.cjs
-changed — gated by `polyrun check-effects`, the report says so as a NOT RUN
-row). "No lane fired" on differing artifacts means a cosmetic edit; say so
-rather than inventing risk.
+changed — gated by `polyrun check-effects` for emissions plus `polyvers
+matrix`/`polyvers product` for the cross-machine surface; the report says so
+as NOT RUN rows). "No lane fired" on differing artifacts means a cosmetic
+edit; say so rather than inventing risk.
 
 ## Step 2 — Choose the snapshot corpus honestly
 
@@ -94,7 +95,7 @@ a validated migration swaps the corpus, so every downstream gate runs over
 the states the fleet will hold AFTER the migration. Apply stays with
 `polyrun migrate` (dry run over live snapshots, then `--apply`).
 
-## Step 5 — Parent/child machines: the version matrix
+## Step 5 — Parent/child machines: the version matrix, then the product check
 
 ```
 node ${CLAUDE_PLUGIN_ROOT}/polyvers/bin/polyvers.mjs matrix \
@@ -105,9 +106,27 @@ Checks all four rollout-window pairings of the spawn/completion protocol and
 its delivery (child terminal outcomes into the parent with the discovered
 childKeys, parent-terminal cancels into the child). `--parent-snapshots` /
 `--child-snapshots` seed fleet states into discovery and delivery — same
-tier doctrine as `check`. Scope note to relay honestly: this is the
-protocol/delivery matrix; the full product-space model check over joint
-interleavings remains open.
+tier doctrine as `check`.
+
+Then run the JOINT product model check — a delivery-clean pairing can still
+fail it (e.g. a child whose cancel window narrowed between versions ships
+"shipment delivers under a cancelled order"):
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/polyvers/bin/polyvers.mjs product \
+    --parent-old <dir> --parent-new <dir> --child-old <dir> --child-new <dir> \
+    --parent-id <machineId> --child-id <machineId> --invariants <invariants.compose.mjs>
+```
+
+It needs authored CROSS-machine invariants (`invariants.compose.mjs`,
+predicates over `{ parent, children }` joint states — see
+docs/composition-semantics.md §5); refuse to invent them — elicit them from
+the user like any intent artifact. Scope to relay honestly: pairings are
+explored from genesis under each version pair (mid-flight JOINT seeding is a
+recorded follow-up); children with their own effects.cjs are refused
+(grandchildren out of scope); large children can be abstracted with
+`--abstract-child` — a PASS stays sound for status/terminal-reading
+invariants, a FAIL is an abstract witness to confirm concretely.
 
 ## What the agent must not do alone
 

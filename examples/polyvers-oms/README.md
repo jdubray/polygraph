@@ -91,6 +91,30 @@ into every shipment state — each landing as accepted or a *named*
 observable reject. (Try renaming `CANCEL_SHIPMENT` in a copy of the child
 to watch exactly the child-new pairings fail.)
 
+## 5. Product — joint interleavings against cross-machine invariants
+
+The matrix checks protocol and delivery; a delivery-clean pairing can still
+hide an interleaving bug (a shipment that delivers under a cancelled order).
+The product check explores the JOINT order×shipments state space per pairing
+against [`invariants.compose.mjs`](invariants.compose.mjs) — rules neither
+machine's own invariants can state:
+
+```bash
+node polyvers/bin/polyvers.mjs product \
+  --parent-old examples/polyvers-oms/order-v1 --parent-new examples/polyvers-oms/order-v2 \
+  --child-old examples/polyvers-oms/shipment-v1 --child-new examples/polyvers-oms/shipment-v1 \
+  --parent-id order --child-id shipment \
+  --invariants examples/polyvers-oms/invariants.compose.mjs
+```
+
+See [`reports/product-report.md`](reports/product-report.md): 45 joint
+states per pairing, all four PASS — notable because the OMS shipment's
+cancel window is narrow (preparing only); the order machine happens to
+block CANCEL during fulfilling, which is exactly the kind of two-machine
+coincidence you want a checker, not a code review, to certify. (Narrow the
+order's cancel guard in a copy and the product check finds the
+delivered-under-cancelled interleaving with a counterexample.)
+
 > Same disclosure as the whole plugin: these are consistency checks, not
 > proofs, and they are exactly as good as the invariants the artifacts
 > state.
