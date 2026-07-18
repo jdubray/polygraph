@@ -48,6 +48,16 @@ export const LANES = {
     gates: ['load', 'migrate', 'shape-roundtrip'],
     deferred: [],
   },
+  composition: {
+    // A mapper change alters what the machine∘mapper composition EMITS —
+    // never cosmetic either, but its gate lives in polyrun (check-effects
+    // explores the composition against effect invariants). polyvers fires
+    // the lane so the change is classified and the report says, as a NOT
+    // RUN row, exactly which tool gates it.
+    description: 'the effect mapper changed (new or edited effects.cjs)',
+    gates: ['load'],
+    deferred: [{ gate: 'check-effects', milestone: 'polyrun', why: 'the machine∘mapper composition is gated by `polyrun check-effects` (effect-emission invariants over every reachable path), not by polyvers' }],
+  },
 };
 
 const keyTypeMap = (contract) =>
@@ -178,6 +188,9 @@ export function classify(oldA, newA) {
     // the old version didn't have byte-identically. (Removing a migration
     // with no shape change is drained-fleet housekeeping — no lane.)
     migrationChanged: newA.migrateHash !== undefined && oldA.migrateHash !== newA.migrateHash,
+    // Any mapper difference (added, removed, or edited) changes what the
+    // composition emits — classified either way.
+    mapperChanged: oldA.mapperHash !== newA.mapperHash,
   };
 
   const lanes = [];
@@ -186,6 +199,7 @@ export function classify(oldA, newA) {
   // enforces this ordering structurally.
   if (diffs.shape.changed) lanes.push('shape');
   if (diffs.migrationChanged) lanes.push('migration');
+  if (diffs.mapperChanged) lanes.push('composition');
   if (diffs.vocabulary.changed) lanes.push('vocabulary');
   if (diffs.intent.changed) lanes.push('intent');
   // Any module edit is at least a semantic change; a pure contract/invariant

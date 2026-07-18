@@ -21,6 +21,7 @@ import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
 import { GATE_RUNNERS, NEEDS_CORPUS } from '../src/gates.mjs';
 import { scaffoldMigrate, migrationNoteTemplate } from '../src/scaffold.mjs';
+import { runMatrix, renderMatrix } from '../src/matrix.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 
 const args = process.argv.slice(2);
@@ -30,6 +31,7 @@ const has = (name) => args.includes(`--${name}`);
 
 const usage = () => {
   console.error('usage: polyvers <classify|check|migrate scaffold> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--max-states N] [--allow-bounded] [--force] [--out <dir>] [--json]');
+  console.error('       polyvers matrix --parent-old <dir> --parent-new <dir> --child-old <dir> --child-new <dir> --child-id <machineId> [--max-states N]');
   process.exit(2);
 };
 
@@ -37,10 +39,29 @@ const oldDir = flag('old');
 const newDir = flag('new');
 // Validate the command BEFORE any I/O — loading an artifact dir executes the
 // machine module's top-level code, which a typo'd command must never trigger.
-if (!oldDir || !newDir || !['classify', 'check', 'migrate-scaffold'].includes(command)) usage();
+if (command === 'matrix') {
+  if (!flag('parent-old') || !flag('parent-new') || !flag('child-old') || !flag('child-new') || !flag('child-id')) usage();
+} else if (!oldDir || !newDir || !['classify', 'check', 'migrate-scaffold'].includes(command)) {
+  usage();
+}
 
 try {
-  if (command === 'migrate-scaffold') {
+  if (command === 'matrix') {
+    // The rollout-window product check: parent {old,new} × child {old,new}
+    // over the spawn/completion protocol and its delivery. See src/matrix.mjs
+    // for the honest scope (protocol/delivery, not joint interleavings).
+    const rawMax = flag('max-states');
+    const maxStates = rawMax === undefined ? undefined : Number(rawMax);
+    if (rawMax !== undefined && (!Number.isFinite(maxStates) || maxStates < 1)) { console.error(`invalid --max-states '${rawMax}'`); process.exit(2); }
+    // Deliberately sequential — same loader-state rationale as check's loads.
+    const parentOld = await loadArtifacts(flag('parent-old'));
+    const parentNew = await loadArtifacts(flag('parent-new'));
+    const childOld = await loadArtifacts(flag('child-old'));
+    const childNew = await loadArtifacts(flag('child-new'));
+    const result = runMatrix({ parentOld, parentNew, childOld, childNew, childMachineId: flag('child-id'), maxStates });
+    console.log(renderMatrix(result));
+    if (!result.ok) process.exitCode = 1;
+  } else if (command === 'migrate-scaffold') {
     // Contracts-only: the scaffold runs BEFORE the new module exists
     // (contract-first authoring) — it must not execute machine code, demand
     // invariants, or require a loadable module.
@@ -59,8 +80,7 @@ try {
     console.log(`  added: ${scaffold.added.join(', ') || '(none)'} · removed: ${scaffold.removed.join(', ') || '(none)'} · retyped: ${scaffold.retyped.join(', ') || '(none)'}`);
     for (const n of scaffold.notes) console.log(`  TODO: ${n}`);
     if (!scaffold.notes.length) console.log('  scaffold is complete (pure addition) — validate it with `polyvers check`; `polyrun migrate` (dry run, then --apply) remains the apply-time gate over live snapshots');
-    process.exit(0);
-  }
+  } else {
 
   // Deliberately sequential (not Promise.all): both loads compile modules and
   // touch the ESM/CJS loader state; interleaving buys nothing in a CLI.
@@ -186,6 +206,7 @@ try {
       }
       if (report.verdict !== 'PASS') process.exitCode = 1;
     }
+  }
   }
 } catch (err) {
   console.error(String(err && err.message));

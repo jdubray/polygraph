@@ -194,13 +194,13 @@ know they are choosing the migration lane more often.
 
 ## A practical decision table
 
-| the change | the lane | the checks that gate it |
-|---|---|---|
-| same shape, same vocabulary, new transition rules | plain deploy | strict validate · round-trip over live snapshots · invariants pointwise · model check from live states |
-| shape change | `migrate.cjs` | all of the above over `migrate(s)` · projection equality · two-phase apply · `$migrate` journaling |
-| action/effect vocabulary change | contract revision | domain cross-checks · manifest wiring checks · parent/child protocol checks at registration · stale-action rejection covers the transition window |
-| invariant change | intent revision, **first** | gate re-run against live fleet · model check tells you if the stronger rule is already violated or reachable |
-| new machine version alongside old (A/B, per-instance) | per-step `machine_version` | mixed-version fleets supported; audit replays each window against its own version |
+| the change | the lane | the checks that gate it | the command |
+|---|---|---|---|
+| same shape, same vocabulary, new transition rules | plain deploy | strict validate · round-trip over live snapshots · invariants pointwise · model check from live states | `polyvers check` (semantic lane) |
+| shape change | `migrate.cjs` | all of the above over `migrate(s)` · projection equality · two-phase apply · `$migrate` journaling | `polyvers migrate scaffold` + `check` (migrate gate), apply via `polyrun migrate` |
+| action/effect vocabulary change | contract revision | domain cross-checks · manifest wiring checks · parent/child protocol checks at registration · stale-action rejection covers the transition window | `polyvers check` (vocabulary + stimuli gates); `polyvers matrix` for parent×child pairings |
+| invariant change | intent revision, **first** | gate re-run against live fleet · model check tells you if the stronger rule is already violated or reachable | `polyvers check` (intent lane: diff + pointwise + seeded model check) |
+| new machine version alongside old (A/B, per-instance) | per-step `machine_version` | mixed-version fleets supported; audit replays each window against its own version | `polyrun audit` (version-aware) |
 
 ## What remains genuinely open
 

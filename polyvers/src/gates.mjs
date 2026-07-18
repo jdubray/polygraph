@@ -372,6 +372,54 @@ export function migrateGate(newA, corpus) {
 // reject would journal as unexplained. Classification mirrors the polyrun
 // kernel's dispatch (lastStep(), SamSchemaError→reject, mutate-then-reject
 // would throw) so the gate predicts what production would journal.
+// One delivery, classified — the kernel's dispatch ladder as a reusable
+// verdict: { ok, cls?, why? }. Used by the stimuli gate (old-version stimuli
+// into the new machine) and the cross-machine matrix (child completions into
+// the parent, parent cancels into the child). `cls` is a stable failure class
+// for per-(action, class) dedup.
+export function stimulusOutcome(mod, state, action, data) {
+  const handler = mod.actions[action];
+  if (typeof handler !== 'function') {
+    return { ok: false, cls: 'unhandled-surface', why: `is not in the machine's action surface — delivery would journal as unhandled` };
+  }
+  try {
+    mod.init();
+    mod.setState(state);
+    try {
+      handler(data);
+    } catch (err) {
+      if (err && err.name === 'SamSchemaError') return { ok: true }; // observable reject of a schema-invalid payload — verified behavior (kernel parity)
+      return { ok: false, cls: 'throw', why: `makes the machine THROW (${err && err.message}) — in production this poisons the instance` };
+    }
+    // Classification parity note: like the kernel, we read lastStep() after a
+    // synchronous handler call — polyrun machines are synchronous by
+    // construction (FR-2.6), and an async module would mislead the kernel
+    // identically, so parity is the honest contract.
+    const step = mod.instance({}).lastStep();
+    if (!step || (step.intent !== undefined && step.intent !== null && step.intent !== action)) {
+      return { ok: false, cls: 'unclassifiable', why: `is not classified by lastStep() — the kernel would poison the instance rather than guess` };
+    }
+    if (step.classification === 'unhandled') {
+      return { ok: false, cls: 'unhandled', why: `is UNHANDLED in this state — neither accepted nor an observable reject; delivery becomes undefined behavior` };
+    }
+    if (step.classification === 'rejected') {
+      // Mutate-then-reject is a poison class in production (kernel FR-2.5):
+      // a rejected step must leave the observable model untouched.
+      const projected = projectState(mod, Object.keys(state));
+      if (stable(projected) !== stable(state)) {
+        return { ok: false, cls: 'mutate-then-reject', why: `mutates the observable model and then rejects — in production the kernel poisons the instance for exactly this` };
+      }
+      const reason = step.rejections && step.rejections[0] && step.rejections[0].reason;
+      if (!reason) {
+        return { ok: false, cls: 'unnamed-reject', why: `is rejected WITHOUT a reason — the journal entry would be unexplained; name the rule (contract specialRules)` };
+      }
+    }
+    return { ok: true }; // mutated / identity-by-mutation / named reject = verified behavior
+  } catch (err) {
+    return { ok: false, cls: 'setup', why: `could not be delivered at this snapshot: ${err && err.message}` };
+  }
+}
+
 export function stimuliGate(oldA, newA, corpus) {
   const failures = [];
   // The stimulus set is the FULL declared domain — a deliberate conservative
@@ -412,39 +460,9 @@ export function stimuliGate(oldA, newA, corpus) {
   for (const { id, state } of corpus) {
     for (const { action, data } of deliverable) {
       fired += 1;
-      const handler = mod.actions[action];
-      try {
-        mod.init();
-        mod.setState(state);
-        try {
-          handler(data);
-        } catch (err) {
-          if (err && err.name === 'SamSchemaError') continue; // observable reject of a schema-invalid payload — verified behavior (kernel parity)
-          record(action, 'throw', id, () => `old-version stimulus '${action}(${JSON.stringify(data)})' makes the new machine THROW (${err && err.message}) — in production this poisons the instance`);
-          continue;
-        }
-        // Classification parity note: like the kernel, the gate reads
-        // lastStep() after a synchronous handler call — polyrun machines are
-        // synchronous by construction (FR-2.6), and an async module would
-        // mislead the kernel identically, so parity is the honest contract.
-        const step = mod.instance({}).lastStep();
-        if (!step || (step.intent !== undefined && step.intent !== null && step.intent !== action)) {
-          record(action, 'unclassifiable', id, () => `lastStep() did not classify '${action}' — the kernel would poison the instance rather than guess`);
-        } else if (step.classification === 'unhandled') {
-          record(action, 'unhandled', id, () => `old-version stimulus '${action}(${JSON.stringify(data)})' is UNHANDLED in this state — neither accepted nor an observable reject; cross-version delivery becomes undefined behavior`);
-        } else if (step.classification === 'rejected') {
-          const reason = step.rejections && step.rejections[0] && step.rejections[0].reason;
-          if (!reason) record(action, 'unnamed-reject', id, () => `old-version stimulus '${action}(${JSON.stringify(data)})' is rejected WITHOUT a reason — the journal entry would be unexplained; name the rule (contract specialRules)`);
-          // Mutate-then-reject is a poison class in production (kernel
-          // FR-2.5): a rejected step must leave the observable model
-          // untouched.
-          const projected = projectState(mod, Object.keys(state));
-          if (stable(projected) !== stable(state)) {
-            record(action, 'mutate-then-reject', id, () => `the acceptor for '${action}' mutates the observable model and then rejects — in production the kernel poisons the instance for exactly this`);
-          }
-        } // mutated / identity-by-mutation = accepted — verified behavior
-      } catch (err) {
-        record(action, 'setup', id, () => `could not deliver '${action}' at this snapshot: ${err && err.message}`);
+      const verdict = stimulusOutcome(mod, state, action, data);
+      if (!verdict.ok) {
+        record(action, verdict.cls, id, () => `old-version stimulus '${action}(${JSON.stringify(data)})' ${verdict.why}`);
       }
     }
   }

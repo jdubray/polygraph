@@ -1,0 +1,16 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "shipState", "type": "enum: 'preparing' | 'inTransit' | 'delivered' | 'cancelledShipment'" }
+  ],
+  "initState": { "shipState": "preparing" },
+  "actions": {
+    "SHIP": { "dataFields": {} },
+    "DELIVER": { "dataFields": {} },
+    "CANCEL_SHIPMENT": { "dataFields": {} }
+  },
+  "dataDomain": {},
+  "terminalStates": ["delivered", "cancelledShipment"],
+  "specialRules": [],
+  "noOpRule": "An action that does not apply in the current state is reject(reason)."
+}

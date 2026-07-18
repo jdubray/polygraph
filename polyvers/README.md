@@ -1,4 +1,4 @@
-# polyvers — the versioning engine (M0–M2)
+# polyvers — the versioning engine (M0–M3)
 
 The fourth engine of the triad-now-quartet: Polygraph **audits**, polygen
 **authors**, polyrun **executes**, polyvers **evolves**. It makes
@@ -41,6 +41,19 @@ polyrun kernel's dispatch classification. An LLM-drafted fill of scaffold
 TODO holes (polygen-style, self-repaired against the migrate gate) is a
 recorded follow-up.
 
+**M3** ships the plugin surfaces (`/polygraph:polyvers` command, the
+`polyvers` skill and agent) and attempts the recorded open item: `polyvers
+matrix` checks the parent {old,new} × child {old,new} rollout-window
+pairings of the **spawn/completion protocol and its delivery** — spawn
+wiring per pairing, every reachable child terminal outcome delivered into
+every parent fleet state, the parent-terminal cancel delivered into every
+child fleet state, all under the accepted-or-named-reject doctrine. Honest
+scope, stated in every matrix report: this closes the undefined-behavior
+class across the version boundary; the full product-space model check
+(joint interleavings against cross-machine invariants) remains open. A
+changed `effects.cjs` fires the **composition** lane, whose real gate is
+`polyrun check-effects` — the report says so as a NOT RUN row.
+
 ## Usage
 
 An artifact dir holds `contract.json` + the SAM v2 module (`next.cjs`,
@@ -72,12 +85,14 @@ refused, never a vacuous PASS.
 
 ## The lanes (decision table as data, `src/classify.mjs`)
 
-| lane | fires when | gates (all live) |
+| lane | fires when | gates |
 |---|---|---|
 | semantic | the module changed | load · shape-roundtrip · invariants-pointwise · semantic-model-check |
 | shape | contract `stateKeys` changed | load · migrate · shape-roundtrip |
+| migration | `migrate.cjs` added or edited | load · migrate · shape-roundtrip |
 | vocabulary | actions / reject reasons / effect kinds / terminal states changed | load · vocabulary · stimuli |
 | intent | `invariants.mjs` changed (state or transition invariants) | load · invariant-diff · invariants-pointwise · semantic-model-check |
+| composition | `effects.cjs` added or edited | load (+ NOT RUN row → `polyrun check-effects`) |
 
 Gate doctrine, from the SDLC best-practices: a removed action fails the
 vocabulary gate (deprecate, don't delete — in-flight stimuli still arrive);

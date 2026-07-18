@@ -172,7 +172,11 @@ has a lane with mechanical gates.
 1. **Classify the change first** (see the decision table in the essay):
    semantics-only → plain deploy gate; shape change → the `migrate.cjs`
    lane; vocabulary change → contract revision with cross-checks; rule
-   change → invariants move **first**, then everything else.
+   change → invariants move **first**, then everything else. This step is
+   mechanized: `/polygraph:polyvers` (`polyvers classify --old --new`)
+   names the lanes and the gates they require, and `polyvers check` runs
+   them against fleet snapshots — including the seeded model check, the
+   in-flight-stimuli replay, and migration validation.
 2. **Run `polyrun deploy` against a copy of live state, not an empty
    database.** The gate's value is precisely that production snapshots are
    its test inputs — round-trip, pointwise invariants, and the model check

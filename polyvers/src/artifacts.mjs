@@ -25,13 +25,13 @@ function findModulePath(dir) {
     const p = join(dir, name);
     if (existsSync(p)) return p;
   }
-  // migrate.cjs is a sibling ARTIFACT, never the machine — without this
-  // exclusion, scaffolding a migration into a custom-named-machine dir would
-  // make the dir unloadable (two .cjs files), bricking the very `polyvers
-  // check` the scaffold tells the user to run next.
-  const cjs = readdirSync(dir).filter((f) => f.endsWith('.cjs') && f !== 'migrate.cjs');
+  // migrate.cjs and effects.cjs are sibling ARTIFACTS, never the machine —
+  // without this exclusion, adding either beside a custom-named machine
+  // module would make the dir unloadable (multiple .cjs files), bricking the
+  // very `polyvers check` that must run next.
+  const cjs = readdirSync(dir).filter((f) => f.endsWith('.cjs') && f !== 'migrate.cjs' && f !== 'effects.cjs');
   if (cjs.length === 1) return join(dir, cjs[0]);
-  throw new Error(`cannot locate the machine module in '${dir}' — expected next.cjs, machine.cjs, or exactly one non-migrate .cjs file${cjs.length ? ` (found: ${cjs.join(', ')})` : ''}`);
+  throw new Error(`cannot locate the machine module in '${dir}' — expected next.cjs, machine.cjs, or exactly one .cjs file besides migrate.cjs/effects.cjs${cjs.length ? ` (found: ${cjs.join(', ')})` : ''}`);
 }
 
 /**
@@ -104,6 +104,20 @@ export async function loadArtifacts(dir) {
     out.manifest = JSON.parse(bytes.toString('utf-8'));
   }
 
+  // effects.cjs (optional, M3): the pure effect mapper — needed by the
+  // cross-machine matrix (spawn discovery) and part of version identity (the
+  // machine∘mapper composition is what actually runs).
+  const mapperPath = join(abs, 'effects.cjs');
+  if (existsSync(mapperPath)) {
+    const bytes = readFileSync(mapperPath);
+    out.mapperHash = sha256(bytes);
+    const mod = loadSpec(mapperPath);
+    if (typeof mod.effects !== 'function') {
+      throw new Error(`'${mapperPath}' does not export effects(pre, action, data, post, stepKind) — a present mapper artifact must be callable, not decorative`);
+    }
+    out.mapper = mod.effects;
+  }
+
   // migrate.cjs (optional, M2): the pure shape migration for THIS version —
   // module.exports.migrate(oldState) → newState. Loaded through the same
   // pinned loader as the machine module. Part of version identity: shipping
@@ -122,7 +136,7 @@ export async function loadArtifacts(dir) {
   // Version identity: hash of the artifact hashes, in a fixed order. Two
   // dirs with byte-identical artifacts are the same version, wherever they
   // live and whatever the machine is called.
-  out.versionHash = sha256([out.contractHash, out.moduleHash, out.invariantsHash ?? '', out.manifestHash ?? '', out.migrateHash ?? ''].join('\n')).slice(0, 12);
+  out.versionHash = sha256([out.contractHash, out.moduleHash, out.invariantsHash ?? '', out.manifestHash ?? '', out.migrateHash ?? '', out.mapperHash ?? ''].join('\n')).slice(0, 12);
   return out;
 }
 

@@ -1,18 +1,26 @@
 # polyvers — plan for the fourth engine (version)
 
-**Status: PLAN v0.4 — M0–M2 implemented** under
+**Status: PLAN v1.0 — M0–M3 implemented** under
 [`polyvers/`](../polyvers/README.md): classifier, shape/vocabulary/intent
 gates, archive + synthesized corpora, CLI, fixtures (M0); the semantic
 model-check gate via `check.mjs --initial-states` with the landmine fixture
 (M1); the migration lane (`migrate scaffold` + the migrate gate, with the
 validated migration swapping the corpus every downstream gate sees) and the
 stimuli gate (old-version stimuli × fleet states, kernel-mirrored
-classification) (M2). Each milestone hardened by an adversarial multi-agent
-review with all confirmed findings fixed. `npm run test:polyvers`. Deviations
-from the plan below: `--draft` (LLM-filled scaffold holes) is a recorded
-follow-up, and the stimuli gate reads the old module's manifest-declared
-domain rather than harvesting a live journal (the deterministic equivalent
-at this milestone). M3 remains as planned.
+classification) (M2); the plugin surfaces (`/polygraph:polyvers` command,
+skill, agent), the migration and composition lanes, and the cross-machine
+matrix (M3). Each milestone hardened by an adversarial multi-agent review
+with all confirmed findings fixed. `npm run test:polyvers`.
+
+**Recorded deviations and follow-ups:** `--draft` (LLM-filled scaffold
+holes, self-repaired against the migrate gate) is follow-up work; the
+stimuli gate reads the old module's manifest-declared domain rather than
+harvesting a live journal (the deterministic superset); the M3 matrix is
+the spawn/completion **protocol/delivery** check — the full product-space
+model check (joint interleavings against cross-machine invariants) remains
+open, per the essay's scope note, as does `versions.json` (open question
+#2, version-identity reconciliation with polyrun's declared versions) and
+extracting a shared `classifyStep()` the polyrun kernel itself consumes.
 **Thesis:** `docs/VERSIONING.md` argues that "compatible" decomposes into five
 mechanically checkable questions. Today those checks are scattered — some live
 in `polyrun deploy`/`migrate`, some exist only as prose in the essay, and the

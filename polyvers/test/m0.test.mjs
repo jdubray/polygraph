@@ -15,6 +15,7 @@ import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
 import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate, semanticModelCheckGate, migrateGate, stimuliGate } from '../src/gates.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
+import { runMatrix } from '../src/matrix.mjs';
 import { check } from '../../scripts/check.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -651,6 +652,65 @@ test('m2-review: when migration fails, downstream corpus gates are refused, not 
     assert.ok(r.stdout.includes('polyvers migrate scaffold')); // the real cause, front and center
     assert.ok(r.stdout.includes('refused: the corpus could not be migrated'));
     assert.ok(!r.stdout.includes('could not deliver')); // no per-action setup noise
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ── M3: the cross-machine version matrix + the composition lane ─────────────
+
+test('m3: matrix — same versions everywhere, all four pairings pass', async () => {
+  const [po, ship] = [await load('po-v1'), await load('ship-v1')];
+  const result = runMatrix({ parentOld: po, parentNew: po, childOld: ship, childNew: ship, childMachineId: 'shipment' });
+  assert.equal(result.ok, true);
+  assert.equal(result.cells.length, 4);
+  assert.ok(result.cells.every((c) => c.ok));
+});
+
+test('m3: matrix — a renamed child cancel action fails exactly the child-new pairings', async () => {
+  const [po, shipOld, shipNew] = [await load('po-v1'), await load('ship-v1'), await load('ship-v2-renamed')];
+  const result = runMatrix({ parentOld: po, parentNew: po, childOld: shipOld, childNew: shipNew, childMachineId: 'shipment' });
+  assert.equal(result.ok, false);
+  const verdicts = Object.fromEntries(result.cells.map((c) => [c.pairing, c.ok]));
+  assert.equal(verdicts['parent-old × child-old'], true);
+  assert.equal(verdicts['parent-new × child-old'], true);
+  assert.equal(verdicts['parent-old × child-new'], false);
+  assert.equal(verdicts['parent-new × child-new'], false);
+  const failing = result.cells.find((c) => !c.ok);
+  assert.ok(failing.failures.some((f) => f.message.includes("onParentTerminal 'CANCEL_SHIPMENT'") && f.message.includes('poison the child')));
+});
+
+test('m3: matrix — a wrong child id is refused, never a vacuous PASS', async () => {
+  const [po, ship] = [await load('po-v1'), await load('ship-v1')];
+  const result = runMatrix({ parentOld: po, parentNew: po, childOld: ship, childNew: ship, childMachineId: 'nope' });
+  assert.equal(result.ok, false);
+  assert.ok(result.cells.every((c) => c.failures.some((f) => f.message.includes('refusing'))));
+});
+
+test('m3: cli matrix — exit code is the verdict', () => {
+  const pass = runCli(['matrix', '--parent-old', fix('po-v1'), '--parent-new', fix('po-v1'),
+    '--child-old', fix('ship-v1'), '--child-new', fix('ship-v1'), '--child-id', 'shipment']);
+  assert.equal(pass.code, 0);
+  assert.ok(pass.stdout.includes('Verdict: PASS'));
+  assert.ok(pass.stdout.includes('PROTOCOL and DELIVERY matrix')); // the honest scope note is part of every matrix report
+  const fail = runCli(['matrix', '--parent-old', fix('po-v1'), '--parent-new', fix('po-v1'),
+    '--child-old', fix('ship-v1'), '--child-new', fix('ship-v2-renamed'), '--child-id', 'shipment']);
+  assert.equal(fail.code, 1);
+  assert.ok(fail.stdout.includes('parent-old × child-new | **FAIL**'));
+});
+
+test('m3: an effects.cjs-only change fires the composition lane with an honest NOT RUN row', async () => {
+  const dir = scratchCopy('po-v1');
+  try {
+    const src = readFileSync(join(dir, 'effects.cjs'), 'utf-8');
+    writeFileSync(join(dir, 'effects.cjs'), src.replace("childKey: 'c1'", "childKey: 'c-1'"));
+    const cls = classify(await load('po-v1'), await loadArtifacts(dir));
+    assert.deepEqual(cls.lanes, ['composition']);
+    // The check run: the load gate needs no corpus, and the report must
+    // disclose that the composition's real gate lives in polyrun.
+    const r = runCli(['check', '--old', fix('po-v1'), '--new', dir]);
+    assert.equal(r.code, 0);
+    assert.ok(r.stdout.includes('not required by these lanes')); // corpus-not-needed path, alive again
+    assert.ok(r.stdout.includes('NOT RUN (polyrun)'));           // deferred rendering, alive again
+    assert.ok(r.stdout.includes('check-effects'));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
