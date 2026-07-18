@@ -124,6 +124,9 @@ Key properties:
 
 ## Engine 2 — polygen (author)
 
+> Introduction: [`polygen.md`](polygen.md) — what it's for and why
+> verification-before-shipping changes what a clean result means.
+
 [![polygen — authoring verifiable code from intent](diagrams/thumbs/architecture-04-polygen-author.png)](diagrams/architecture-04-polygen-author.dc.html)
 *Interactive diagram — [polygen — authoring verifiable code from intent](diagrams/architecture-04-polygen-author.dc.html)*
 

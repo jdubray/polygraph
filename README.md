@@ -84,10 +84,15 @@ $40 per repository. The convergent finding: the LLM alone is not trustworthy,
 but an LLM *held accountable by a model checker and trace validation* is a
 practical bug-finder.
 
+> **The five engines** share one artifact family, so what one produces the
+> next can consume: **Polygraph** audits (this document), **polygen**
+> [authors](docs/polygen.md), **polyrun** [executes](polyrun/README.md),
+> **polyvers** [evolves](polyvers/README.md), **polynv**
+> [elicits](polynv/README.md) the rules they all check against.
+>
 > **Deep dives:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the
-> five engines (Polygraph audits, polygen authors, polyrun executes,
-> polyvers evolves, polynv elicits) share
-> one artifact family; [`docs/SDLC.md`](docs/SDLC.md) — a team lifecycle for
+> five engines fit together;
+> [`docs/SDLC.md`](docs/SDLC.md) — a team lifecycle for
 > integrating them into agentic workflows, with the human gates spelled out;
 > [`docs/polyrun-spec.md`](docs/polyrun-spec.md) — the durable-execution
 > harness specification; [`docs/VERSIONING.md`](docs/VERSIONING.md) — an
@@ -265,6 +270,7 @@ the entry points directly:
 | `polygen` | author **subagent** | hand off the whole authoring loop |
 | `/polygraph:polyvers` | version **skill / command** | gate a machine version change against the fleet: lanes, migrations, stimuli, seeded model check (no API key) |
 | `polyvers` | version **subagent** | hand off the whole compatibility check + migration scaffold |
+| `polyrun` | execute **CLI** | run a verified machine durably — state, effects, timers, children — and keep checking it in production (no API key) |
 | `/polygraph:polynv` | elicit **skill / command** | find the invariants themselves: harvested + pre-checked candidates, domain priors, a plugin-led interview, a mutation grade of the result (no API key) |
 | `polynv` | elicit **subagent** | prepare the interview autonomously (harvest, pre-check, grade, ranked questions) — the interview itself stays with you |
 
@@ -292,6 +298,15 @@ node polynv/bin/polynv.mjs grade --artifacts <machine-dir> --include-invariants
 
 # author NEW verifiable code (needs ANTHROPIC_API_KEY)
 node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/
+
+# gate a version change against the live fleet (no API key)
+node polyvers/bin/polyvers.mjs check --old machines/v1 --new machines/v2 --snapshots archive/
+
+# run it durably, and keep checking it in production (no API key)
+node polyrun/bin/polyrun.mjs deploy        --config polyrun.config.mjs
+node polyrun/bin/polyrun.mjs check-product --config polyrun.config.mjs --parent order \
+  --invariants invariants.compose.mjs
+node polyrun/bin/polyrun.mjs audit         --config polyrun.config.mjs
 ```
 
 polygen writes everything to `<out>/`: `contract.json`, `next.cjs` (the
@@ -341,19 +356,30 @@ back.
 
 ```
 .claude-plugin/plugin.json   plugin manifest
-skills/polygraph/            the audit method, as instructions Claude follows
-skills/polygen/              the author method, as instructions Claude follows
-commands/                    /polygraph:verify, /polygraph:polygen, /polygraph:polyvers
-agents/                      polygraph-verifier and polygen subagents
-scripts/                     sam-tv.mjs (replayer), check.mjs (model checker),
-                             to-tla.mjs + tla-check.mjs (TLC tier), verify,
-                             generate, polygen, validate_corpus, models,
+skills/                      the methods, as instructions Claude follows:
+                             polygraph (audit), polygen (author),
+                             polyvers (version), polynv (elicit)
+commands/                    /polygraph:verify, :polygen, :polyvers, :polynv
+agents/                      polygraph-verifier, polygen, polyvers, polynv subagents
+scripts/                     the shared core: sam-tv.mjs (replayer),
+                             check.mjs (model checker), to-tla.mjs +
+                             tla-check.mjs (TLC tier), verify, generate,
+                             polygen, validate_corpus, models,
                              vendor/sam-pattern.cjs, instrument/*
+polyrun/                     durable execution engine (README.md)
+polyvers/                    versioning engine (README.md)
+polynv/                      invariants-elicitation engine (README.md)
 templates/                   contract.schema.json + contract.example.json
 examples/                    worked examples and case studies (see above)
 eval/                        the seeded-bug A/B eval and findings
 test/                        npm test — no API key needed
 ```
+
+Engine introductions: [`docs/polygen.md`](docs/polygen.md) ·
+[`polyrun/README.md`](polyrun/README.md) ·
+[`polyvers/README.md`](polyvers/README.md) ·
+[`polynv/README.md`](polynv/README.md). The audit engine (Polygraph
+itself) is this document.
 
 ## Origin
 
