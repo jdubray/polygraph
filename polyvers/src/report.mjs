@@ -1,8 +1,10 @@
 // polyvers compat-report — the deliverable: lanes, gates run, corpus
 // provenance, verdicts, named failures. Deterministic: no timestamps, and
 // corpus ids/source contain no machine-local absolute paths — the report for
-// the same change against the same corpus content is byte-identical, so it
-// diffs cleanly in a PR.
+// the same change against the same corpus content AND the same committed
+// intent-ledger.json (the invariant-adequacy line's source; absent = NOT
+// MEASURED) is byte-identical, so it diffs cleanly in a PR. Commit the
+// ledger alongside the artifacts or the adequacy line differs per machine.
 'use strict';
 
 // The ONE milestone label — stamped into every report; bump it with the
@@ -10,7 +12,7 @@
 // copy — this constant plus its test is the enforcement).
 export const MILESTONE = 'M3';
 
-export function buildReport({ classification, corpusInfo, gateResults }) {
+export function buildReport({ classification, corpusInfo, gateResults, adequacy }) {
   const ok = gateResults.every((g) => g.ok);
   return {
     tool: 'polyvers',
@@ -21,6 +23,12 @@ export function buildReport({ classification, corpusInfo, gateResults }) {
     lanes: classification.lanes,
     diffs: classification.diffs,
     corpus: corpusInfo, // { source, count, truncated?, notes? } — provenance is part of the verdict
+    // Invariant-set strength is the same KIND of disclosure as corpus
+    // provenance: a semantic-lane PASS against invariants that kill 9/40
+    // mutants is a different object than one against 36/40, and the report
+    // says which one the reader is holding (polynv grade; not a gate — the
+    // verdict is unchanged, the trust tier is named).
+    adequacy: adequacy ?? { measured: false },
     gates: gateResults,
     deferred: classification.deferred,
     verdict: ok ? 'PASS' : 'FAIL',
@@ -36,6 +44,13 @@ export function renderReport(r) {
   lines.push(`**Lanes:** ${r.lanes.join(', ')}`);
   lines.push(`**Corpus:** ${r.corpus.count} snapshot(s), source: ${r.corpus.source}${r.corpus.truncated ? ' (TRUNCATED — raise --max-states)' : ''}${r.corpus.migrated ? ` — migrated through the new version's migrate.cjs before the downstream gates${r.corpus.migratedCount !== r.corpus.count ? ` (${r.corpus.migratedCount} distinct post-migration state(s) — the migration collapses some old states together)` : ''}` : ''}`);
   for (const n of r.corpus.notes ?? []) lines.push(`> corpus note: ${n}`);
+  lines.push(r.adequacy?.measured
+    ? `**Invariant adequacy:** the intent artifact kills ${r.adequacy.killed}/${r.adequacy.distinct} behaviorally distinct machine mutant(s)${r.adequacy.survivors ? ` — ${r.adequacy.survivors} unconstrained behavior class(es) open` : ''} (polynv grade)`
+    : r.adequacy?.stale
+      ? `**Invariant adequacy:** STALE — the invariants changed after the last \`polynv grade\`; the recorded score no longer describes this intent artifact (regrade to restore the disclosure)`
+      : r.adequacy?.unreadable
+        ? `**Invariant adequacy:** UNREADABLE — an intent-ledger.json is present but could not be parsed (${r.adequacy.unreadable}); fix or regenerate it — this is not the same as never graded`
+        : `**Invariant adequacy:** NOT MEASURED — invariant-set strength unknown; a PASS against weak invariants is weaker than it looks (\`polynv grade\` measures it)`);
   lines.push('');
   lines.push('| gate | verdict | summary |');
   lines.push('|---|---|---|');

@@ -20,7 +20,7 @@ import { loadSpec } from '../../scripts/load-spec.mjs';
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
-function findModulePath(dir) {
+export function findModulePath(dir) {
   for (const name of ['next.cjs', 'machine.cjs']) {
     const p = join(dir, name);
     if (existsSync(p)) return p;

@@ -4,6 +4,7 @@ old version `ea94f8be5cf5` → new version `567141e63b32`
 
 **Lanes:** shape, migration, intent, semantic
 **Corpus:** 33 snapshot(s), source: synthesized (BFS-reachable states of the OLD machine — the weakest tier; prefer live or archived snapshots) — migrated through the new version's migrate.cjs before the downstream gates
+**Invariant adequacy:** NOT MEASURED — invariant-set strength unknown; a PASS against weak invariants is weaker than it looks (`polynv grade` measures it)
 
 | gate | verdict | summary |
 |---|---|---|

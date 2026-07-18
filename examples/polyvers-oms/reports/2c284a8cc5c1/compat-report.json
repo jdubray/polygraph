@@ -65,6 +65,9 @@
     "migrated": true,
     "migratedCount": 33
   },
+  "adequacy": {
+    "measured": false
+  },
   "gates": [
     {
       "gate": "load",

@@ -93,7 +93,12 @@ export function buildDomain(contract, windows = []) {
 // "is the machine correct from init". Seeds dedupe against init and each
 // other by stable(); counterexample paths record whether they start at init
 // or at a seed.
-export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000, legacyBareNext = false, initialStates = [] }) {
+// steps: an explicit (action, data) domain override — [{action, data}] — used
+// by callers that must explore two modules over the SAME alphabet (polynv's
+// mutation grade drives adapter-wrapped mutants with the original module's
+// manifest domain). When provided it replaces domain building entirely; the
+// caller owns alphabet correctness.
+export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000, legacyBareNext = false, initialStates = [], steps: providedSteps = null }) {
   // ── Engine selection ──────────────────────────────────────────────────────
   // A v2 SAM strict-profile module is driven through the {init,next} adapter
   // (rejections return the input state — a legal, observable no-op) with the
@@ -137,7 +142,7 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
     if (!mod || typeof mod.next !== 'function' || typeof mod.init !== 'function') {
       return { ok: false, error: 'spec must export init() and next() (or the v2 SAM surface)', statesExplored: 0, capHit: false, violations: [] };
     }
-    ({ steps, notes } = buildDomain(contract, windows));
+    ({ steps, notes } = providedSteps ? { steps: providedSteps, notes: [] } : buildDomain(contract, windows));
   }
   // An empty exploration domain would visit only init() and pass every
   // invariant vacuously — that is a failed check, never a clean one.

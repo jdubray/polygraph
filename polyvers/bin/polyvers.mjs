@@ -18,7 +18,7 @@
 // Everything here is pure local execution — no API key.
 'use strict';
 
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { loadArtifacts, loadContractOnly } from '../src/artifacts.mjs';
 import { classify } from '../src/classify.mjs';
@@ -209,7 +209,33 @@ try {
         }
       }
 
-      const report = buildReport({ classification, corpusInfo, gateResults });
+      // Invariant-adequacy disclosure: if the NEW version's artifact dir
+      // carries a polynv intent ledger with a grade, surface it (a trust
+      // tier, not a gate — the verdict is unaffected). Two honesty guards
+      // (review findings, 2026-07-18): an unreadable ledger is disclosed as
+      // unreadable, never as merely NOT MEASURED; and a grade whose oracle
+      // no longer matches the ledger's confirmed rules or the dir's
+      // invariants.mjs is disclosed as STALE, never as current.
+      let adequacy;
+      const lp = join(newDir, 'intent-ledger.json');
+      if (existsSync(lp)) {
+        try {
+          const ledger = JSON.parse(readFileSync(lp, 'utf-8'));
+          const g = ledger.grade;
+          if (g) {
+            const { oracleHashOf } = await import('../../polynv/src/ledger.mjs');
+            const stale =
+              (g.ledgerOracleHash && oracleHashOf(ledger) !== g.ledgerOracleHash) ||
+              (g.invariantsFileHash && newA.invariantsHash && g.invariantsFileHash !== newA.invariantsHash);
+            adequacy = stale
+              ? { measured: false, stale: true }
+              : { measured: true, killed: g.killed, distinct: g.distinct, survivors: g.survivors?.length ?? 0 };
+          }
+        } catch (e) {
+          adequacy = { measured: false, unreadable: String(e && e.message) };
+        }
+      }
+      const report = buildReport({ classification, corpusInfo, gateResults, adequacy });
       if (has('json')) console.log(JSON.stringify(report, null, 2));
       else console.log(renderReport(report));
 
