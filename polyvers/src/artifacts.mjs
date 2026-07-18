@@ -153,6 +153,17 @@ export function terminalKeyOf(contract) {
     ?? null;
 }
 
+/** The kernel's terminal predicate, derived once (polyrun registerMachine
+ *  convention): terminalStates over the effective terminal key. Returns null
+ *  when the contract declares no terminal metadata — callers must treat that
+ *  as "cannot enumerate", never as "no terminal states exist". */
+export function isTerminalOf(contract) {
+  const key = terminalKeyOf(contract);
+  const values = new Set(contract.terminalStates ?? []);
+  if (!key || values.size === 0) return null;
+  return (state) => values.has(state[key]);
+}
+
 /** The ONE bridge from artifact invariant fields to the checker's input
  *  shape — every check() caller (gate and test alike) goes through this so
  *  the mapping can never silently diverge into a vacuous {undefined}. */

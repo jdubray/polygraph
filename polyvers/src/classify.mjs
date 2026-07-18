@@ -23,9 +23,9 @@ export const LANES = {
     deferred: [],
   },
   shape: {
-    // 'migrate' is listed before the other corpus gates on purpose: the CLI
-    // runs gates in this order, and a validated migration swaps the corpus
-    // every downstream gate sees to the post-migration states.
+    // Gate EXECUTION order is the CLI's structural concern (it always runs
+    // migrate before the other corpus consumers, whatever this list says);
+    // the list only declares WHICH gates the lane demands.
     description: 'the sealed state shape changed',
     gates: ['load', 'migrate', 'shape-roundtrip'],
     deferred: [],
@@ -56,7 +56,7 @@ export const LANES = {
     // RUN row, exactly which tool gates it.
     description: 'the effect mapper changed (new or edited effects.cjs)',
     gates: ['load'],
-    deferred: [{ gate: 'check-effects', milestone: 'polyrun', why: 'the machine∘mapper composition is gated by `polyrun check-effects` (effect-emission invariants over every reachable path), not by polyvers' }],
+    deferred: [{ gate: 'check-effects', milestone: 'polyrun', why: 'the machine∘mapper composition is gated by `polyrun check-effects` (effect-emission invariants over every reachable path) — not YET by polyvers (a mapper-emission walk cross-checking kinds against the manifest is a recorded follow-up)' }],
   },
 };
 
@@ -194,9 +194,9 @@ export function classify(oldA, newA) {
   };
 
   const lanes = [];
-  // Order is load-bearing: 'shape' (and 'migration') come first so the
-  // migrate gate precedes every corpus consumer; the CLI additionally
-  // enforces this ordering structurally.
+  // Lane order here is COSMETIC (readability of reports): gate execution
+  // order is enforced structurally by the CLI (non-corpus gates, then
+  // migrate, then corpus consumers) — do not build anything on this order.
   if (diffs.shape.changed) lanes.push('shape');
   if (diffs.migrationChanged) lanes.push('migration');
   if (diffs.mapperChanged) lanes.push('composition');
@@ -207,10 +207,9 @@ export function classify(oldA, newA) {
   if (diffs.moduleChanged) lanes.push('semantic');
 
   const gates = [...new Set(lanes.flatMap((l) => LANES[l].gates))];
-  // Dedupe deferred gates by name, merging the lanes that demand each. Every
-  // gate is live as of M2 (all deferred lists are empty), so this machinery
-  // is dormant — deliberately retained: any future deferred gate demanded by
-  // two lanes must print one NOT RUN row, not two.
+  // Dedupe deferred gates by name, merging the lanes that demand each — LIVE
+  // as of M3 (the composition lane defers check-effects to polyrun); a gate
+  // deferred by two lanes must print one NOT RUN row, not two.
   const deferredByGate = new Map();
   for (const l of lanes) {
     for (const d of LANES[l].deferred) {

@@ -42,8 +42,9 @@ const sanitizedState = (mod) => JSON.parse(JSON.stringify(mod.getState(), saniti
 // The ONE projection: sanitize the module state, keep `keys` (or, with null,
 // the raw post-setState keys — polyrun's convention, which keeps module-added
 // stray keys visible), never fabricating explicit-undefined entries (stable()
-// renders those as a sentinel distinct from an absent key).
-const projectState = (mod, keys) => {
+// renders those as a sentinel distinct from an absent key). Exported for the
+// matrix's kernel-parity transition walk.
+export const projectState = (mod, keys) => {
   const raw = sanitizedState(mod);
   const projected = {};
   for (const k of keys ?? Object.keys(raw)) {
@@ -403,15 +404,21 @@ export function stimulusOutcome(mod, state, action, data) {
       return { ok: false, cls: 'unhandled', why: `is UNHANDLED in this state — neither accepted nor an observable reject; delivery becomes undefined behavior` };
     }
     if (step.classification === 'rejected') {
-      // Mutate-then-reject is a poison class in production (kernel FR-2.5):
-      // a rejected step must leave the observable model untouched.
+      // A reject can be defective in TWO independent ways — report both in
+      // one verdict, so fixing one does not hide the other for a review
+      // cycle (mutate-then-reject poisons in production, kernel FR-2.5; an
+      // unnamed reject journals unexplained).
+      const problems = [];
       const projected = projectState(mod, Object.keys(state));
       if (stable(projected) !== stable(state)) {
-        return { ok: false, cls: 'mutate-then-reject', why: `mutates the observable model and then rejects — in production the kernel poisons the instance for exactly this` };
+        problems.push('mutates the observable model and then rejects — in production the kernel poisons the instance for exactly this');
       }
       const reason = step.rejections && step.rejections[0] && step.rejections[0].reason;
       if (!reason) {
-        return { ok: false, cls: 'unnamed-reject', why: `is rejected WITHOUT a reason — the journal entry would be unexplained; name the rule (contract specialRules)` };
+        problems.push('is rejected WITHOUT a reason — the journal entry would be unexplained; name the rule (contract specialRules)');
+      }
+      if (problems.length) {
+        return { ok: false, cls: problems.length === 2 ? 'mutate-then-reject+unnamed' : (reason ? 'mutate-then-reject' : 'unnamed-reject'), why: problems.join('; AND ') };
       }
     }
     return { ok: true }; // mutated / identity-by-mutation / named reject = verified behavior

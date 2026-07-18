@@ -6,19 +6,21 @@ description: Check whether a state-machine version change is safe to ship agains
 # polyvers — version a state machine with mechanical gates
 
 The fourth engine: Polygraph audits, polygen authors, polyrun executes,
-polyvers EVOLVES. The premise (from `docs/VERSIONING.md`): state outlives
-code, so every deploy is a compatibility event against the live fleet — and
-"compatible" is not one question but several, each with its own mechanical
-check. Everything here is deterministic, local, and needs **no API key**.
+polyvers EVOLVES. The premise (from
+`${CLAUDE_PLUGIN_ROOT}/docs/VERSIONING.md`): state outlives code, so every
+deploy is a compatibility event against the live fleet — and "compatible"
+is not one question but several, each with its own mechanical check.
+Everything here is deterministic, local, and needs **no API key**.
 
 The CLI is `${CLAUDE_PLUGIN_ROOT}/polyvers/bin/polyvers.mjs`; an artifact
 dir holds `contract.json` + the SAM v2 module + optional `invariants.mjs`,
 `effects.manifest.json`, `effects.cjs`, `migrate.cjs` — what polygen emits.
 
-> **Disclosure (same as the whole plugin).** These gates are consistency
-> checks, not proofs, and they are exactly as good as the invariants the
-> artifacts state — semantic drift the invariants do not mention is invisible
-> to every gate. Versioning maturity is invariant-writing maturity.
+> **Disclosure (same as the whole plugin).** This is experimental, unproven
+> technology, and these gates are consistency checks, not proofs. They are
+> exactly as good as the invariants the artifacts state — semantic drift the
+> invariants do not mention is invisible to every gate. Versioning maturity
+> is invariant-writing maturity.
 
 ## Step 1 — Classify before running anything
 
@@ -38,8 +40,10 @@ rather than inventing risk.
 
 The gates run against fleet states, and provenance is part of the verdict:
 
-1. **live / archived fleet state** (`--snapshots <dir|file>`; `polyrun
-   archive` output, bare ndjson, or a `.json` array) — the honest tier;
+1. **fleet exports** (`--snapshots <dir|file>`; `polyrun archive` output,
+   bare ndjson, or a `.json` array) — the honest tier. "Live" means a FRESH
+   `polyrun archive`/export of the fleet fed to this flag; polyvers never
+   connects to a database.
 2. **`--synthesize`** — BFS-reachable states of the OLD machine: the weakest
    tier, because it contains only states the old MODEL says are reachable,
    which is exactly the assumption a landmine violates.
@@ -96,8 +100,10 @@ node ${CLAUDE_PLUGIN_ROOT}/polyvers/bin/polyvers.mjs matrix \
 ```
 
 Checks all four rollout-window pairings of the spawn/completion protocol and
-its delivery (child terminal outcomes into the parent, parent-terminal
-cancels into the child). Scope note to relay honestly: this is the
+its delivery (child terminal outcomes into the parent with the discovered
+childKeys, parent-terminal cancels into the child). `--parent-snapshots` /
+`--child-snapshots` seed fleet states into discovery and delivery — same
+tier doctrine as `check`. Scope note to relay honestly: this is the
 protocol/delivery matrix; the full product-space model check over joint
 interleavings remains open.
 

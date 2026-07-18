@@ -73,6 +73,10 @@ npm run polyvers -- check ... --synthesize     # BFS-reachable states of the OLD
 # shape change? scaffold the migration, review/fill it, re-run check
 npm run polyvers -- migrate scaffold --old machines/order-v1 --new machines/order-v2
 
+# parent/child machines? check the rollout-window version pairings
+npm run polyvers -- matrix --parent-old machines/order-v1 --parent-new machines/order-v2 \
+  --child-old machines/shipment-v1 --child-new machines/shipment-v1 --child-id shipment
+
 npm run test:polyvers
 ```
 

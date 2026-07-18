@@ -141,7 +141,8 @@ Consistent with the existing polygraph plugin (`commands/`, `skills/`,
 - **`MIGRATION-NOTE.md`** — scaffolded next to `migrate.cjs` (mirrors
   `REPAIR-NOTE.md`): why the shape changed, what each hole maps, which
   instances (if any) were meaning-gap and what the human decided.
-- **`versions.json`** (per machine dir) — append-only version manifest:
+- **`versions.json`** (per machine dir; RECORDED FOLLOW-UP — not implemented,
+  see open question #2) — append-only version manifest:
   `machineVersion`, content hashes of the four artifacts, changeId, link to
   the compat-report that admitted it. polyrun's per-step `machine_version`
   stamping gets its values from here.

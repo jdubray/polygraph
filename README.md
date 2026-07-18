@@ -225,6 +225,8 @@ the entry points directly:
 | `polygraph-verifier` | audit **subagent** | hand off the whole audit for an autonomous run |
 | `/polygraph:polygen` | author **skill / command** | write a NEW verified state machine from a feature description |
 | `polygen` | author **subagent** | hand off the whole authoring loop |
+| `/polygraph:polyvers` | version **skill / command** | gate a machine version change against the fleet: lanes, migrations, stimuli, seeded model check (no API key) |
+| `polyvers` | version **subagent** | hand off the whole compatibility check + migration scaffold |
 
 ## Use it as a plain CLI (no Claude Code)
 
@@ -296,7 +298,7 @@ back.
 .claude-plugin/plugin.json   plugin manifest
 skills/polygraph/            the audit method, as instructions Claude follows
 skills/polygen/              the author method, as instructions Claude follows
-commands/                    /polygraph:verify and /polygraph:polygen
+commands/                    /polygraph:verify, /polygraph:polygen, /polygraph:polyvers
 agents/                      polygraph-verifier and polygen subagents
 scripts/                     sam-tv.mjs (replayer), check.mjs (model checker),
                              to-tla.mjs + tla-check.mjs (TLC tier), verify,

@@ -1,15 +1,19 @@
 #!/usr/bin/env node
-// polyvers CLI (M0–M2): classify a machine change and run the gates its
+// polyvers CLI (M0–M3): classify a machine change and run the gates its
 // lanes require.
 //
 //   polyvers classify         --old <dir> --new <dir> [--json]
 //   polyvers check            --old <dir> --new <dir> [--snapshots <path> | --synthesize]
 //                             [--max-states N] [--allow-bounded] [--out <dir>] [--json]
 //   polyvers migrate scaffold --old <dir> --new <dir> [--force]
+//   polyvers matrix           --parent-old <dir> --parent-new <dir>
+//                             --child-old <dir> --child-new <dir> --child-id <machineId>
+//                             [--parent-snapshots <path>] [--child-snapshots <path>]
+//                             [--max-states N] [--allow-bounded]
 //
 // An artifact dir holds contract.json + the machine module (next.cjs /
 // machine.cjs / the only .cjs) + optional invariants.mjs +
-// effects.manifest.json + optional migrate.cjs.
+// effects.manifest.json + optional effects.cjs + optional migrate.cjs.
 //
 // Everything here is pure local execution — no API key.
 'use strict';
@@ -28,10 +32,19 @@ const args = process.argv.slice(2);
 const command = args[0] === 'migrate' ? `migrate-${args[1]}` : args[0];
 const flag = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
 const has = (name) => args.includes(`--${name}`);
+// ONE numeric-flag validator for every subcommand — the same flag must mean
+// the same thing under check and matrix alike.
+const numFlag = (name, { min = 1 } = {}) => {
+  const raw = flag(name);
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < min) { console.error(`invalid --${name} '${raw}'`); process.exit(2); }
+  return n;
+};
 
 const usage = () => {
   console.error('usage: polyvers <classify|check|migrate scaffold> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--max-states N] [--allow-bounded] [--force] [--out <dir>] [--json]');
-  console.error('       polyvers matrix --parent-old <dir> --parent-new <dir> --child-old <dir> --child-new <dir> --child-id <machineId> [--max-states N]');
+  console.error('       polyvers matrix --parent-old <dir> --parent-new <dir> --child-old <dir> --child-new <dir> --child-id <machineId> [--parent-snapshots <path>] [--child-snapshots <path>] [--max-states N] [--allow-bounded]');
   process.exit(2);
 };
 
@@ -45,20 +58,32 @@ if (command === 'matrix') {
   usage();
 }
 
+// The classify/check prologue — kept sequential (not Promise.all): both loads
+// compile modules and touch the ESM/CJS loader state; interleaving buys
+// nothing in a CLI.
+const loadPair = async () => {
+  const oldA = await loadArtifacts(oldDir);
+  const newA = await loadArtifacts(newDir);
+  return { oldA, newA, classification: classify(oldA, newA) };
+};
+
 try {
   if (command === 'matrix') {
     // The rollout-window product check: parent {old,new} × child {old,new}
     // over the spawn/completion protocol and its delivery. See src/matrix.mjs
     // for the honest scope (protocol/delivery, not joint interleavings).
-    const rawMax = flag('max-states');
-    const maxStates = rawMax === undefined ? undefined : Number(rawMax);
-    if (rawMax !== undefined && (!Number.isFinite(maxStates) || maxStates < 1)) { console.error(`invalid --max-states '${rawMax}'`); process.exit(2); }
-    // Deliberately sequential — same loader-state rationale as check's loads.
+    const maxStates = numFlag('max-states');
+    const parentSeeds = flag('parent-snapshots') ? loadCorpus(flag('parent-snapshots')) : [];
+    const childSeeds = flag('child-snapshots') ? loadCorpus(flag('child-snapshots')) : [];
     const parentOld = await loadArtifacts(flag('parent-old'));
     const parentNew = await loadArtifacts(flag('parent-new'));
     const childOld = await loadArtifacts(flag('child-old'));
     const childNew = await loadArtifacts(flag('child-new'));
-    const result = runMatrix({ parentOld, parentNew, childOld, childNew, childMachineId: flag('child-id'), maxStates });
+    const result = runMatrix({
+      parentOld, parentNew, childOld, childNew,
+      childMachineId: flag('child-id'), maxStates,
+      allowBounded: has('allow-bounded'), parentSeeds, childSeeds,
+    });
     console.log(renderMatrix(result));
     if (!result.ok) process.exitCode = 1;
   } else if (command === 'migrate-scaffold') {
@@ -80,15 +105,8 @@ try {
     console.log(`  added: ${scaffold.added.join(', ') || '(none)'} · removed: ${scaffold.removed.join(', ') || '(none)'} · retyped: ${scaffold.retyped.join(', ') || '(none)'}`);
     for (const n of scaffold.notes) console.log(`  TODO: ${n}`);
     if (!scaffold.notes.length) console.log('  scaffold is complete (pure addition) — validate it with `polyvers check`; `polyrun migrate` (dry run, then --apply) remains the apply-time gate over live snapshots');
-  } else {
-
-  // Deliberately sequential (not Promise.all): both loads compile modules and
-  // touch the ESM/CJS loader state; interleaving buys nothing in a CLI.
-  const oldA = await loadArtifacts(oldDir);
-  const newA = await loadArtifacts(newDir);
-  const classification = classify(oldA, newA);
-
-  if (command === 'classify') {
+  } else if (command === 'classify') {
+    const { classification } = await loadPair();
     if (has('json')) {
       console.log(JSON.stringify(classification, null, 2));
     } else {
@@ -102,7 +120,8 @@ try {
         for (const d of classification.deferred) console.log(`  deferred (${d.milestone}): ${d.gate} — ${d.why}`);
       }
     }
-  } else {
+  } else { // check
+    const { oldA, newA, classification } = await loadPair();
     if (classification.identical) {
       console.log('polyvers check: identical artifacts — nothing to gate');
     } else if (classification.lanes.length === 0) {
@@ -112,9 +131,7 @@ try {
       console.log('polyvers check: no lane fired — the artifacts differ, but only in ways no compatibility lane classifies (cosmetic edit); zero gates apply');
     } else {
       const wanted = classification.gates;
-      const rawMax = flag('max-states');
-      const maxStates = rawMax === undefined ? undefined : Number(rawMax);
-      if (rawMax !== undefined && (!Number.isFinite(maxStates) || maxStates < 1)) { console.error(`invalid --max-states '${rawMax}'`); process.exit(2); }
+      const maxStates = numFlag('max-states');
 
       // ── corpus (only if a wanted gate consumes one) ──
       const needsCorpus = wanted.some((g) => NEEDS_CORPUS.has(g));
@@ -206,7 +223,6 @@ try {
       }
       if (report.verdict !== 'PASS') process.exitCode = 1;
     }
-  }
   }
 } catch (err) {
   console.error(String(err && err.message));

@@ -1,6 +1,6 @@
 ---
 description: Run polyvers — classify a state-machine version change into compatibility lanes, run the gates those lanes require against fleet snapshots (shape round-trip, vocabulary, in-flight stimuli, migration validation, seeded model check), scaffold migrations, and check parent×child version matrices. No API key.
-argument-hint: <classify|check|migrate scaffold|matrix> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--out out/compat] [--allow-bounded]
+argument-hint: <classify|check|migrate scaffold> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--out out/compat] [--allow-bounded] — or — matrix --parent-old <dir> --parent-new <dir> --child-old <dir> --child-new <dir> --child-id <machineId>
 allowed-tools: Bash, Read, Write
 ---
 
@@ -30,11 +30,13 @@ Workflow:
 1. **`classify` first** — it names the lanes (shape / vocabulary / intent /
    semantic / migration / composition) and the gates they demand, without
    running anything.
-2. **Pick the snapshot corpus honestly** — live fleet state > `polyrun
-   archive` output (`--snapshots`) > `--synthesize` (BFS-reachable states of
-   the OLD machine — the weakest tier: it contains only states the old MODEL
-   says are reachable, which is exactly the assumption a landmine violates).
-   Always tell the user which tier was used; the report records it.
+2. **Pick the snapshot corpus honestly** — fleet exports (`--snapshots`:
+   `polyrun archive` output or state dumps; "live" means a FRESH export fed
+   to this flag — polyvers never connects to a database) > `--synthesize`
+   (BFS-reachable states of the OLD machine — the weakest tier: it contains
+   only states the old MODEL says are reachable, which is exactly the
+   assumption a landmine violates). Always tell the user which tier was
+   used; the report records it.
 3. **`check`** — exit 0 is the gate. Read the report's failures BY LANE, and
    triage with this vocabulary: **migration-defect** (migrate.cjs is wrong —
    fix it), **rule-regression** (the new rules can hurt live state — the
@@ -47,7 +49,8 @@ Workflow:
    every downstream gate runs over the MIGRATED corpus). `polyrun migrate`
    (dry run, then `--apply`) remains the apply-time gate over live snapshots.
 5. **Parent/child machines?** `matrix` checks the 2×2 rollout-window pairings
-   of the spawn/completion protocol and its delivery.
+   of the spawn/completion protocol and its delivery (`--parent-snapshots` /
+   `--child-snapshots` seed fleet states into discovery and delivery).
 
 A BOUNDED exploration is a failing gate unless the operator explicitly
 accepts it with `--allow-bounded`. An empty corpus, a missing invariants

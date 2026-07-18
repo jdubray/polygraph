@@ -15,7 +15,7 @@ import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
 import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate, semanticModelCheckGate, migrateGate, stimuliGate } from '../src/gates.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
-import { runMatrix } from '../src/matrix.mjs';
+import { runMatrix, discoverSpawns } from '../src/matrix.mjs';
 import { check } from '../../scripts/check.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -318,7 +318,7 @@ test('cli: --out writes compat-report.json and .md under the changeId', () => {
     const report = JSON.parse(r.stdout);
     const j = JSON.parse(readFileSync(join(dir, report.changeId, 'compat-report.json'), 'utf-8'));
     assert.equal(j.verdict, 'PASS');
-    assert.equal(j.milestone, 'M2'); // the ONE milestone constant, not prose
+    assert.equal(j.milestone, 'M3'); // the ONE milestone constant, not prose
     assert.ok(readFileSync(join(dir, report.changeId, 'compat-report.md'), 'utf-8').includes('# polyvers compat-report'));
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -695,6 +695,76 @@ test('m3: cli matrix — exit code is the verdict', () => {
     '--child-old', fix('ship-v1'), '--child-new', fix('ship-v2-renamed'), '--child-id', 'shipment']);
   assert.equal(fail.code, 1);
   assert.ok(fail.stdout.includes('parent-old × child-new | **FAIL**'));
+});
+
+test('m3-review: a spawn without a childKey is a defect in every cell (kernel poisons on it)', async () => {
+  const dir = scratchCopy('po-v1');
+  try {
+    const src = readFileSync(join(dir, 'effects.cjs'), 'utf-8');
+    writeFileSync(join(dir, 'effects.cjs'), src.replace("childKey: 'c1',\n", ''));
+    const po = await loadArtifacts(dir);
+    const ship = await load('ship-v1');
+    const result = runMatrix({ parentOld: po, parentNew: po, childOld: ship, childNew: ship, childMachineId: 'shipment' });
+    assert.equal(result.ok, false);
+    assert.ok(result.cells.every((c) => c.failures.some((f) => f.message.includes('without a childKey'))));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m3-review: spawns emitted on identity-accepted steps are discovered (kernel parity)', async () => {
+  const dir = scratchCopy('po-v1');
+  try {
+    // PING: accepted but state-identical; the mapper spawns on the ACTION —
+    // the kernel runs the mapper on every accepted step, so must the walk.
+    let mod = readFileSync(join(dir, 'next.cjs'), 'utf-8');
+    mod = mod.replace(
+      "START: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },",
+      "START: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },\n      PING: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },");
+    mod = mod.replace(
+      "START: (model) => (p, { reject }) => {",
+      "PING: (model) => (p, { reject }) => { model.poState = model.poState; },\n      START: (model) => (p, { reject }) => {");
+    writeFileSync(join(dir, 'next.cjs'), mod);
+    let fx = readFileSync(join(dir, 'effects.cjs'), 'utf-8');
+    fx = fx.replace(
+      "const out = [];",
+      "const out = [];\n  if (action === 'PING') out.push({ kind: 'spawnChild', machineId: 'pinger', childKey: 'p1', onComplete: 'CHILD_DONE' });");
+    writeFileSync(join(dir, 'effects.cjs'), fx);
+    const po = await loadArtifacts(dir);
+    const { spawns } = discoverSpawns(po);
+    assert.ok(spawns.some((s) => s.machineId === 'pinger'), 'identity-accept spawn discovered');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m3-review: a truncated matrix is BOUNDED — failing unless explicitly accepted', async () => {
+  const [po, ship] = [await load('po-v1'), await load('ship-v1')];
+  const bounded = runMatrix({ parentOld: po, parentNew: po, childOld: ship, childNew: ship, childMachineId: 'shipment', maxStates: 3 });
+  assert.equal(bounded.bounded, true);
+  assert.equal(bounded.ok, false); // cells may pass, but a truncated space is not a pass
+  const accepted = runMatrix({ parentOld: po, parentNew: po, childOld: ship, childNew: ship, childMachineId: 'shipment', maxStates: 3, allowBounded: true });
+  assert.equal(accepted.ok, true);
+});
+
+test('m3-review: missing terminal metadata is a metadata refusal, not a livelock diagnosis', async () => {
+  const dir = scratchCopy('ship-v1');
+  try {
+    const c = JSON.parse(readFileSync(join(dir, 'contract.json'), 'utf-8'));
+    delete c.terminalStates;
+    writeFileSync(join(dir, 'contract.json'), JSON.stringify(c, null, 2));
+    const po = await load('po-v1');
+    const ship = await loadArtifacts(dir);
+    const result = runMatrix({ parentOld: po, parentNew: po, childOld: ship, childNew: ship, childMachineId: 'shipment' });
+    assert.equal(result.ok, false);
+    const f = result.cells[0].failures.find((x) => x.message.includes('declares no terminalStates'));
+    assert.ok(f, 'refusal names the missing metadata');
+    assert.ok(!f.message.includes('await them forever'), 'no phantom livelock diagnosis');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m3-review: completion delivery carries the DISCOVERED childKey', async () => {
+  const [po, ship] = [await load('po-v1'), await load('ship-v1')];
+  const { spawns } = discoverSpawns(po);
+  assert.equal(spawns[0].childKey, 'c1'); // and checkPairing delivers {childKey: 'c1', ...} — asserted via the all-pass matrix
+  const result = runMatrix({ parentOld: po, parentNew: po, childOld: ship, childNew: ship, childMachineId: 'shipment' });
+  assert.equal(result.ok, true);
 });
 
 test('m3: an effects.cjs-only change fires the composition lane with an honest NOT RUN row', async () => {

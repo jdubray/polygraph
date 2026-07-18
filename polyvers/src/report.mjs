@@ -6,8 +6,9 @@
 'use strict';
 
 // The ONE milestone label — stamped into every report; bump it with the
-// build, never in prose alone (both prior reviews caught a stale copy).
-export const MILESTONE = 'M2';
+// build, never in prose alone (three consecutive reviews caught a stale
+// copy — this constant plus its test is the enforcement).
+export const MILESTONE = 'M3';
 
 export function buildReport({ classification, corpusInfo, gateResults }) {
   const ok = gateResults.every((g) => g.ok);
@@ -41,9 +42,8 @@ export function renderReport(r) {
   for (const g of r.gates) {
     lines.push(`| ${g.gate} | ${g.ok ? 'PASS' : `**FAIL** (${g.failures.length})`} | ${g.summary} |`);
   }
-  // Dormant, not dead: every lane's gates are live as of M2, so deferred is
-  // currently always empty — this rendering (and classify's dedup/merge) is
-  // deliberately retained for any future deferred gate; deleting it would
+  // LIVE as of M3: the composition lane defers to `polyrun check-effects`,
+  // so NOT RUN rows render whenever a mapper changed. Deleting this would
   // reintroduce silent PASS-over-gates-that-never-ran.
   for (const d of r.deferred) {
     lines.push(`| ${d.gate} | NOT RUN (${d.milestone}) | ${d.why} — required by: ${d.lanes.join(', ')} |`);

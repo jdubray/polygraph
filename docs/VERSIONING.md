@@ -205,10 +205,12 @@ know they are choosing the migration lane more often.
 ## What remains genuinely open
 
 Three things, stated plainly. **Cross-machine version products**: parent v2
-orchestrating child v1 is protocol-checked (the wiring must exist and
-type-match) but not *product model-checked* — "no reachable interleaving of
-parent-v2 and child-v1 violates a cross-machine invariant" is future work,
-recorded as a scope note. **Unstated intent**: every compatibility
+orchestrating child v1 is protocol- and delivery-checked per version pairing
+(`polyvers matrix`: spawn wiring, child terminal outcomes delivered into
+parent fleet states, parent-terminal cancels into child fleet states — the
+undefined-behavior class is closed) but not *product model-checked* — "no
+reachable interleaving of parent-v2 and child-v1 violates a cross-machine
+invariant" is future work, recorded as a scope note. **Unstated intent**: every compatibility
 guarantee above is relative to the invariants you wrote; semantic drift the
 invariants do not mention is invisible to every gate. Versioning maturity
 in this toolset is therefore mostly *invariant-writing* maturity — which we
