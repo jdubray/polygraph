@@ -62,6 +62,6 @@ export function renderQuestion(record) {
     L.push('  → acceptable: reject the candidate (the behavior is intended).');
     L.push('  → NOT acceptable: confirm it — the rule becomes intent, and this path is the repro of a live finding.');
   }
-  if (p.precheckDetail && p.precheck !== 'FAILS') L.push(`  note: ${p.precheckDetail}`);
+  if (p.precheckDetail && (p.precheck !== 'FAILS' || !p.counterexample)) L.push(`  ${p.precheck === 'FAILS' ? 'failure' : 'note'}: ${p.precheckDetail}`);
   return L.join('\n');
 }

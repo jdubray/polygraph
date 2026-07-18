@@ -16,6 +16,7 @@
 //                    [--out <invariants path>] [--force] [--ledger <path>] [--max-states N]
 //                    (temporal modify takes --js '{"kind":"precedence","first":"A","then":"B"}')
 //   polynv grade     --artifacts <dir> [--ledger <path>] [--max-mutants N] [--max-states N]
+//   polynv drift     --artifacts <dir> [--ledger <path>] [--reopen --author <name>] [--max-states N]
 //   polynv report    --artifacts <dir> [--ledger <path>] [--log] [--json]
 //
 // The ledger defaults to <artifacts>/intent-ledger.json — the system of
@@ -39,7 +40,7 @@ import {
   loadLedger, saveLedger, mergeCandidates, addCandidate, applyDisposition,
   generateInvariants, findRecord, GENERATED_MARKER,
 } from '../src/ledger.mjs';
-import { precheckRecord } from '../src/precheck.mjs';
+import { precheckRecord, precheckEmissionRecord } from '../src/precheck.mjs';
 import { openQuestions, questionPayload, renderQuestion } from '../src/questions.mjs';
 import { buildStatus, renderStatus, renderLog } from '../src/report.mjs';
 
@@ -64,12 +65,12 @@ const numFlag = (name, { min = 1 } = {}) => {
 };
 
 const usage = () => {
-  console.error('usage: polynv <harvest|questions|add|record|grade|report> --artifacts <dir> [options] — see the header of polynv/bin/polynv.mjs');
+  console.error('usage: polynv <harvest|questions|add|record|grade|drift|report> --artifacts <dir> [options] — see the header of polynv/bin/polynv.mjs');
   process.exit(2);
 };
 
 const artifactsDir = flag('artifacts');
-if (!['harvest', 'questions', 'add', 'record', 'grade', 'report'].includes(command) || !artifactsDir) usage();
+if (!['harvest', 'questions', 'add', 'record', 'grade', 'drift', 'report'].includes(command) || !artifactsDir) usage();
 const ledgerPath = flag('ledger') ?? join(artifactsDir, 'intent-ledger.json');
 const now = () => new Date().toISOString();
 
@@ -151,7 +152,11 @@ try {
     const { added, skipped } = mergeCandidates(ledger, askable, { date });
     const verdicts = {};
     for (const record of added) {
-      const r = precheckRecord(record, artifacts, { maxStates: numFlag('max-states'), date, graph });
+      // emission candidates route through check-effects (the machine ∘
+      // mapper layer) when the dir carries the composition; NOT-RUN otherwise
+      const r = record.target === 'emission'
+        ? await precheckEmissionRecord(record, artifactsDir, { date })
+        : precheckRecord(record, artifacts, { maxStates: numFlag('max-states'), date, graph });
       verdicts[r.verdict] = (verdicts[r.verdict] ?? 0) + 1;
     }
     saveLedger(ledgerPath, ledger);
@@ -298,6 +303,55 @@ try {
     saveLedger(ledgerPath, ledger);
     console.log(renderGrade(grade));
     if (added.length) console.log(`  ${added.length} survivor question(s) added to the ledger — \`polynv questions --next\``);
+  } else if (command === 'drift') {
+    // The version-bump re-interview diff (plan §10.6, recorded follow-up):
+    // re-check every record's CURRENT predicate against the machine as it
+    // is NOW and report every verdict that changed since it was recorded —
+    // the settled answers whose ground truth moved. Report-only by default
+    // (nothing written); --reopen (attributed) updates pre-checks, reopens
+    // affected rejected/abandoned records for re-asking, and leaves a
+    // confirmed-rule-now-FAILS as a confirmed finding (the rule is still
+    // the intent; the machine drifted).
+    const artifacts = await loadArtifacts(artifactsDir);
+    const date = now();
+    const graph = enumerateGraph(artifacts, { maxStates: numFlag('max-states') ?? 100000 });
+    const changes = [];
+    for (const record of ledger.records) {
+      if (record.target === 'emission') continue; // composition drift: recorded follow-up
+      if (!record.versions.length) continue;
+      const probe = structuredClone(record);
+      precheckRecord(probe, artifacts, { maxStates: numFlag('max-states'), date, graph });
+      const from = record.precheck?.verdict ?? 'none';
+      const to = probe.precheck.verdict;
+      if (from !== to) changes.push({ record, from, to, fresh: probe.precheck });
+    }
+    if (!changes.length) {
+      console.log(`polynv drift — no verdict changed across ${ledger.records.length} record(s); the recorded answers still describe this machine`);
+    } else {
+      console.log(`polynv drift — ${changes.length} record(s) whose verdict changed since it was recorded:`);
+      for (const c of changes) {
+        const finding = c.record.status === 'confirmed' && c.to === 'FAILS';
+        console.log(`  ${finding ? '✗' : '△'} ${c.record.id} [${c.record.status}]: ${c.from} → ${c.to}${finding ? ' — a CONFIRMED rule is now reachably violated (finding)' : ''}`);
+      }
+      if (has('reopen')) {
+        const author = flag('author');
+        if (!author) { console.error('--reopen requires --author (drift events are attributed)'); process.exit(2); }
+        for (const c of changes) {
+          c.record.precheck = c.fresh;
+          c.record.events.push({ type: 'drift', date, author, note: `verdict ${c.from} → ${c.to} on re-check against the current machine` });
+          if (['rejected', 'abandoned'].includes(c.record.status)) {
+            // the behavior the disposition judged has changed — re-ask
+            c.record.status = 'open';
+            c.record.events.push({ type: 'disposition', disposition: 'modify', date, author, note: 'reopened by drift: the machine behavior this answer judged has changed' });
+          }
+        }
+        saveLedger(ledgerPath, ledger);
+        console.log(`  ledger updated: pre-checks refreshed; reopened ${changes.filter((c) => ['open'].includes(c.record.status) && c.record.events.some((e) => e.note?.startsWith('reopened by drift'))).length} settled record(s); confirmed-but-violated rules stay confirmed (findings)`);
+      } else {
+        console.log('  (report-only — pass --reopen --author <name> to refresh pre-checks and reopen affected settled records)');
+      }
+      process.exitCode = 1; // drift found — never a silent pass
+    }
   } else { // report
     const status = buildStatus(ledger);
     if (has('json')) console.log(JSON.stringify(status, null, 2));

@@ -40,7 +40,13 @@ Generates template candidates from the contract's own vocabulary (one
 absorbing question per terminal state, range/sign/set-once/monotone per
 typed field, one no-op question per reject-describing special rule, one
 at-most-once question per manifest effect kind) and pre-checks each against
-the machine. **Always offer to mine**: if traces, a polyrun journal export,
+the machine — emission candidates through the machine ∘ mapper composition
+(polyrun check-effects) whenever the dir carries `effects.cjs` + manifest.
+**Resuming after the machine changed?** Run `drift --artifacts <dir>`
+first: it re-checks every recorded answer and names the verdicts that
+moved; `--reopen --author <designer>` re-asks judged answers whose ground
+truth drifted, while a confirmed rule now violated stays confirmed as a
+finding. **Always offer to mine**: if traces, a polyrun journal export,
 or fleet snapshots exist, pass them — the miners add observed-behavior
 candidates (in-domain, ranges, orderings, control-key implications,
 temporal precedence) with observation counts as evidence; mined candidates

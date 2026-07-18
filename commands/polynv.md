@@ -21,8 +21,17 @@ node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs add       --artifacts <dir> --i
 node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs record    --artifacts <dir> --id <id> --disposition confirm|reject|abandon|defer|modify --author <designer>
                                                            [--js "…"] [--concern "…"] [--assign <name>] [--target state|transition] [--out <path>] [--force]
 node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs grade     --artifacts <dir> [--include-invariants]
+node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs drift     --artifacts <dir> [--reopen --author <name>]
 node ${CLAUDE_PLUGIN_ROOT}/polynv/bin/polynv.mjs report    --artifacts <dir> [--log]
 ```
+
+On a **version bump** (the machine changed since the interview), run
+`drift` first: it re-checks every recorded answer against the machine as it
+is now and names every verdict that moved — a confirmed rule now violated
+is a finding; a rejected candidate whose behavior changed is re-asked
+(`--reopen`, attributed). Emission candidates get real verdicts whenever
+the dir carries the composition (`effects.cjs` + manifest, via polyrun
+check-effects).
 
 Disposition flags that trip the unprepared: a **temporal** (precedence)
 record's revision is STRUCTURED — `--disposition modify

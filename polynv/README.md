@@ -1,4 +1,4 @@
-# polynv — the invariants engine (M0)
+# polynv — the invariants engine (complete: M0–M3 + follow-ups)
 
 The fifth engine: Polygraph **audits**, polygen **authors**, polyrun
 **executes**, polyvers **evolves**, polynv **elicits**. Every other engine's
@@ -46,8 +46,24 @@ five-engine docs (ARCHITECTURE Engine 5, SDLC human gate #2's elicit
 path), and polyvers consuming the ledger both ways — the compat-report's
 adequacy trust tier (measured / STALE / UNREADABLE / NOT MEASURED) and
 intent-diff provenance annotations (elicited-and-confirmed-by vs
-no-ledger-record). Recorded follow-ups: the version-bump re-interview
-diff and harvest's per-candidate BFS reuse.
+no-ledger-record).
+
+**Completion** closes the recorded follow-ups: the **shared-graph
+pre-check fast path** (one BFS per harvest instead of two per candidate —
+verdict parity with the full checker is test-asserted; harvest on the OMS
+example dropped ~6×), the **emission pre-check** (at-most-once candidates
+run through polyrun check-effects whenever the dir carries the
+composition — real HOLDS/BOUNDED/FAILS verdicts instead of NOT-RUN), the
+**`drift` command** (the version-bump re-interview diff, plan §10.6:
+re-check every recorded answer against the machine as it is now; report
+moved verdicts, exit 1; `--reopen` re-asks judged answers whose ground
+truth drifted while confirmed-now-violated rules stay confirmed as
+findings), and the review's efficiency backlog (incremental prune
+indexes, first-occurrence temporal indexing, hoisted witness maps,
+clone-free mutant wrappers). Still recorded for the future:
+acceptor-aware widen donors, runtime monitoring of confirmed temporal
+rules, composition drift for emission records, and the five-engine
+diagram refresh.
 
 The one design rule (plan §1): **harvested candidates are behavior, not
 intent** — nothing enters `invariants.mjs` without an explicit, attributed

@@ -184,18 +184,26 @@ export function mineTemporal(windows, { minScenarios = 3 } = {}) {
   const sequences = [...byScenario.values()];
   if (!sequences.length) return { candidates, notes: ['no effective windows — temporal mining skipped'] };
   const actions = [...new Set(sequences.flat())].sort();
+  // One pass per sequence builds action → first-occurrence index; each pair
+  // check is then two O(1) lookups instead of linear scans (review
+  // efficiency finding: the doubly-nested indexOf was O(A² × events)).
+  const firstIndex = sequences.map((seq) => {
+    const m = new Map();
+    seq.forEach((a, i) => { if (!m.has(a)) m.set(a, i); });
+    return m;
+  });
 
   for (const first of actions) {
     for (const then of actions) {
       if (first === then) continue;
       let thenScenarios = 0;
       let holds = true;
-      for (const seq of sequences) {
-        const ti = seq.indexOf(then);
-        if (ti < 0) continue;
+      for (const m of firstIndex) {
+        const ti = m.get(then);
+        if (ti === undefined) continue;
         thenScenarios++;
-        const fi = seq.indexOf(first);
-        if (fi < 0 || fi > ti) { holds = false; break; }
+        const fi = m.get(first);
+        if (fi === undefined || fi > ti) { holds = false; break; }
       }
       if (!holds || thenScenarios === 0) continue;
       if (thenScenarios < minScenarios) {
@@ -229,24 +237,35 @@ export function mineTemporal(windows, { minScenarios = 3 } = {}) {
 export function pruneCandidates(candidates, existingRecords) {
   const kept = [];
   const pruned = [];
-  const all = () => [...existingRecords, ...kept];
   const nfOf = (r) => (r.versions ? r.versions[r.versions.length - 1]?.nf : r.nf);
   const jsOf = (r) => (r.versions ? r.versions[r.versions.length - 1]?.js : r.js);
+  // Incremental indexes (review efficiency finding — rebuilding these per
+  // candidate was O(C×(R+C))): built once over the existing records, then
+  // extended as candidates are kept.
+  const jsSet = new Set();
+  const rangeByField = new Map();
+  const index = (r) => {
+    const js = jsOf(r);
+    if (js) jsSet.add(js);
+    const nf = nfOf(r);
+    if (nf?.kind === 'range' && !rangeByField.has(nf.field)) rangeByField.set(nf.field, nf);
+  };
+  for (const r of existingRecords) index(r);
   for (const c of candidates) {
-    const existingJs = new Set(all().map(jsOf).filter(Boolean));
-    if (c.js && existingJs.has(c.js)) { pruned.push({ id: c.id, reason: 'identical predicate already present' }); continue; }
+    if (c.js && jsSet.has(c.js)) { pruned.push({ id: c.id, reason: 'identical predicate already present' }); continue; }
     if (c.nf?.kind === 'nonneg') {
-      const covering = all().map(nfOf).find((n) => n?.kind === 'range' && n.field === c.nf.field && n.min >= 0);
-      if (covering) { pruned.push({ id: c.id, reason: `implied by range:${c.nf.field} (min ${covering.min} >= 0)` }); continue; }
+      const covering = rangeByField.get(c.nf.field);
+      if (covering && covering.min >= 0) { pruned.push({ id: c.id, reason: `implied by range:${c.nf.field} (min ${covering.min} >= 0)` }); continue; }
     }
     if (c.nf?.kind === 'range') {
-      const other = all().map(nfOf).find((n) => n?.kind === 'range' && n.field === c.nf.field);
+      const other = rangeByField.get(c.nf.field);
       if (other && !(c.nf.min > other.min || c.nf.max < other.max)) {
         pruned.push({ id: c.id, reason: `not tighter than the existing range on '${c.nf.field}' (${other.min}..${other.max})` });
         continue;
       }
     }
     kept.push(c);
+    index(c);
   }
   return { kept, pruned };
 }

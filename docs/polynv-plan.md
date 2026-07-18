@@ -1,6 +1,6 @@
 # polynv — plan for the fifth engine (invariants)
 
-**Status: PLAN v0.3 — M0–M3 implemented, design revised by literature review** under
+**Status: PLAN v0.3 — COMPLETE (M0–M3 + follow-ups), design revised by literature review** under
 [`polynv/`](../polynv/README.md): the contract-structure template
 generator, per-candidate pre-check through `scripts/check.mjs` (HOLDS /
 FAILS-with-counterexample / BOUNDED / ERROR / NOT-RUN), the append-only
@@ -62,10 +62,15 @@ adversarial review fixed a lookup-key mismatch (diff names are
 'state:'/'transition:'-prefixed; ledger ids are bare), the
 partial-provenance-on-parse-failure inconsistency, and the
 polynv-unavailable misdiagnosis (RECORDED BUT UNVERIFIED, not
-UNREADABLE). **Recorded follow-ups:** the
-re-interview diff on a version bump (old dialog answers vs new
-behavior/priors, plan §10.6's drift design) and the harvest
-per-candidate BFS reuse (efficiency).
+UNREADABLE). **Completion (follow-ups closed):** the shared-graph
+pre-check fast path (verdict parity test-asserted; harvest ~6× faster on
+the OMS example), the emission pre-check through polyrun check-effects,
+`polynv drift` (the §10.6 re-interview diff: moved verdicts named,
+judged answers re-asked under `--reopen`, confirmed-now-violated rules
+kept confirmed as findings), and the review's efficiency backlog.
+**Still recorded:** acceptor-aware widen donors, runtime monitoring of
+confirmed temporal rules, composition drift for emission records, the
+five-engine diagram refresh.
 
 **Thesis:** every gate in the other four engines is exactly as good as
 `invariants.mjs`, and the repo says so itself — *"unstated intent is

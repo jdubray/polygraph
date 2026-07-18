@@ -12,10 +12,13 @@
 //   NOT-RUN — emission-target candidates (check-effects territory; M1).
 'use strict';
 
+import { existsSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { check } from '../../scripts/check.mjs';
 import { compile } from './nf.mjs';
 import { currentVersion } from './ledger.mjs';
-import { checkPrecedence } from './consequences.mjs';
+import { checkPrecedence, graphSound, violationsOf, pathsOf } from './consequences.mjs';
 
 export function precheckRecord(record, artifacts, { maxStates = 100000, date, graph = null }) {
   let result;
@@ -39,6 +42,36 @@ export function precheckRecord(record, artifacts, { maxStates = 100000, date, gr
         ? { verdict: graph.capHit ? 'BOUNDED' : 'HOLDS', statesExplored: graph.states.length, date, ...(graph.capHit ? { detail: 'no violation found over a TRUNCATED graph — not a pass' } : {}) }
         : { verdict: 'FAILS', detail: `the machine can drive '${v.nf.then}' before any '${v.nf.first}'`, kind: 'temporal', counterexample: r.path, statesExplored: graph.states.length, date };
     }
+  } else if (graph && graphSound(graph)) {
+    // Fast path (review efficiency finding): a SOUND shared graph already
+    // contains every reachable state and explored edge — evaluate the
+    // candidate over it and reconstruct the shortest counterexample from
+    // the memoized parent pointers, instead of re-running a full check()
+    // double-pass per candidate. Verdicts are identical by construction;
+    // unsound graphs (truncated/throwing/nondeterministic) fall through to
+    // the full check() below, whose attribution logic handles them.
+    const v = currentVersion(record);
+    const compiled = compile(v.nf);
+    const violations = violationsOf(compiled, graph) ?? [];
+    if (violations.length === 0) {
+      result = { verdict: 'HOLDS', statesExplored: graph.states.length, date };
+    } else {
+      const { pathToState, pathToEdge } = pathsOf(graph);
+      let best = null;
+      for (const viol of violations) {
+        const p = viol.kind === 'state' ? pathToState(viol.key) : pathToEdge(viol.edge);
+        if (p && (!best || p.length < best.length)) best = p;
+      }
+      result = {
+        verdict: 'FAILS',
+        detail: violations[0].kind === 'state' ? 'reachable state violates the rule' : `violated by ${violations[0].edge?.action ?? 'a transition'}`,
+        kind: violations[0].kind === 'state' ? 'state' : 'transition',
+        counterexample: best ?? [],
+        statesExplored: graph.states.length,
+        date,
+      };
+    }
+    if (graph.domainNotes?.length) result.domainNotes = graph.domainNotes;
   } else {
     const v = currentVersion(record);
     const { target, pred } = compile(v.nf);
@@ -66,6 +99,61 @@ export function precheckRecord(record, artifacts, { maxStates = 100000, date, gr
       result = { verdict: 'HOLDS', statesExplored: r.statesExplored, date };
     }
     if (r.domainNotes?.length) result.domainNotes = r.domainNotes;
+  }
+  record.precheck = result;
+  record.events.push({ type: 'precheck', verdict: result.verdict, date });
+  return result;
+}
+
+/**
+ * Emission pre-check (recorded follow-up, now wired): an
+ * emission-at-most-once candidate is checked at the machine ∘ mapper layer
+ * through polyrun's check-effects — the composition explorer that evaluates
+ * invariants over per-path EMISSIONS. Runs only when the artifact dir
+ * carries the composition (effects.cjs + effects.manifest.json); otherwise
+ * the candidate keeps its explicit NOT-RUN. Async because checkEffects is.
+ */
+export async function precheckEmissionRecord(record, artifactsDir, { date, maxDepth, maxPaths } = {}) {
+  const v = currentVersion(record);
+  let result;
+  if (v?.nf?.kind !== 'emission-at-most-once') {
+    result = { verdict: 'NOT-RUN', note: `emission kind '${v?.nf?.kind}' has no checker`, date };
+  } else if (!existsSync(join(artifactsDir, 'effects.cjs')) || !existsSync(join(artifactsDir, 'effects.manifest.json'))) {
+    result = { verdict: 'NOT-RUN', note: 'emission invariant — needs effects.cjs + effects.manifest.json in the artifact dir (the machine ∘ mapper composition); ask the designer without a verdict', date };
+  } else {
+    const { checkEffects } = await import('../../polyrun/src/check-effects.mjs');
+    const { findModulePath } = await import('../../polyvers/src/artifacts.mjs');
+    // checkEffects takes an invariants MODULE PATH — write the single
+    // candidate as a throwaway effectInvariants module.
+    const dir = mkdtempSync(join(tmpdir(), 'polynv-emis-'));
+    const invPath = join(dir, 'inv.mjs');
+    writeFileSync(invPath, `export const effectInvariants = [{ name: ${JSON.stringify(record.id)}, pred: (path) => path.count(${JSON.stringify(v.nf.effect)}) <= 1 }];\n`);
+    try {
+      const r = await checkEffects({
+        module: findModulePath(artifactsDir),
+        mapper: join(artifactsDir, 'effects.cjs'),
+        manifest: join(artifactsDir, 'effects.manifest.json'),
+        contract: join(artifactsDir, 'contract.json'),
+        invariants: invPath,
+        maxDepth, maxPaths,
+      });
+      // Attribution mirrors the state/transition path: only THIS candidate's
+      // violations are the candidate failing; mapper defects etc. are
+      // machine/composition problems.
+      const own = (r.violations ?? []).filter((x) => x.invariant === record.id);
+      const other = (r.violations ?? []).filter((x) => x.invariant !== record.id);
+      if (own.length) {
+        result = { verdict: 'FAILS', detail: `'${v.nf.effect}' can be emitted more than once on a reachable path: ${own[0].counterexample}`, kind: 'emission', statesExplored: r.statesSeen, date };
+      } else if (other.length) {
+        result = { verdict: 'ERROR', detail: `composition problem, not this candidate: ${other[0].invariant} — ${other[0].detail ?? other[0].counterexample}`, date };
+      } else if (r.bounded) {
+        result = { verdict: 'BOUNDED', detail: `no violation found, but path exploration was bounded (${r.pathsExplored} paths) — not a pass`, statesExplored: r.statesSeen, date };
+      } else {
+        result = { verdict: 'HOLDS', statesExplored: r.statesSeen, date };
+      }
+    } catch (e) {
+      result = { verdict: 'ERROR', detail: `check-effects could not run: ${String(e && e.message)}`, date };
+    }
   }
   record.precheck = result;
   record.events.push({ type: 'precheck', verdict: result.verdict, date });
