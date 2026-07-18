@@ -3,6 +3,47 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 3.0.0 — 2026-07-17
+
+New engine: **polyvers**, versioning for state machines with mechanical
+compatibility gates — the fourth engine (Polygraph audits, polygen authors,
+polyrun executes, polyvers **evolves**). It makes `docs/VERSIONING.md`
+executable: given two versions of a machine's artifact family and fleet
+snapshots, `polyvers classify` fires the compatibility lanes the change
+touches (shape / vocabulary / intent / semantic / migration / composition)
+and `polyvers check` runs exactly the gates those lanes demand — setState
+round-trip, cross-version stimuli replay (everything the old version can
+still deliver must land as accepted or a NAMED observable reject,
+kernel-parity classification), migration validation (`polyvers migrate
+scaffold` generates migrate.cjs from the shape diff; the gate checks purity,
+acceptance, projection equality, and state+transition invariants, then
+swaps the corpus so every downstream gate runs over post-migration states),
+and the headline: an exhaustive model check **seeded from live fleet
+snapshots** (`check.mjs --initial-states`) asking whether any state the
+fleet actually holds can be DRIVEN to an invariant violation under the new
+rules — the v1-reachable/v3-unreachable landmine hunt, mechanized, with a
+fixture proving only the seeded check catches it. `polyvers matrix` checks
+parent×child rollout-window pairings over the spawn/completion protocol and
+its delivery. Deterministic byte-identical compat-reports, refusals instead
+of vacuous passes (empty corpus, missing invariants, BOUNDED exploration
+without --allow-bounded), no API key anywhere. Plugin surfaces:
+`/polygraph:polyvers` command, skill, and subagent. Worked example:
+`examples/polyvers-oms` versions the OMS order machine (shape+rules+intent
+change, scaffolded migration, committed compat-report and matrix report).
+Docs: the four-engine architecture (two verification gates between
+authoring and execution — correctness and compatibility — with execution
+feeding both back), an updated diagram set (reworked fig 1, new fig 5), the
+SDLC's Phase 7 mechanized, and a literature-context section in the
+versioning essay. Every milestone (M0–M3) shipped with an adversarial
+multi-agent review; all confirmed findings fixed. 62 polyvers tests; the
+shared checker gained `initialStates` with seed-exempt exploration caps.
+
+Major-version note: `scripts/check.mjs`'s result shape changed
+(`statesExplored` now counts discovered states only, with `seededStates`
+reported separately), and the polyvers artifact-dir convention reserves
+`migrate.cjs`/`effects.cjs` as sibling artifacts a machine module may not
+be named after.
+
 ## 2.1.0 — 2026-07-17
 
 New component: **polyrun**, a durable execution harness for polygen-verified

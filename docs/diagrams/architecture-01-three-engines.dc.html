@@ -18,79 +18,82 @@
 </helmet>
 <div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
 
-  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2px;">
     <div>
       <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">Architecture · fig 1</div>
       <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Four engines, one artifact family</div>
     </div>
     <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a09a8c; padding-bottom: 4px;">hover an engine ↗</div>
   </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #55595f; margin-bottom: 14px;">Two verification gates between authoring and execution: the first version takes the correctness path; every later version takes the compatibility path.</div>
 
-  <div style="position: relative; width: 960px; height: 560px; margin: 0 auto;">
-    <svg viewBox="0 0 960 560" width="960" height="560" style="position: absolute; inset: 0; overflow: visible;">
+  <div style="position: relative; width: 960px; height: 615px; margin: 0 auto;">
+    <svg viewBox="0 0 960 615" width="960" height="615" style="position: absolute; inset: 0; overflow: visible;">
       <defs>
         <marker id="ah-t" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#2f6f8f"></path></marker>
-        <marker id="ah-a" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#bc6a1e"></path></marker>
         <marker id="ah-e" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#3f7a54"></path></marker>
-        <marker id="ah-v" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#6a4b9c"></path></marker>
+        <marker id="ah-a" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#bc6a1e"></path></marker>
       </defs>
-      <path d="M 320,100 Q 460,55 600,100" fill="none" stroke="#6a4b9c" stroke-width="2" marker-end="url(#ah-t)" opacity="{{ opArc1 }}"></path>
-      <path d="M 762,195 Q 810,297 762,395 " fill="none" stroke="#2f6f8f" stroke-width="2" marker-end="url(#ah-a)" opacity="{{ opArc2 }}"></path>
-      <path d="M 600,492 Q 460,538 320,492" fill="none" stroke="#bc6a1e" stroke-width="2" marker-end="url(#ah-e)" opacity="{{ opArc3 }}"></path>
-      <path d="M 198,395 Q 150,297 198,195" fill="none" stroke="#3f7a54" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ah-v)" opacity="{{ opArc4 }}"></path>
-      <line x1="300" y1="168" x2="398" y2="228" stroke="#c9c3b4" stroke-width="1.2" opacity="{{ opSpokeV }}"></line>
-      <line x1="660" y1="168" x2="562" y2="228" stroke="#c9c3b4" stroke-width="1.2" opacity="{{ opSpokeT }}"></line>
-      <line x1="660" y1="420" x2="562" y2="368" stroke="#c9c3b4" stroke-width="1.2" opacity="{{ opSpokeA }}"></line>
-      <line x1="300" y1="420" x2="398" y2="368" stroke="#c9c3b4" stroke-width="1.2" opacity="{{ opSpokeE }}"></line>
+      <!-- forward: author → gates -->
+      <path d="M 250,205 Q 305,110 360,102" fill="none" stroke="#6a4b9c" stroke-width="2" marker-end="url(#ah-t)" opacity="{{ opArcGG }}"></path>
+      <path d="M 250,330 Q 305,490 360,500" fill="none" stroke="#6a4b9c" stroke-width="2" marker-end="url(#ah-e)" opacity="{{ opArcGV }}"></path>
+      <!-- forward: gates → execute -->
+      <path d="M 600,102 Q 655,110 712,205" fill="none" stroke="#2f6f8f" stroke-width="2" marker-end="url(#ah-a)" opacity="{{ opArcTR }}"></path>
+      <path d="M 600,500 Q 655,490 712,335" fill="none" stroke="#3f7a54" stroke-width="2" marker-end="url(#ah-a)" opacity="{{ opArcVR }}"></path>
+      <!-- feedback: execute → both gates (dashed) -->
+      <path d="M 840,192 Q 880,60 604,55" fill="none" stroke="#bc6a1e" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ah-t)" opacity="{{ opArcRT }}"></path>
+      <path d="M 840,345 Q 890,545 604,550" fill="none" stroke="#bc6a1e" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ah-e)" opacity="{{ opArcRV }}"></path>
     </svg>
 
     <!-- arc labels -->
-    <div style="position: absolute; left: 380px; top: 42px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #6a4b9c; opacity: {{ opArc1 }};">authors artifacts →</div>
-    <div style="position: absolute; left: 800px; top: 275px; width: 150px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #2f6f8f; opacity: {{ opArc2 }};">verified machine ships ↓</div>
-    <div style="position: absolute; left: 372px; top: 522px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #bc6a1e; opacity: {{ opArc3 }};">journal + fleet snapshots ←</div>
-    <div style="position: absolute; left: 8px; top: 275px; width: 140px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #3f7a54; opacity: {{ opArc4 }};">gated next version re-enters ↑</div>
+    <div style="position: absolute; left: 216px; top: 118px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #6a4b9c; opacity: {{ opArcGG }};">first version ↗</div>
+    <div style="position: absolute; left: 205px; top: 462px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #6a4b9c; opacity: {{ opArcGV }};">every later version ↘</div>
+    <div style="position: absolute; left: 648px; top: 118px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #2f6f8f; opacity: {{ opArcTR }};">verified machine ships ↘</div>
+    <div style="position: absolute; left: 630px; top: 462px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #3f7a54; opacity: {{ opArcVR }};">compatible version ships ↗</div>
+    <div style="position: absolute; left: 690px; top: 22px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #bc6a1e; opacity: {{ opArcRT }};">journal = trace corpus ↩</div>
+    <div style="position: absolute; left: 682px; top: 566px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #bc6a1e; opacity: {{ opArcRV }};">fleet snapshots ↪</div>
 
-    <!-- polygen (top-left) -->
-    <div onMouseEnter="{{ onGen }}" onMouseLeave="{{ onClear }}" style="position: absolute; left: 150px; top: 88px; width: 210px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #6a4b9c; border-radius: 13px; padding: 15px 17px; cursor: default; box-shadow: 0 1px 0 #e9e4d5; opacity: {{ opGen }}; transition: opacity .18s;">
+    <!-- polygen (left) -->
+    <div onMouseEnter="{{ onGen }}" onMouseLeave="{{ onClear }}" style="position: absolute; left: 20px; top: 205px; width: 230px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #6a4b9c; border-radius: 13px; padding: 15px 17px; cursor: default; box-shadow: 0 1px 0 #e9e4d5; opacity: {{ opGen }}; transition: opacity .18s;">
       <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #6a4b9c;">Engine 2 · author</div>
       <div style="font-size: 20px; font-weight: 600; margin: 3px 0 5px;">polygen</div>
       <div style="font-family: 'Newsreader', serif; font-size: 14px; line-height: 1.35; color: #4b4f55;">Authors new stateful code so it is verifiable from the moment it is written.</div>
     </div>
 
-    <!-- Polygraph (top-right) -->
-    <div onMouseEnter="{{ onGraph }}" onMouseLeave="{{ onClear }}" style="position: absolute; left: 600px; top: 88px; width: 210px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #2f6f8f; border-radius: 13px; padding: 15px 17px; cursor: default; box-shadow: 0 1px 0 #e9e4d5; opacity: {{ opGraph }}; transition: opacity .18s;">
-      <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #2f6f8f;">Engine 1 · audit</div>
+    <!-- Polygraph (top-center: the correctness gate) -->
+    <div onMouseEnter="{{ onGraph }}" onMouseLeave="{{ onClear }}" style="position: absolute; left: 365px; top: 30px; width: 230px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #2f6f8f; border-radius: 13px; padding: 15px 17px; cursor: default; box-shadow: 0 1px 0 #e9e4d5; opacity: {{ opGraph }}; transition: opacity .18s;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #2f6f8f;">Engine 1 · audit — the correctness gate</div>
       <div style="font-size: 20px; font-weight: 600; margin: 3px 0 5px;">Polygraph</div>
-      <div style="font-family: 'Newsreader', serif; font-size: 14px; line-height: 1.35; color: #4b4f55;">Audits stateful code that already exists — generate, replay, model-check.</div>
+      <div style="font-family: 'Newsreader', serif; font-size: 14px; line-height: 1.35; color: #4b4f55;">Is this machine right? Generate, replay, model-check — from init.</div>
     </div>
 
-    <!-- hub -->
-    <div style="position: absolute; left: 340px; top: 218px; width: 280px; background: #1b1d1f; color: #f6f4ee; border-radius: 14px; padding: 16px 18px 18px; box-shadow: 0 8px 24px rgba(27,29,31,0.16);">
+    <!-- hub (center, between the two gates) -->
+    <div style="position: absolute; left: 340px; top: 196px; width: 280px; background: #1b1d1f; color: #f6f4ee; border-radius: 14px; padding: 14px 18px 16px; box-shadow: 0 8px 24px rgba(27,29,31,0.16);">
       <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #a7a294;">the artifact family</div>
-      <div style="font-size: 15px; font-weight: 500; margin: 3px 0 11px; color: #f0ede3;">small, inspectable, diffable — shared by all four</div>
-      <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 4px 8px;">contract.json</span>
-        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 4px 8px;">next.cjs</span>
-        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 4px 8px;">invariants.mjs</span>
-        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 4px 8px;">*.ndjson traces</span>
-        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 4px 8px;">effects.cjs</span>
-        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 4px 8px;">migrate.cjs</span>
+      <div style="font-size: 14px; font-weight: 500; margin: 3px 0 9px; color: #f0ede3;">small, inspectable, diffable — shared by all four</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 3px 7px;">contract.json</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 3px 7px;">next.cjs</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 3px 7px;">invariants.mjs</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 3px 7px;">*.ndjson traces</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 3px 7px;">effects.cjs</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: #2b2e31; border: 1px solid #3a3d40; border-radius: 6px; padding: 3px 7px;">migrate.cjs</span>
       </div>
-      <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 12.5px; color: #b9b4a6; margin-top: 11px; line-height: 1.3;">The <span style="font-family:'JetBrains Mono',monospace; font-style: normal; font-size: 11px;">{pre, action, data, post}</span> window is the universal currency.</div>
+      <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 12px; color: #b9b4a6; margin-top: 9px; line-height: 1.3;">The <span style="font-family:'JetBrains Mono',monospace; font-style: normal; font-size: 10.5px;">{pre, action, data, post}</span> window is the universal currency.</div>
     </div>
 
-    <!-- polyvers (bottom-left) -->
-    <div onMouseEnter="{{ onVers }}" onMouseLeave="{{ onClear }}" style="position: absolute; left: 150px; top: 408px; width: 210px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #3f7a54; border-radius: 13px; padding: 15px 17px; cursor: default; box-shadow: 0 1px 0 #e9e4d5; opacity: {{ opVers }}; transition: opacity .18s;">
-      <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #3f7a54;">Engine 4 · evolve</div>
+    <!-- polyvers (bottom-center: the compatibility gate) -->
+    <div onMouseEnter="{{ onVers }}" onMouseLeave="{{ onClear }}" style="position: absolute; left: 365px; top: 455px; width: 230px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #3f7a54; border-radius: 13px; padding: 15px 17px; cursor: default; box-shadow: 0 1px 0 #e9e4d5; opacity: {{ opVers }}; transition: opacity .18s;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #3f7a54;">Engine 4 · evolve — the compatibility gate</div>
       <div style="font-size: 20px; font-weight: 600; margin: 3px 0 5px;">polyvers</div>
-      <div style="font-family: 'Newsreader', serif; font-size: 14px; line-height: 1.35; color: #4b4f55;">Gates every new version against the live fleet — state outlives code.</div>
+      <div style="font-family: 'Newsreader', serif; font-size: 14px; line-height: 1.35; color: #4b4f55;">Is this version safe for the fleet the last one left behind? State outlives code.</div>
     </div>
 
-    <!-- polyrun (bottom-right) -->
-    <div onMouseEnter="{{ onRun }}" onMouseLeave="{{ onClear }}" style="position: absolute; left: 600px; top: 408px; width: 210px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #bc6a1e; border-radius: 13px; padding: 15px 17px; cursor: default; box-shadow: 0 1px 0 #e9e4d5; opacity: {{ opRun }}; transition: opacity .18s;">
+    <!-- polyrun (right) -->
+    <div onMouseEnter="{{ onRun }}" onMouseLeave="{{ onClear }}" style="position: absolute; left: 710px; top: 205px; width: 230px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid #bc6a1e; border-radius: 13px; padding: 15px 17px; cursor: default; box-shadow: 0 1px 0 #e9e4d5; opacity: {{ opRun }}; transition: opacity .18s;">
       <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #bc6a1e;">Engine 3 · execute</div>
       <div style="font-size: 20px; font-weight: 600; margin: 3px 0 5px;">polyrun</div>
-      <div style="font-family: 'Newsreader', serif; font-size: 14px; line-height: 1.35; color: #4b4f55;">Executes verified machines durably. Its journal <em>is</em> the trace corpus that feeds audit.</div>
+      <div style="font-family: 'Newsreader', serif; font-size: 14px; line-height: 1.35; color: #4b4f55;">Executes verified machines durably. Its journal feeds <em>both</em> gates: traces to audit, snapshots to versioning.</div>
     </div>
   </div>
 
@@ -113,29 +116,29 @@ class Component extends DCLogic {
     const arc = (...ids) => (!A || ids.includes(A)) ? '1' : '0.12';
     const details = {
       null: { color: '#b23b2e', kicker: 'Scope disclosure · repo-wide',
-        body: 'Everything here is a consistency check, not a proof. A clean run means observable behavior matches an independent reading of the code within explored bounds — nothing more. Each engine is useful alone; together they close a loop from design to verification to production to the next version, and back.',
+        body: 'Everything here is a consistency check, not a proof. A clean run means observable behavior matches an independent reading of the code within explored bounds — nothing more. Authoring feeds two gates: Polygraph asks whether the machine is right; polyvers asks whether this version is safe for the fleet. Execution feeds both gates back.',
         touches: 'shared substrate: the SAM v2 strict profile · stable() canonical state equality' },
       polygen: { color: '#6a4b9c', kicker: 'polygen · author',
-        body: 'Turns one paragraph of intent into a verified machine — drafting the contract, authoring the SAM v2 module, proposing invariants, model-checking its own output and self-repairing code (never invariants).',
+        body: 'Turns one paragraph of intent into a verified machine — drafting the contract, authoring the SAM v2 module, proposing invariants, model-checking its own output and self-repairing code (never invariants). A first version heads to the correctness gate; every revision also heads to the compatibility gate.',
         touches: 'produces → contract.json · next.cjs · invariants.mjs · effects.cjs + manifest' },
-      polygraph: { color: '#2f6f8f', kicker: 'Polygraph · audit',
-        body: 'Reads existing code (any language) by generating N independent specs, proving the harness with controls first, then replaying every window and model-checking against intent to surface reachable bad states.',
-        touches: 'consumes ← contract + source + traces   ·   produces → specs 1..N · findings + shortest counterexamples' },
+      polygraph: { color: '#2f6f8f', kicker: 'Polygraph · audit — the correctness gate',
+        body: 'Reads existing code (any language) by generating N independent specs, proving the harness with controls first, then replaying every window and model-checking against intent to surface reachable bad states — exploring from init().',
+        touches: 'consumes ← contract + source + traces (from the polyrun journal)   ·   produces → specs 1..N · findings + shortest counterexamples' },
       polyrun: { color: '#bc6a1e', kicker: 'polyrun · execute',
-        body: 'Gives a verified module durable state, reliable effects, and durable timers — one ACID transaction per step, no event-sourced replay. Its append-only journal doubles as a Polygraph trace corpus and a polyvers fleet corpus.',
+        body: 'Gives a verified module durable state, reliable effects, and durable timers — one ACID transaction per step, no event-sourced replay. Its append-only journal is the trace corpus that feeds the correctness gate, and its fleet snapshots are the initial states that feed the compatibility gate.',
         touches: 'consumes ← module + contract + mapper/manifest   ·   produces → journal (= trace corpus) · fleet snapshots' },
-      polyvers: { color: '#3f7a54', kicker: 'polyvers · evolve',
-        body: 'Classifies a version change into compatibility lanes and gates it against fleet snapshots: round-trip, old-version stimuli replay, migration validation, and a model check seeded from live states — can any instance be DRIVEN to a violation under the new rules?',
-        touches: 'consumes ← both versions of the family + fleet snapshots   ·   produces → compat-report · migrate.cjs (scaffold) · matrix' },
+      polyvers: { color: '#3f7a54', kicker: 'polyvers · evolve — the compatibility gate',
+        body: 'The alternate verification path for every version after the first: classify the change into lanes, then gate it against fleet snapshots — round-trip, old-version stimuli replay, migration validation, and a model check exploring from LIVE states rather than init(): can any instance the fleet holds be driven to a violation under the new rules?',
+        touches: 'consumes ← both versions of the family + fleet snapshots (from polyrun)   ·   produces → compat-report · migrate.cjs (scaffold) · matrix' },
     };
     const d = details[A] || details.null;
     return {
       onGen: () => this.set('polygen'), onGraph: () => this.set('polygraph'),
       onRun: () => this.set('polyrun'), onVers: () => this.set('polyvers'), onClear: () => this.set(null),
       opGen: dim('polygen'), opGraph: dim('polygraph'), opRun: dim('polyrun'), opVers: dim('polyvers'),
-      opArc1: arc('polygen','polygraph'), opArc2: arc('polygraph','polyrun'),
-      opArc3: arc('polyrun','polyvers'), opArc4: arc('polyvers','polygen'),
-      opSpokeV: dim('polygen'), opSpokeT: dim('polygraph'), opSpokeA: dim('polyrun'), opSpokeE: dim('polyvers'),
+      opArcGG: arc('polygen','polygraph'), opArcGV: arc('polygen','polyvers'),
+      opArcTR: arc('polygraph','polyrun'), opArcVR: arc('polyvers','polyrun'),
+      opArcRT: arc('polyrun','polygraph'), opArcRV: arc('polyrun','polyvers'),
       detailColor: d.color, detailKicker: d.kicker, detailBody: d.body, detailTouches: d.touches,
     };
   }

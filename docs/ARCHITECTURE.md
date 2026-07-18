@@ -5,8 +5,11 @@ that already exists. **polygen authors** new stateful code so it is
 verifiable from the moment it is written. **polyrun executes** verified
 machines durably. **polyvers evolves** them — gating every new version
 against the live fleet, because state outlives code. Each is useful alone;
-together they close a loop in which the same artifacts flow from design to
-verification to production to the next version, and back.
+together they put TWO verification gates between authoring and execution —
+the first version of a machine takes the correctness path (Polygraph),
+every later version takes the compatibility path (polyvers) — and
+execution feeds both gates back: the journal is the audit's trace corpus,
+the fleet snapshots are the versioning gate's initial states.
 
 > Scope disclosure (repo-wide): everything here is a **consistency check,
 > not a proof**. A clean run means observable behavior matches an

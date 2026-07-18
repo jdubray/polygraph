@@ -60,7 +60,7 @@ class Component extends DCLogic {
     })) });
     return { sections: [
       S('ARCHITECTURE.md', '#1b1d1f', 'four engines around one artifact family', [
-        ['Three engines, one artifact family', 'The audit \→ verification \→ production loop, with the shared artifact hub.', 'architecture-01-three-engines.dc.html'],
+        ['Four engines, one artifact family', 'Author \→ two verification gates (correctness \· compatibility) \→ production, with execution feeding both gates back.', 'architecture-01-three-engines.dc.html'],
         ['The artifact family', 'The five artifacts, who produces each and who consumes it.', 'architecture-02-artifact-family.dc.html'],
         ['Polygraph \— audit', 'Controls, N-way specs, replay and model check against existing code.', 'architecture-03-polygraph-audit.dc.html'],
         ['polygen \— author', 'Intent \→ contract \→ module \→ the repair loop that never touches invariants.', 'architecture-04-polygen-author.dc.html'],

@@ -1,7 +1,7 @@
 {
   "name": "polygraph",
   "displayName": "Polygraph",
-  "version": "2.2.0",
+  "version": "3.0.0",
   "description": "A polygraph for your state machine. The agent does the hard part for you: it instruments your code, builds any test doubles needed to run it, and captures real execution traces — then has an LLM derive a transition-function spec from the source (default: a SAM v2 strict-profile module with named intents/schemas/domains, keyed acceptors, observable reject(reason), sealed model; --legacy-bare-next keeps the bare next(state, action, data) artifact), replays the traces against it (conformance), model-checks it against invariants (finds bugs by exhaustive iteration), and can escalate the winning spec to TLC via mechanical TLA+ transpilation (--tla), surfacing every disagreement as a spec-error, code-finding, or contract-error. Also includes polygen (author NEW verifiable code from a feature description, self-repaired against reachable invariant violations before it ships) and polyvers (version a state machine with mechanical compatibility gates: classify the change into lanes, replay old-version stimuli and validate migrations against fleet snapshots, and model-check whether any live state can be driven to an invariant violation under the new rules — no API key).",
   "author": {
     "name": "jdubray",
