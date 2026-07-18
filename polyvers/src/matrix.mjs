@@ -30,12 +30,14 @@
 // throws), and a bounded run is a failing verdict unless the operator
 // explicitly accepts it — check-effects doctrine, uniform across the tool.
 //
-// Honest scope (recorded): this is the protocol/delivery matrix, NOT the full
-// product-space model check — "no reachable INTERLEAVING of parent-vN and
-// child-vM violates a cross-machine invariant" needs a joint-state
-// exploration with cross-machine invariants, which remains open (the essay's
-// scope note stands). What this gate closes is the undefined-behavior class:
-// nothing either side can deliver across the version boundary is unhandled.
+// Honest scope: this is the protocol/delivery matrix — what it closes is the
+// undefined-behavior class (nothing either side can deliver across the
+// version boundary is unhandled). The full product-space model check ("no
+// reachable INTERLEAVING of parent-vN and child-vM violates a cross-machine
+// invariant"), long recorded here as open, is now `polyvers product`
+// (src/product.mjs, composition plan CP-M3) — run BOTH: this matrix catches
+// delivery gaps cheaply and needs no authored cross-machine invariants; the
+// product check catches the interleavings this one cannot see.
 //
 // Deterministic, no API key.
 'use strict';
@@ -308,7 +310,8 @@ export function renderMatrix(result) {
   lines.push('> Scope note: this is the spawn/completion PROTOCOL and DELIVERY matrix —');
   lines.push('> nothing either side can deliver across the version boundary is unhandled.');
   lines.push('> The full product-space model check (joint interleavings against');
-  lines.push('> cross-machine invariants) remains open, as recorded in docs/VERSIONING.md.');
+  lines.push('> cross-machine invariants) is `polyvers product` — a delivery-clean');
+  lines.push('> pairing can still fail it (e.g. a narrowed cancel window), so run both.');
   lines.push('');
   return lines.join('\n');
 }

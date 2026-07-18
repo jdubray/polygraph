@@ -27,7 +27,23 @@ Remaining recorded follow-ups beyond cascadeStep()/classifyStep(): a shared
 delivery ladder for check-product's deliver() and polyvers' stimulusOutcome()
 (they have drifted on unnamed-reject/mutate-then-reject details), and a
 shared seeded-BFS driver in scripts/ for the four hand-rolled reachability
-walks. CP-M3..M4 remain open.
+walks.
+
+CP-M3 LANDED (2026-07-18): `polyvers product` (polyvers/src/product.mjs)
+runs the joint product check per rollout-window pairing (parent {old,new} ×
+child {old,new}), memoizing identical pairings, with `--abstract-child`
+pass-through. The headline test proves the pitch: a child whose cancel
+window narrowed between versions PASSES the protocol/delivery matrix but
+FAILS the product check on "shipment delivers under a cancelled order". The
+matrix/VERSIONING/spec/README scope notes are flipped. Third recorded
+deviation from the plan: pairings are explored from GENESIS under each
+version pair, not seeded from live fleet snapshots — joint seeding needs a
+polyrun joint-export (parent + linked children in one snapshot), recorded
+below as the main CP-M3 follow-up; per-machine mid-flight coverage remains
+the seeded semantic gate's job. Gate wiring into `polyrun deploy` was NOT
+done (deploy is store-backed and per-machine; the product check needs
+version PAIRS, which deploy does not know — `polyvers product` in CI is the
+right seam). CP-M4 (DST harness) remains open.
 Addresses: the reviewer comment that "real fleets fail in the interleavings" — the
 parent×child product model check declared open in `docs/polyrun-spec.md` FR-8.3,
 `docs/VERSIONING.md` ("What remains genuinely open"), `polyrun/README.md` scope

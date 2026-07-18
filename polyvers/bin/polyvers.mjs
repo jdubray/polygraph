@@ -10,6 +10,11 @@
 //                             --child-old <dir> --child-new <dir> --child-id <machineId>
 //                             [--parent-snapshots <path>] [--child-snapshots <path>]
 //                             [--max-states N] [--allow-bounded]
+//   polyvers product          --parent-old <dir> --parent-new <dir>
+//                             --child-old <dir> --child-new <dir> --child-id <machineId>
+//                             --invariants <compose.mjs>
+//                             [--max-states N] [--allow-bounded]
+//                             [--abstract-child [--abstract-max-states N]] [--out <file>]
 //
 // An artifact dir holds contract.json + the machine module (next.cjs /
 // machine.cjs / the only .cjs) + optional invariants.mjs +
@@ -26,6 +31,7 @@ import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
 import { GATE_RUNNERS, NEEDS_CORPUS } from '../src/gates.mjs';
 import { scaffoldMigrate, migrationNoteTemplate } from '../src/scaffold.mjs';
 import { runMatrix, renderMatrix } from '../src/matrix.mjs';
+import { runProductMatrix, renderProductMatrix } from '../src/product.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 
 const args = process.argv.slice(2);
@@ -45,6 +51,7 @@ const numFlag = (name, { min = 1 } = {}) => {
 const usage = () => {
   console.error('usage: polyvers <classify|check|migrate scaffold> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--max-states N] [--allow-bounded] [--force] [--out <dir>] [--json]');
   console.error('       polyvers matrix --parent-old <dir> --parent-new <dir> --child-old <dir> --child-new <dir> --child-id <machineId> [--parent-snapshots <path>] [--child-snapshots <path>] [--max-states N] [--allow-bounded]');
+  console.error('       polyvers product --parent-old <dir> --parent-new <dir> --child-old <dir> --child-new <dir> --child-id <machineId> --invariants <compose.mjs> [--max-states N] [--allow-bounded] [--abstract-child [--abstract-max-states N]] [--out <file>]');
   process.exit(2);
 };
 
@@ -52,8 +59,9 @@ const oldDir = flag('old');
 const newDir = flag('new');
 // Validate the command BEFORE any I/O — loading an artifact dir executes the
 // machine module's top-level code, which a typo'd command must never trigger.
-if (command === 'matrix') {
+if (command === 'matrix' || command === 'product') {
   if (!flag('parent-old') || !flag('parent-new') || !flag('child-old') || !flag('child-new') || !flag('child-id')) usage();
+  if (command === 'product' && !flag('invariants')) usage();
 } else if (!oldDir || !newDir || !['classify', 'check', 'migrate-scaffold'].includes(command)) {
   usage();
 }
@@ -68,7 +76,23 @@ const loadPair = async () => {
 };
 
 try {
-  if (command === 'matrix') {
+  if (command === 'product') {
+    // CP-M3 (docs/composition-plan.md): the JOINT product model check per
+    // rollout-window pairing — closes the interleaving class the
+    // protocol/delivery matrix recorded as open.
+    const result = await runProductMatrix({
+      parentOldDir: flag('parent-old'), parentNewDir: flag('parent-new'),
+      childOldDir: flag('child-old'), childNewDir: flag('child-new'),
+      childMachineId: flag('child-id'), invariants: flag('invariants'),
+      maxStates: numFlag('max-states'), allowBounded: has('allow-bounded'),
+      abstractChild: has('abstract-child'), abstractMaxStates: numFlag('abstract-max-states'),
+    });
+    const rendered = renderProductMatrix(result);
+    console.log(rendered);
+    const out = flag('out');
+    if (out) { writeFileSync(out, rendered); console.error(`wrote ${out}`); }
+    if (!result.ok) process.exitCode = 1;
+  } else if (command === 'matrix') {
     // The rollout-window product check: parent {old,new} × child {old,new}
     // over the spawn/completion protocol and its delivery. See src/matrix.mjs
     // for the honest scope (protocol/delivery, not joint interleavings).

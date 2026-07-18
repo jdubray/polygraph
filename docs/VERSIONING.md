@@ -209,13 +209,17 @@ know they are choosing the migration lane more often.
 
 ## What remains genuinely open
 
-Four things, stated plainly. **Cross-machine version products**: parent v2
-orchestrating child v1 is protocol- and delivery-checked per version pairing
-(`polyvers matrix`: spawn wiring, child terminal outcomes delivered into
-parent fleet states, parent-terminal cancels into child fleet states — the
-undefined-behavior class is closed) but not *product model-checked* — "no
-reachable interleaving of parent-v2 and child-v1 violates a cross-machine
-invariant" is future work, recorded as a scope note. **Unstated intent**: every compatibility
+Three things, stated plainly — a fourth closed since the essay was written.
+(**Cross-machine version products** — parent v2 orchestrating child v1 — are
+now checked at BOTH depths: `polyvers matrix` covers the spawn/completion
+protocol and its delivery, and `polyvers product` runs the full JOINT
+product model check per pairing — "no reachable interleaving of parent-v2
+and child-v1 violates a cross-machine invariant", explored from genesis
+under each pairing with counterexample stimulus sequences
+(docs/composition-semantics.md). What remains of that item is narrower and
+recorded in docs/composition-plan.md: joint mid-flight seeding — parent +
+linked-children snapshots as BFS seeds — and grandchildren.)
+**Unstated intent**: every compatibility
 guarantee above is relative to the invariants you wrote; semantic drift the
 invariants do not mention is invisible to every gate. Versioning maturity
 in this toolset is therefore mostly *invariant-writing* maturity — which we

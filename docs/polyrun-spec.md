@@ -328,7 +328,9 @@ SAM's parent/child instance model maps directly onto workflow decomposition
   (FR-7.2) remain the always-on backstop for fleets without them, and
   cross-machine rules expressible as single-machine invariants over
   completion actions remain the cheaper first resort. Version-pairing
-  products and grandchildren remain open per docs/composition-plan.md.
+  products are closed by `polyvers product` (CP-M3: the joint check per
+  parent {old,new} × child {old,new} pairing); grandchildren and joint
+  mid-flight seeding remain open per docs/composition-plan.md.
 - **FR-8.4** Terminal parents cancel their non-terminal children by
   dispatching a manifest-declared cancel action into each (never by deleting
   state); a child that rejects it is journaled and surfaced, not forced.

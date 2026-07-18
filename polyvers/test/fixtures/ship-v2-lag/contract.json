@@ -1,0 +1,18 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "shipState", "type": "enum: 'preparing' | 'inTransit' | 'delivered' | 'cancelledShipment'" }
+  ],
+  "initState": { "shipState": "preparing" },
+  "actions": {
+    "SHIP": { "dataFields": {} },
+    "DELIVER": { "dataFields": {} },
+    "CANCEL_SHIPMENT": { "dataFields": {} }
+  },
+  "dataDomain": {},
+  "terminalStates": ["delivered", "cancelledShipment"],
+  "specialRules": [
+    { "name": "cancel-too-late", "note": "CANCEL_SHIPMENT is only applicable while shipState == 'preparing' — narrower than v1.", "whenState": "shipState != 'preparing'", "whenAction": "CANCEL_SHIPMENT" }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason)."
+}

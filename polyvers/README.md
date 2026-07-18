@@ -49,12 +49,20 @@ matrix` checks the parent {old,new} × child {old,new} rollout-window
 pairings of the **spawn/completion protocol and its delivery** — spawn
 wiring per pairing, every reachable child terminal outcome delivered into
 every parent fleet state, the parent-terminal cancel delivered into every
-child fleet state, all under the accepted-or-named-reject doctrine. Honest
-scope, stated in every matrix report: this closes the undefined-behavior
-class across the version boundary; the full product-space model check
-(joint interleavings against cross-machine invariants) remains open. A
-changed `effects.cjs` fires the **composition** lane, whose real gate is
-`polyrun check-effects` — the report says so as a NOT RUN row.
+child fleet state, all under the accepted-or-named-reject doctrine. This
+closes the undefined-behavior class across the version boundary. The full
+product-space model check the matrix report used to record as open is now
+**`polyvers product`** (composition plan CP-M3): the joint parent×child
+state space explored exhaustively per pairing against cross-machine
+invariants (`invariants.compose.mjs`), with shortest counterexample
+stimulus sequences — the interleaving class the protocol matrix cannot see
+(e.g. a child whose cancel window narrowed between versions still passes
+delivery, but the product check finds "shipment delivers under a cancelled
+order"). Identical pairings are explored once; `--abstract-child` scales
+large children (docs/composition-semantics.md §7); joint mid-flight seeding
+is the recorded follow-up. A changed `effects.cjs` fires the
+**composition** lane, whose real gate is `polyrun check-effects` — the
+report says so as a NOT RUN row.
 
 ## Usage
 
@@ -78,6 +86,11 @@ npm run polyvers -- migrate scaffold --old machines/order-v1 --new machines/orde
 # parent/child machines? check the rollout-window version pairings
 npm run polyvers -- matrix --parent-old machines/order-v1 --parent-new machines/order-v2 \
   --child-old machines/shipment-v1 --child-new machines/shipment-v1 --child-id shipment
+
+# …and the JOINT product model check per pairing (cross-machine invariants)
+npm run polyvers -- product --parent-old machines/order-v1 --parent-new machines/order-v2 \
+  --child-old machines/shipment-v1 --child-new machines/shipment-v1 --child-id shipment \
+  --invariants machines/invariants.compose.mjs
 
 npm run test:polyvers
 ```

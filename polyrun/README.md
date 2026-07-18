@@ -148,12 +148,13 @@ a Polygraph trace corpus (`rt.exportTraces()`).
   BOUNDED). It is opt-in — it runs only when invoked with authored
   cross-machine invariants; for fleets without them, the always-on backstop
   is unchanged: the domain gate, per-machine checks, and the continuous
-  audit cover the cross-machine surface as before. Still open, per
-  docs/composition-plan.md: version-pairing products (parent-vN × child-vM
-  over the polyvers matrix, CP-M3), grandchildren (children with their own
-  mappers — check-product refuses such configs rather than certifying an
-  unmodeled fleet), and contract-derived child abstractions for large
-  products (CP-M2).
+  audit cover the cross-machine surface as before. Version-pairing products
+  (parent-vN × child-vM) are covered by `polyvers product` (CP-M3), which
+  runs this same checker per rollout-window pairing. Still open, per
+  docs/composition-plan.md: grandchildren (children with their own mappers —
+  check-product refuses such configs rather than certifying an unmodeled
+  fleet) and joint mid-flight seeding (parent + linked-children snapshots
+  as BFS seeds).
 
 The demo machine is hand-authored in the exact shape polygen emits; the M0
 follow-up is to re-author it with polygen and diff.
