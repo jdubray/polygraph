@@ -80,6 +80,10 @@ npm run polyvers -- matrix --parent-old machines/order-v1 --parent-new machines/
 npm run test:polyvers
 ```
 
+Worked example — versioning the OMS order machine (shape + rules + intent
+change, scaffolded migration, committed compat-report and matrix report):
+[`examples/polyvers-oms/`](../examples/polyvers-oms/README.md).
+
 `--snapshots` accepts `polyrun archive` output (`*.ndjson`), bare ndjson of
 state objects, or a `.json` array of states. `--synthesize` is the weakest
 tier — it contains only states the old *model* says are reachable, which is

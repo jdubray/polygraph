@@ -1,0 +1,200 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "orderState",
+      "type": "enum: 'pending' | 'fraudCheck' | 'awaitingAmend' | 'charging' | 'fulfilling' | 'completed' | 'partiallyDelivered' | 'rejected' | 'paymentFailed' | 'cancelled'"
+    },
+    {
+      "name": "fulfillments",
+      "type": "integer 0..2 \u2014 number of shipments this order splits into (0 until submitted)"
+    },
+    {
+      "name": "shipmentsDelivered",
+      "type": "integer 0..2 \u2014 shipments that completed with outcome 'delivered'"
+    },
+    {
+      "name": "shipmentsFailed",
+      "type": "integer 0..2 \u2014 shipments that completed with outcome 'cancelledShipment'"
+    },
+    {
+      "name": "totalCents",
+      "type": "integer >= 0, order total in cents"
+    },
+    {
+      "name": "txId",
+      "type": "string, payment transaction id ('' until charged)"
+    },
+    {
+      "name": "cancelReason",
+      "type": "string, why the order ended early ('' otherwise)"
+    },
+    {
+      "name": "amendCount",
+      "type": "integer >= 0 \u2014 how many times the customer amended the order (0 until the first AMEND)"
+    }
+  ],
+  "initState": {
+    "orderState": "pending",
+    "fulfillments": 0,
+    "shipmentsDelivered": 0,
+    "shipmentsFailed": 0,
+    "totalCents": 0,
+    "txId": "",
+    "cancelReason": "",
+    "amendCount": 0
+  },
+  "actions": {
+    "SUBMIT": {
+      "dataFields": {
+        "fulfillments": "integer 1..2 \u2014 how many shipments the order's items split into",
+        "totalCents": "integer > 0"
+      }
+    },
+    "FRAUD_PASSED": {
+      "dataFields": {
+        "itemsAvailable": "boolean \u2014 whether all items are in stock"
+      }
+    },
+    "FRAUD_FAILED": {
+      "dataFields": {
+        "reason": "string"
+      }
+    },
+    "AMEND": {
+      "dataFields": {
+        "fulfillments": "integer 1..2, amended fulfillment count",
+        "totalCents": "integer > 0, amended total"
+      }
+    },
+    "AMEND_WINDOW_EXPIRED": {
+      "dataFields": {}
+    },
+    "CHARGE_SUCCEEDED": {
+      "dataFields": {
+        "txId": "string"
+      }
+    },
+    "CHARGE_FAILED": {
+      "dataFields": {
+        "reason": "string"
+      }
+    },
+    "CHARGE_TIMED_OUT": {
+      "dataFields": {}
+    },
+    "SHIPMENT_COMPLETED": {
+      "dataFields": {
+        "childKey": "string \u2014 which shipment child completed",
+        "childState": "object \u2014 the child's terminal state, e.g. { shipState: 'delivered' } or { shipState: 'cancelledShipment' }"
+      }
+    },
+    "CANCEL": {
+      "dataFields": {
+        "reason": "string"
+      }
+    }
+  },
+  "dataDomain": {
+    "SUBMIT": {
+      "fulfillments": [
+        1,
+        2
+      ],
+      "totalCents": [
+        2500
+      ]
+    },
+    "FRAUD_PASSED": {
+      "itemsAvailable": [
+        true,
+        false
+      ]
+    },
+    "FRAUD_FAILED": {
+      "reason": [
+        "suspicious"
+      ]
+    },
+    "AMEND": {
+      "fulfillments": [
+        1
+      ],
+      "totalCents": [
+        1900
+      ]
+    },
+    "AMEND_WINDOW_EXPIRED": {},
+    "CHARGE_SUCCEEDED": {
+      "txId": [
+        "tx-1"
+      ]
+    },
+    "CHARGE_FAILED": {
+      "reason": [
+        "declined"
+      ]
+    },
+    "CHARGE_TIMED_OUT": {},
+    "SHIPMENT_COMPLETED": {
+      "childKey": [
+        "f1",
+        "f2"
+      ],
+      "childState": [
+        {
+          "shipState": "delivered"
+        },
+        {
+          "shipState": "cancelledShipment"
+        }
+      ]
+    },
+    "CANCEL": {
+      "reason": [
+        "customer-request"
+      ]
+    }
+  },
+  "terminalKey": "orderState",
+  "terminalStates": [
+    "completed",
+    "partiallyDelivered",
+    "rejected",
+    "paymentFailed",
+    "cancelled"
+  ],
+  "specialRules": [
+    {
+      "name": "cancel-blocked-while-charging",
+      "note": "CANCEL while orderState == 'charging' is rejected (reason = this rule's name): a charge decision is in flight and must resolve first.",
+      "whenState": "orderState == 'charging'",
+      "whenAction": "CANCEL"
+    },
+    {
+      "name": "fulfillment-in-progress",
+      "note": "CANCEL while orderState == 'fulfilling' is rejected (reason = this rule's name): shipments are already with couriers; per-shipment cancellation is the shipment machine's business, not the order's.",
+      "whenState": "orderState == 'fulfilling'",
+      "whenAction": "CANCEL"
+    },
+    {
+      "name": "rollup",
+      "note": "SHIPMENT_COMPLETED (only applicable in 'fulfilling') increments shipmentsDelivered when childState.shipState == 'delivered', otherwise shipmentsFailed. When shipmentsDelivered + shipmentsFailed reaches fulfillments the order transitions: to 'completed' if shipmentsFailed == 0, else to 'partiallyDelivered'. While in 'fulfilling', shipmentsDelivered + shipmentsFailed is strictly less than fulfillments by construction.",
+      "whenState": "orderState == 'fulfilling'",
+      "whenAction": "SHIPMENT_COMPLETED"
+    },
+    {
+      "name": "stale-completions-reject",
+      "note": "Completions and timer expiries (FRAUD_*, CHARGE_*, AMEND_WINDOW_EXPIRED, SHIPMENT_COMPLETED) arriving in any state other than the one that awaits them are observable rejections (post == pre) \u2014 at-least-once delivery makes late and duplicate arrivals normal, never faults.",
+      "whenState": "any non-awaiting state",
+      "whenAction": "FRAUD_PASSED | FRAUD_FAILED | CHARGE_SUCCEEDED | CHARGE_FAILED | CHARGE_TIMED_OUT | AMEND_WINDOW_EXPIRED | SHIPMENT_COMPLETED"
+    },
+    {
+      "name": "amend-resets-rollup",
+      "note": "SUBMIT and AMEND set fulfillments from their data and reset shipmentsDelivered and shipmentsFailed to 0.",
+      "whenState": "orderState == 'pending' (SUBMIT) or 'awaitingAmend' (AMEND)",
+      "whenAction": "SUBMIT | AMEND"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) \u2014 an observable no-op with post == pre, never a throw and never a silent mutation."
+}

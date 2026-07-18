@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>* { box-sizing: border-box; } body { margin: 0; }</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 4px;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #3f7a54;">Architecture · fig 5 · Engine 4 evolve</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">polyvers — versioning with mechanical gates</div>
+    </div>
+  </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #3f7a54; margin-bottom: 20px;">State outlives code — so every deploy is a compatibility event against the live fleet.</div>
+
+  <div style="display: flex; align-items: stretch; gap: 0;">
+    <sc-for list="{{ stages }}" as="s" hint-placeholder-count="5">
+      <div style="display: flex; align-items: center; flex: 1;">
+        <div onMouseEnter="{{ s.on }}" style="flex: 1; background: #fffdf8; border: 1px solid #e4dfcf; border-radius: 12px; padding: 14px 15px; min-height: 128px; box-shadow: {{ s.ring }}; opacity: {{ s.op }}; transition: box-shadow .18s, opacity .18s; cursor: default;">
+          <div style="width: 22px; height: 22px; border-radius: 50%; background: {{ s.dot }}; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;">{{ s.n }}</div>
+          <div style="font-size: 14.5px; font-weight: 600; margin: 9px 0 5px; line-height: 1.2;">{{ s.title }}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.45; color: #6b6f76;">{{ s.sub }}</div>
+        </div>
+        <div style="width: 22px; text-align: center; color: #b9b3a4; font-size: 15px; flex: none; opacity: {{ s.arrow }};">›</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top: 18px; background: #eef5f0; border: 1px solid #cfe2d5; border-radius: 12px; padding: 16px 20px; min-height: 92px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #3f7a54;">Step {{ stepNo }} / 5 · {{ capTitle }}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #2b3033; margin-top: 6px; max-width: 900px;">{{ caption }}</div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 14px; margin-top: 16px;">
+    <button onClick="{{ prev }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #fffdf8; border: 1px solid #cdc7b8; color: #33373c; border-radius: 8px; padding: 8px 16px; cursor: pointer;">‹ Prev</button>
+    <button onClick="{{ next }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #3f7a54; border: 1px solid #3f7a54; color: #fff; border-radius: 8px; padding: 8px 16px; cursor: pointer;">Next ›</button>
+    <div style="display: flex; gap: 7px; margin-left: 6px;">
+      <sc-for list="{{ dots }}" as="d" hint-placeholder-count="5">
+        <span onClick="{{ d.go }}" style="width: 9px; height: 9px; border-radius: 50%; background: {{ d.fill }}; cursor: pointer;"></span>
+      </sc-for>
+    </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #a09a8c; margin-left: auto;">no API key · deterministic · byte-identical reports</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 500}}">
+class Component extends DCLogic {
+  state = { step: 0 };
+  go(i){ this.setState({ step: i }); }
+  renderVals(){
+    const step = this.state.step, N = 5;
+    const stages = [
+      { title: 'Classify', sub: 'artifact diff → lanes: shape · vocabulary · intent · semantic · migration · composition' },
+      { title: 'Fleet corpus', sub: 'snapshots (honest tier) or synthesized — provenance is part of the verdict' },
+      { title: 'The gates', sub: 'round-trip · stimuli replay · pointwise · seeded model check' },
+      { title: 'Migration lane', sub: 'scaffold → validate (pure, projection-equal) → corpus swap' },
+      { title: 'Verdict', sub: 'compat-report · parent×child matrix · exit 0 is the gate' },
+    ];
+    const captions = [
+      { t: 'Classify', c: 'Diff two versions of the artifact family (contract, machine, invariants, manifest, mapper, migration — all content-hashed) and fire the compatibility lanes the change touches. Each lane names exactly the gates it demands; a cosmetic edit fires none, and the report says so instead of inventing risk.' },
+      { t: 'Fleet corpus', c: 'The gates run against fleet states: polyrun archive exports and state dumps (the honest tier), or BFS-reachable states of the OLD machine (the weakest tier — it contains only states the old model says are reachable, which is exactly the assumption a landmine violates). An empty corpus is refused, never a vacuous pass.' },
+      { t: 'The gates', c: 'Round-trip: the new module must reproduce every snapshot. Stimuli: everything the old version could still deliver — timers, completions, old-vocabulary callers — must land as accepted or a NAMED observable reject. And the landmine hunt: an exhaustive model check SEEDED from the fleet snapshots, asking whether any live state can be DRIVEN to an invariant violation under the new rules — the check that catches what pointwise validation and from-init checking both miss.' },
+      { t: 'Migration lane', c: 'A shape change gets a scaffolded migrate.cjs — complete for pure additions, throwing TODO holes a human must fill. The gate validates it fleet-wide (pure by double application, accepted, projection-equal, state AND transition invariants hold), and then every downstream gate re-runs over the states the fleet will hold AFTER the migration applies. polyrun migrate stays the apply-time gate.' },
+      { t: 'Verdict', c: 'A deterministic compat-report a PR can be gated on — one witness per violated rule, deferred gates disclosed as NOT RUN, BOUNDED exploration failing unless explicitly accepted. For parent/child machines, the matrix checks all four rollout-window version pairings of the spawn/completion protocol and its delivery.' },
+    ];
+    return {
+      stages: stages.map((s, i) => ({
+        n: i + 1, title: s.title, sub: s.sub,
+        on: () => this.go(i),
+        dot: i <= step ? '#3f7a54' : '#c3bdae',
+        ring: i === step ? '0 0 0 2px #3f7a54, 0 6px 16px rgba(63,122,84,0.18)' : '0 1px 0 #e9e4d5',
+        op: i <= step ? '1' : '0.5',
+        arrow: i < N - 1 ? (i < step ? '1' : '0.35') : '0',
+      })),
+      dots: Array.from({ length: N }, (_, i) => ({ go: () => this.go(i), fill: i === step ? '#3f7a54' : '#cdc7b8' })),
+      stepNo: step + 1, capTitle: captions[step].t, caption: captions[step].c,
+      prev: () => this.setState(s => ({ step: Math.max(0, s.step - 1) })),
+      next: () => this.setState(s => ({ step: Math.min(N - 1, s.step + 1) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,17 +1,19 @@
-# Polygraph · polygen · polyrun — system architecture
+# Polygraph · polygen · polyrun · polyvers — system architecture
 
-Three engines around one artifact family. **Polygraph audits** stateful code
+Four engines around one artifact family. **Polygraph audits** stateful code
 that already exists. **polygen authors** new stateful code so it is
 verifiable from the moment it is written. **polyrun executes** verified
-machines durably. Each is useful alone; together they close a loop in which
-the same artifacts flow from design to verification to production and back.
+machines durably. **polyvers evolves** them — gating every new version
+against the live fleet, because state outlives code. Each is useful alone;
+together they close a loop in which the same artifacts flow from design to
+verification to production to the next version, and back.
 
 > Scope disclosure (repo-wide): everything here is a **consistency check,
 > not a proof**. A clean run means observable behavior matches an
 > independent reading of the code within explored bounds — nothing more.
 
-[![Three engines, one artifact family](diagrams/thumbs/architecture-01-three-engines.png)](diagrams/architecture-01-three-engines.dc.html)
-*Interactive diagram — [Three engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine)*
+[![Four engines, one artifact family](diagrams/thumbs/architecture-01-three-engines.png)](diagrams/architecture-01-three-engines.dc.html)
+*Interactive diagram — [Four engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine)*
 
 ## The artifact family
 
@@ -24,7 +26,9 @@ diffable artifacts:
 | machine / spec (`next.cjs`) | an executable model: a **SAM v2 strict-profile module** (`{instance, init, actions, getState, setState}`) | polygen, or LLM spec generation from source | replay, model check, polyrun kernel |
 | `invariants.mjs` | **intent**, as plain JS predicates over states (and transitions) | human (polygen proposes, human confirms) | model check, deploy gate |
 | traces (`*.ndjson`) | ground truth: `{pre, action, data, post}` windows from the code actually executing | instrumentation, test harnesses, **the polyrun journal** | replay, audit |
-| `effects.cjs` + `effects.manifest.json` | pure effect mapper over transitions + the declared effect vocabulary/completion wiring | polygen draft (human-reviewed) | polyrun kernel/workers, check-effects |
+| `effects.cjs` + `effects.manifest.json` | pure effect mapper over transitions + the declared effect vocabulary/completion wiring | polygen draft (human-reviewed) | polyrun kernel/workers, check-effects, polyvers matrix |
+| `migrate.cjs` | the pure shape migration for a version: `migrate(oldState) → newState` | polyvers scaffold (human fills the holes) | polyvers migrate gate, `polyrun migrate` |
+| `compat-report.{json,md}` | the versioning verdict: lanes fired, gates run, corpus provenance, one witness per violated rule — deterministic, PR-gateable | polyvers check | CI, humans, the deploy decision |
 
 The `{pre, action, data, post}` **window** is the universal currency: the
 replayer scores specs against it, the harness captures it, the polyrun
@@ -37,7 +41,7 @@ state-equality definition every consumer shares.
 
 ## The SAM v2 strict profile — why it is the common substrate
 
-All three engines depend on the same code shape
+All four engines depend on the same code shape
 (`@cognitive-fab/sam-pattern`, vendored at `scripts/vendor/`): named intents
 with schemas and **finite declared domains**, acceptors keyed per action, a
 **sealed model** (no hidden bookkeeping state), and first-class
@@ -179,12 +183,59 @@ flowchart TB
   `polyrun audit` replays the production journal through the module and
   reports drift, version-aware.
 
+## Engine 4 — polyvers (evolve)
+
+[![polyvers — versioning with mechanical gates](diagrams/thumbs/architecture-05-polyvers-evolve.png)](diagrams/architecture-05-polyvers-evolve.dc.html)
+*Interactive diagram — [polyvers — versioning with mechanical gates](diagrams/architecture-05-polyvers-evolve.dc.html) (step through the 5 stages)*
+
+```mermaid
+flowchart LR
+  OLD[old version\nartifact family] --> CLS[classify\ndiff → lanes]
+  NEW[new version\nartifact family] --> CLS
+  FLEET[fleet snapshots\narchive · synthesized] --> GATES
+  CLS --> GATES[the lanes' gates\nround-trip · stimuli ·\npointwise · seeded model check]
+  CLS -->|shape change| MIG[migrate scaffold\n+ migrate gate]
+  MIG -->|validated migration\nswaps the corpus| GATES
+  GATES --> REP[compat-report\nexit 0 = the gate]
+  REP -->|apply| PR[polyrun migrate\ndry run → --apply]
+```
+
+The engine that makes `docs/VERSIONING.md` executable (full plan and
+milestones: `docs/polyvers-plan.md`; worked example:
+`examples/polyvers-oms/`). The essence:
+
+- **Classify before checking**: a content-hashed diff of the artifact family
+  fires compatibility lanes — shape, vocabulary, intent, semantic,
+  migration, composition — and each lane names exactly the gates it demands.
+  A cosmetic edit fires none, and the report says so.
+- **Fleet states are the test inputs**: `polyrun archive` exports (the
+  honest tier) or BFS-synthesized old-machine states (the weakest tier —
+  disclosed as such). The headline gate seeds the exhaustive model check
+  with those snapshots: *can any live state be **driven** to an invariant
+  violation under the new rules?* — the v1-reachable/v3-unreachable
+  landmine hunt, mechanized.
+- **Cross-version delivery, checked**: every stimulus the old version could
+  still deliver (timers, completions, old-vocabulary callers) must land on
+  the new machine as accepted or a *named* observable reject — the same
+  doctrine that makes at-least-once delivery safe, applied across the
+  version boundary. `polyvers matrix` extends it to parent×child rollout
+  pairings over the spawn/completion protocol.
+- **Migration as a gated artifact**: scaffolded from the shape diff
+  (complete for pure additions, throwing TODO holes for the rest),
+  validated fleet-wide — pure, accepted, projection-equal, state *and*
+  transition invariants — and then the corpus swaps so every downstream
+  gate runs over post-migration states. Apply remains `polyrun migrate`.
+- **Refusals over vacuous passes**: empty corpus, missing invariants,
+  unreadable stimulus set, BOUNDED exploration — each is a failing verdict
+  with the reason named, never a silent green. No API key anywhere.
+
 ## Trust boundaries
 
 | layer | correctness argument |
 |---|---|
 | machine logic | exhaustive model check vs invariants (per machine) |
 | machine ∘ mapper composition | check-effects path exploration incl. emissions, spawns, timer validity |
+| version compatibility | polyvers lanes/gates over fleet snapshots — exactly as good as the stated invariants and the corpus tier (both disclosed in the report) |
 | kernel + stores + workers | conventional: fault-injection tests, soak, adversarial review — small, fixed, logic-free by design |
 | effect handlers | **yours**: must be idempotent under the provided key (same division as Temporal activities) |
 | contract & invariants | **human judgment** — the one thing no tool derives; a converged run against wrong intent proves nothing |
@@ -204,13 +255,16 @@ flowchart TB
 5. **Defect → gate** — every generation/harness failure discovered becomes
    a mechanical gate so the next run cannot repeat it.
 
-## Worked examples (the OMS trilogy)
+## Worked examples (the OMS quartet)
 
 - `examples/polyrun-oms` — Temporal's OMS reference app **rebuilt** on
   polyrun; every machine polygen-authored.
 - `examples/polygraph-oms-go` — the same app's actual Go source
   **audited**: real-execution traces, controls, three generated specs,
   unanimous model-check findings.
+- `examples/polyvers-oms` — the same order machine **versioned**: a
+  shape+rules+intent change, the scaffolded migration, the committed
+  compat-report, and the parent×child rollout matrix.
 - `polyrun/demo` — the kill -9 mid-charge recovery demo.
 
 See `docs/SDLC.md` for how teams thread these engines into their

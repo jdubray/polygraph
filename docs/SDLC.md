@@ -162,6 +162,13 @@ invariants → machine (regenerate or repair) → check-effects → deploy gate
 editing the machine to change behavior the invariants don't describe, you
 are reintroducing the gap this whole lifecycle exists to close.
 
+This phase is mechanized by **polyvers** (`/polygraph:polyvers`): classify
+the change into compatibility lanes, run the lanes' gates against fleet
+snapshots (round-trip, old-version stimuli replay, migration validation,
+and the model check *seeded from live states*), scaffold the migration when
+the shape changed, and gate the deploy on the compat-report — exit 0 is the
+gate, no API key. Worked example: `examples/polyvers-oms/`.
+
 ## Versioning best practices
 
 The long-form argument is [`docs/VERSIONING.md`](VERSIONING.md); this is
@@ -221,6 +228,7 @@ has a lane with mechanical gates.
 - polyrun check-effects --config <cfg>          # composition gate (exit 1 on violation OR bounded)
 - node scripts/verify.mjs --specs <saved> ...   # replay saved specs vs committed traces
 # on release
+- polyvers check --old <prev> --new <next> --snapshots <archive> --out out/compat   # compatibility gate (lanes → gates)
 - polyrun deploy --config <cfg>                 # against a staging copy of live state
 # nightly / scheduled agent
 - polyrun audit --config <cfg>                  # drift detector
@@ -238,7 +246,8 @@ invariant sets, zero-window corpora).
 | "write a verifiable X flow" → `/polygraph:polygen` | Phase 1–2 guided, with the human gates surfaced to you |
 | "does this code do what I think?" → `/polygraph:polygraph` | Phase 4 end-to-end: the agent designs the contract, instruments, runs controls, triages with you |
 | `/polygraph:verify` | Phase 4 when contract + traces already exist |
-| `polygen` / `polygraph-verifier` subagents | the same, handed off autonomously; review the returned report at the human gates |
+| "can I ship this change?" → `/polygraph:polyvers` | Phase 7: classify the version change, run the compatibility gates against fleet snapshots, scaffold the migration |
+| `polygen` / `polygraph-verifier` / `polyvers` subagents | the same, handed off autonomously; review the returned report at the human gates |
 | scheduled agent (cron/routine) | Phase 6: audit + DLQ review + "regenerate and diff" |
 
 **What agents must not do alone** (encode this in your team norms): approve

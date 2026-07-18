@@ -10,8 +10,12 @@ lives or dies on how it answers one question: *what happens to in-flight
 state when the logic changes?*
 
 This essay lays out why the problem is genuinely hard, the taxonomy of
-compatibility it decomposes into, how the Polygraph/polygen/polyrun triad
-addresses each piece, and — honestly — what remains open.
+compatibility it decomposes into, how the toolset addresses each piece, and
+— honestly — what remains open. Since it was written, the taxonomy has been
+**mechanized as polyvers**, the fourth engine (`polyvers/`,
+`/polygraph:polyvers`): the decision table below is executable, lane by
+lane, against fleet snapshots — see the worked example in
+`examples/polyvers-oms/`.
 
 [![The compatibility taxonomy](diagrams/thumbs/versioning-01-taxonomy.png)](diagrams/versioning-01-taxonomy.dc.html)
 *Interactive diagram — [The compatibility taxonomy](diagrams/versioning-01-taxonomy.dc.html)*
@@ -221,6 +225,57 @@ gate will fail loudly, and a human decides what those instances *mean* now.
 The toolset's contribution is that this decision arrives before the
 deploy, attached to a named list of instances, instead of after it,
 attached to a pager.
+
+## Where this sits in the literature
+
+A quick survey (an LLM-assisted literature pass — read it as a map, not a
+peer review) puts the pieces of this essay in three research neighborhoods,
+none of which ships the combination:
+
+- **Behavioral subtyping / protocol substitutability** is the exact
+  theoretical question — *can v(n+1) safely stand in for v(n)?* —
+  formalized as refinement between automata (CSP refinement via FDR,
+  modal-automata substitutability). The catch is decidability: tractable
+  for synchronous/regular interfaces, **undecidable for asynchronous
+  session subtyping in general**. "Arbitrary state machines" is precisely
+  where the theory stops offering a decision procedure — which is why a
+  bounded exploration with an explicit cap (and a BOUNDED-is-not-a-pass
+  rule) is the honest posture rather than a limitation to apologize for.
+- **Verified dynamic software updating (DSU)** asks this essay's other
+  question — is it safe to move a live instance from old to new, and does
+  the state-transformation function preserve correctness? (Hayden/Foster
+  et al. on specifying and verifying DSU correctness; KupC for C;
+  safe-update-point detection via model checking.) That maps almost
+  one-to-one onto the semantic gate plus the migrate gate — but these are
+  research prototypes on constrained languages, hitting the same
+  state-explosion wall.
+- **What industry deploys at scale is syntactic**: OpenAPI/Swagger diffing,
+  Protobuf/Avro compatibility rules, semver breaking-change detectors,
+  contract tests. Useful — but they check shapes and signatures (this
+  essay's *shape* and *vocabulary* lanes) and never reason about reachable
+  states or invariant preservation. That gap is exactly what the landmine
+  fixture exploits: a change that passes every pointwise and syntactic
+  check, caught only by the model check seeded from fleet state.
+
+The specific combination here — *semantic* compatibility of arbitrary
+machines checked not for all possible states (intractable) but for **the
+states the fleet actually holds** (a finite, checkable set, seeded into an
+exhaustive bounded exploration) — appears closer to bounded model checking
+over runtime state than to full refinement checking, and we have not found
+published work framing it exactly that way. Novel in framing, then, while
+every ingredient has precedent; the sources below are the entry points.
+
+> Hayden, Smith, Hicks, Foster — *Specifying and Verifying the Correctness
+> of Dynamic Software Updates* (VSTTE'12) · *KupC: A Formal Tool for
+> Modeling and Verifying Dynamic Updating of C Programs* · *A Formal
+> Verification of Safe Update Point Detection in Dynamic Software
+> Updating* · *Undecidability of Asynchronous Session Subtyping* (LMCS) ·
+> *Checking Behavioural Subtypes via Refinement* (FDR/CSP) · *Flexible
+> Behavioural Compatibility and Substitutability for Component Protocols* ·
+> *Formal Verification of Backward Compatibility of Microcode*
+> (MICROFORMAL, CAV'05) · Specmatic, *Backward Compatibility* · *Breaking
+> Bad? Semantic Versioning and Impact of Breaking Changes in Maven
+> Central* · *Microservice API Evolution in Practice*.
 
 ## The one-paragraph version
 

@@ -22,8 +22,8 @@
 
   <div style="border-bottom: 1px solid #dcd7ca; padding-bottom: 20px; margin-bottom: 26px;">
     <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">Documentation diagrams</div>
-    <div style="font-size: 32px; font-weight: 600; letter-spacing: -0.015em; margin-top: 6px;">Polygraph · polygen · polyrun</div>
-    <div style="font-family: 'Newsreader', serif; font-size: 16.5px; line-height: 1.5; color: #4b4f55; margin-top: 10px; max-width: 820px;">Thirteen interactive figures illustrating the four core documents. Each is a self-contained file — hover to highlight, step through the flows, and drop it back into its markdown doc. Colour is consistent throughout: <span style="color:#2f6f8f;font-weight:600;">Polygraph / audit</span>, <span style="color:#6a4b9c;font-weight:600;">polygen / author</span>, <span style="color:#bc6a1e;font-weight:600;">polyrun / execute</span>, <span style="color:#b23b2e;font-weight:600;">human judgment</span>.</div>
+    <div style="font-size: 32px; font-weight: 600; letter-spacing: -0.015em; margin-top: 6px;">Polygraph · polygen · polyrun · polyvers</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16.5px; line-height: 1.5; color: #4b4f55; margin-top: 10px; max-width: 820px;">Fourteen interactive figures illustrating the four core documents. Each is a self-contained file — hover to highlight, step through the flows, and drop it back into its markdown doc. Colour is consistent throughout: <span style="color:#2f6f8f;font-weight:600;">Polygraph / audit</span>, <span style="color:#6a4b9c;font-weight:600;">polygen / author</span>, <span style="color:#bc6a1e;font-weight:600;">polyrun / execute</span>, <span style="color:#3f7a54;font-weight:600;">polyvers / evolve</span>, <span style="color:#b23b2e;font-weight:600;">human judgment</span>.</div>
   </div>
 
   <div style="display: flex; flex-direction: column; gap: 30px;">
@@ -59,11 +59,12 @@ class Component extends DCLogic {
       n: 'fig ' + (i + 1), title: it[0], desc: it[1], file: it[2], href: it[2],
     })) });
     return { sections: [
-      S('ARCHITECTURE.md', '#1b1d1f', 'three engines around one artifact family', [
+      S('ARCHITECTURE.md', '#1b1d1f', 'four engines around one artifact family', [
         ['Three engines, one artifact family', 'The audit \→ verification \→ production loop, with the shared artifact hub.', 'architecture-01-three-engines.dc.html'],
         ['The artifact family', 'The five artifacts, who produces each and who consumes it.', 'architecture-02-artifact-family.dc.html'],
         ['Polygraph \— audit', 'Controls, N-way specs, replay and model check against existing code.', 'architecture-03-polygraph-audit.dc.html'],
         ['polygen \— author', 'Intent \→ contract \→ module \→ the repair loop that never touches invariants.', 'architecture-04-polygen-author.dc.html'],
+        ['polyvers \— evolve', 'Classify the change, gate it against fleet snapshots, migrate, and check the rollout matrix.', 'architecture-05-polyvers-evolve.dc.html'],
       ]),
       S('SDLC.md', '#6a4b9c', 'threading the engines into an agentic lifecycle', [
         ['A lifecycle for verified code', 'Phases 0\–7 with the three human gates surfaced.', 'sdlc-01-lifecycle.dc.html'],
