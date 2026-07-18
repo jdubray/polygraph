@@ -3,6 +3,54 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 4.0.0 — 2026-07-18
+
+New engine: **polynv**, invariant elicitation — the fifth engine (Polygraph
+audits, polygen authors, polyrun executes, polyvers evolves, polynv
+**elicits**). Every other engine's guarantee is exactly as good as
+`invariants.mjs`; polynv attacks where that file comes from, converting the
+scarce skill (writing predicates from a blank page) into a common one
+(judging concrete stories). `polynv harvest` generates pre-checked
+candidates from the contract's own vocabulary (terminal-absorbing, ranges,
+set-once, reject-in-state, at-most-once emissions — the last verdicted
+through the machine ∘ mapper composition via check-effects), Daikon-style
+state-property miners over traces/snapshots and precedence miners over
+ordered event streams (statistical confidence thresholds; below-threshold
+observations become notes, never questions), and frontier-model domain
+priors (key-free in-session; `--llm` headless). Every candidate arrives at
+the interview as "holds everywhere — rule or coincidence?" or as a shortest
+counterexample: "the machine can do this today — acceptable?". Dispositions
+(confirm / reject / modify / defer, always attributed) live in an
+append-only `intent-ledger.json` — the multi-person system of record that
+keeps every answer, including rejections, forever. `polynv grade` measures
+invariant-set strength by mutation: four operator families, behaviorally
+equivalent mutants discarded by graph comparison (the finite-domain
+restriction making the field's classic undecidable subproblem mechanical),
+kill-profile redundancy clustering, and survivors becoming the next
+questions. `polynv drift` re-checks every recorded answer when the machine
+changes. polyvers consumes the ledger both ways: the compat-report's
+invariant-adequacy trust tier (measured / STALE / UNREADABLE / NOT
+MEASURED) and intent-diff provenance annotations. Convergence requires the
+grade; a grade that measured nothing is refused. Plugin surfaces:
+`/polygraph:polynv` command, skill, and subagent (which prepares the
+interview but never answers intent questions). Design plan with literature
+anchors (Daikon mines, L* asks, van Lamsweerde generalizes, SpecFuzzer
+gates): `docs/polynv-plan.md`. Worked example with a genuine designer
+session — 68/113 mutants killed by round one, 88/113 after one
+survivor-closing rule, vs 101/113 for the years-old hand-written set:
+`examples/polynv-oms/`. Three adversarial multi-agent reviews (M0–M2, M3,
+completion), all confirmed findings fixed; `npm run test:polynv` (47
+tests).
+
+Also in this release: a repo-wide precision pass on the scope claims —
+"exhaustive" always means exhaustive over the finite (action, data) domains
+the contract declares, stated in every disclosure, with the
+declared-domain-vs-real-data abstraction gap named as unmeasured;
+`check.mjs` gained an explicit `steps` domain override; and the composition
+checker landed CP-M0..M2 (product semantics, the parent×child joint-state
+checker, contract-derived child abstraction walks — `polyrun
+check-product`).
+
 ## 3.0.0 — 2026-07-17
 
 New engine: **polyvers**, versioning for state machines with mechanical
