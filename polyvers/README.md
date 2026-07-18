@@ -1,4 +1,4 @@
-# polyvers — the versioning engine (M0 + M1)
+# polyvers — the versioning engine (M0–M2)
 
 The fourth engine of the triad-now-quartet: Polygraph **audits**, polygen
 **authors**, polyrun **executes**, polyvers **evolves**. It makes
@@ -23,15 +23,30 @@ the affected-instance list. The landmine fixture (`test/fixtures/order-v2-landmi
 proves the point: its violation passes the pointwise gate AND the from-init
 model check, and only the seeded check finds it. A BOUNDED exploration is a
 failing gate unless accepted explicitly with `--allow-bounded`
-(check-effects doctrine). The migration lane and the in-flight-stimuli gate
-are M2 — reports disclose deferred gates as NOT RUN rather than silently
-passing.
+(check-effects doctrine).
+
+**M2** completes the lanes. The **migration lane**: `polyvers migrate
+scaffold` emits a `migrate.cjs` skeleton (complete for pure additions,
+throwing TODO holes for retyped keys) plus a MIGRATION-NOTE template, and
+the **migrate gate** validates it corpus-wide — pure by double application,
+accepted by the new module, projection-equal, invariants hold. A validated
+migration then swaps the corpus: every downstream gate (round-trip,
+stimuli, pointwise, seeded model check) runs over the states the fleet will
+hold AFTER the migration; apply remains `polyrun migrate --apply`. The
+**stimuli gate** checks cross-version delivery: every (action, data)
+stimulus the old version could still deliver is fired at the new machine in
+every fleet state, and each outcome must be accepted or a NAMED observable
+reject — `unhandled`, a throw, or an unnamed reject fails, mirroring the
+polyrun kernel's dispatch classification. An LLM-drafted fill of scaffold
+TODO holes (polygen-style, self-repaired against the migrate gate) is a
+recorded follow-up.
 
 ## Usage
 
 An artifact dir holds `contract.json` + the SAM v2 module (`next.cjs`,
 `machine.cjs`, or the only `.cjs`) + optional `invariants.mjs` +
-`effects.manifest.json` — exactly what polygen emits.
+`effects.manifest.json` + optional `migrate.cjs` — exactly what polygen
+emits, plus the migration when the shape changed.
 
 ```bash
 # which lanes does this change touch, and what gates do they require?
@@ -41,6 +56,9 @@ npm run polyvers -- classify --old machines/order-v1 --new machines/order-v2
 npm run polyvers -- check --old machines/order-v1 --new machines/order-v2 \
   --snapshots archive/ --out out/compat        # archived fleet state, or:
 npm run polyvers -- check ... --synthesize     # BFS-reachable states of the OLD machine
+
+# shape change? scaffold the migration, review/fill it, re-run check
+npm run polyvers -- migrate scaffold --old machines/order-v1 --new machines/order-v2
 
 npm run test:polyvers
 ```
@@ -54,12 +72,12 @@ refused, never a vacuous PASS.
 
 ## The lanes (decision table as data, `src/classify.mjs`)
 
-| lane | fires when | M0 gates | deferred |
-|---|---|---|---|
-| semantic | the module changed | load · shape-roundtrip · invariants-pointwise · semantic-model-check | — |
-| shape | contract `stateKeys` changed | load · shape-roundtrip | migrate (M2) |
-| vocabulary | actions / reject reasons / effect kinds / terminal states changed | load · vocabulary | stimuli (M2) |
-| intent | `invariants.mjs` changed (state or transition invariants) | load · invariant-diff · invariants-pointwise · semantic-model-check | — |
+| lane | fires when | gates (all live) |
+|---|---|---|
+| semantic | the module changed | load · shape-roundtrip · invariants-pointwise · semantic-model-check |
+| shape | contract `stateKeys` changed | load · migrate · shape-roundtrip |
+| vocabulary | actions / reject reasons / effect kinds / terminal states changed | load · vocabulary · stimuli |
+| intent | `invariants.mjs` changed (state or transition invariants) | load · invariant-diff · invariants-pointwise · semantic-model-check |
 
 Gate doctrine, from the SDLC best-practices: a removed action fails the
 vocabulary gate (deprecate, don't delete — in-flight stimuli still arrive);

@@ -29,7 +29,7 @@ export function renderReport(r) {
   lines.push(`old version \`${r.oldVersion}\` → new version \`${r.newVersion}\``);
   lines.push('');
   lines.push(`**Lanes:** ${r.lanes.join(', ')}`);
-  lines.push(`**Corpus:** ${r.corpus.count} snapshot(s), source: ${r.corpus.source}${r.corpus.truncated ? ' (TRUNCATED — raise --max-states)' : ''}`);
+  lines.push(`**Corpus:** ${r.corpus.count} snapshot(s), source: ${r.corpus.source}${r.corpus.truncated ? ' (TRUNCATED — raise --max-states)' : ''}${r.corpus.migrated ? ' — migrated through the new version\'s migrate.cjs before the downstream gates' : ''}`);
   for (const n of r.corpus.notes ?? []) lines.push(`> corpus note: ${n}`);
   lines.push('');
   lines.push('| gate | verdict | summary |');

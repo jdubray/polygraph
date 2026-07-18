@@ -87,10 +87,25 @@ export async function loadArtifacts(dir) {
     out.manifest = JSON.parse(bytes.toString('utf-8'));
   }
 
+  // migrate.cjs (optional, M2): the pure shape migration for THIS version —
+  // module.exports.migrate(oldState) → newState. Loaded through the same
+  // pinned loader as the machine module. Part of version identity: shipping
+  // the same machine with a different migration is a different version.
+  const migratePath = join(abs, 'migrate.cjs');
+  if (existsSync(migratePath)) {
+    const bytes = readFileSync(migratePath);
+    out.migrateHash = sha256(bytes);
+    const mod = loadSpec(migratePath);
+    if (typeof mod.migrate !== 'function') {
+      throw new Error(`'${migratePath}' does not export migrate(oldState) — a present migration artifact must be callable, not decorative`);
+    }
+    out.migrate = mod.migrate;
+  }
+
   // Version identity: hash of the artifact hashes, in a fixed order. Two
   // dirs with byte-identical artifacts are the same version, wherever they
   // live and whatever the machine is called.
-  out.versionHash = sha256([out.contractHash, out.moduleHash, out.invariantsHash ?? '', out.manifestHash ?? ''].join('\n')).slice(0, 12);
+  out.versionHash = sha256([out.contractHash, out.moduleHash, out.invariantsHash ?? '', out.manifestHash ?? '', out.migrateHash ?? ''].join('\n')).slice(0, 12);
   return out;
 }
 

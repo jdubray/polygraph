@@ -1,33 +1,35 @@
 #!/usr/bin/env node
-// polyvers CLI (M0+M1): classify a machine change and run the gates its
+// polyvers CLI (M0–M2): classify a machine change and run the gates its
 // lanes require.
 //
-//   polyvers classify --old <dir> --new <dir> [--json]
-//   polyvers check    --old <dir> --new <dir> [--snapshots <path> | --synthesize]
-//                     [--max-states N] [--out <dir>] [--json]
+//   polyvers classify         --old <dir> --new <dir> [--json]
+//   polyvers check            --old <dir> --new <dir> [--snapshots <path> | --synthesize]
+//                             [--max-states N] [--allow-bounded] [--out <dir>] [--json]
+//   polyvers migrate scaffold --old <dir> --new <dir> [--force]
 //
 // An artifact dir holds contract.json + the machine module (next.cjs /
 // machine.cjs / the only .cjs) + optional invariants.mjs +
-// effects.manifest.json.
+// effects.manifest.json + optional migrate.cjs.
 //
 // Everything here is pure local execution — no API key.
 'use strict';
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { loadArtifacts } from '../src/artifacts.mjs';
 import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
 import { GATE_RUNNERS, NEEDS_CORPUS } from '../src/gates.mjs';
+import { scaffoldMigrate, migrationNoteTemplate } from '../src/scaffold.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 
 const args = process.argv.slice(2);
-const command = args[0];
+const command = args[0] === 'migrate' ? `migrate-${args[1]}` : args[0];
 const flag = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
 const has = (name) => args.includes(`--${name}`);
 
 const usage = () => {
-  console.error('usage: polyvers <classify|check> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--max-states N] [--allow-bounded] [--out <dir>] [--json]');
+  console.error('usage: polyvers <classify|check|migrate scaffold> --old <dir> --new <dir> [--snapshots <path> | --synthesize] [--max-states N] [--allow-bounded] [--force] [--out <dir>] [--json]');
   process.exit(2);
 };
 
@@ -35,7 +37,7 @@ const oldDir = flag('old');
 const newDir = flag('new');
 // Validate the command BEFORE any I/O — loading an artifact dir executes the
 // machine module's top-level code, which a typo'd command must never trigger.
-if (!oldDir || !newDir || !['classify', 'check'].includes(command)) usage();
+if (!oldDir || !newDir || !['classify', 'check', 'migrate-scaffold'].includes(command)) usage();
 
 try {
   // Deliberately sequential (not Promise.all): both loads compile modules and
@@ -44,7 +46,21 @@ try {
   const newA = await loadArtifacts(newDir);
   const classification = classify(oldA, newA);
 
-  if (command === 'classify') {
+  if (command === 'migrate-scaffold') {
+    const migratePath = join(newDir, 'migrate.cjs');
+    const notePath = join(newDir, 'MIGRATION-NOTE.md');
+    if (existsSync(migratePath) && !has('force')) {
+      console.error(`${migratePath} already exists — refusing to overwrite (use --force after reading it)`);
+      process.exit(2);
+    }
+    const scaffold = scaffoldMigrate(oldA, newA);
+    writeFileSync(migratePath, scaffold.code);
+    writeFileSync(notePath, migrationNoteTemplate(oldA, newA, scaffold));
+    console.log(`scaffolded ${migratePath} (+ MIGRATION-NOTE.md)`);
+    console.log(`  added: ${scaffold.added.join(', ') || '(none)'} · removed: ${scaffold.removed.join(', ') || '(none)'} · retyped: ${scaffold.retyped.join(', ') || '(none)'}`);
+    for (const n of scaffold.notes) console.log(`  TODO: ${n}`);
+    if (!scaffold.notes.length) console.log('  scaffold is complete (pure addition) — validate it with `polyvers check`, apply with `polyrun migrate --apply`');
+  } else if (command === 'classify') {
     if (has('json')) {
       console.log(JSON.stringify(classification, null, 2));
     } else {
@@ -107,11 +123,23 @@ try {
         oldA, newA, corpus, diffs: classification.diffs,
         opts: { maxStates, allowBounded: has('allow-bounded') },
       };
-      const gateResults = wanted.map((name) => {
+      const gateResults = [];
+      for (const name of wanted) {
         const run = GATE_RUNNERS[name];
-        if (!run) return { gate: name, ok: false, summary: 'required by the classified lanes but NOT IMPLEMENTED in this build', failures: [{ message: `no runner registered for gate '${name}' — the verdict below cannot be trusted until it runs` }] };
-        return run(ctx);
-      });
+        if (!run) {
+          gateResults.push({ gate: name, ok: false, summary: 'required by the classified lanes but NOT IMPLEMENTED in this build', failures: [{ message: `no runner registered for gate '${name}' — the verdict below cannot be trusted until it runs` }] });
+          continue;
+        }
+        const result = run(ctx);
+        gateResults.push(result);
+        // A fully-validated migration redefines the fleet: every later
+        // corpus gate (round-trip, stimuli, pointwise, seeded model check)
+        // runs over the states production will hold AFTER the migration.
+        if (name === 'migrate' && result.migratedCorpus) {
+          ctx.corpus = result.migratedCorpus;
+          corpusInfo = { ...corpusInfo, migrated: true };
+        }
+      }
 
       const report = buildReport({ classification, corpusInfo, gateResults });
       if (has('json')) console.log(JSON.stringify(report, null, 2));

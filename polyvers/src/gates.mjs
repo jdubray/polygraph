@@ -29,7 +29,7 @@ import samAdapter from '../../scripts/sam-adapter.cjs';
 import { check } from '../../scripts/check.mjs';
 import { observableKeys, invariantsOf } from './artifacts.mjs';
 
-const { isSamV2Module } = samAdapter;
+const { isSamV2Module, domainFromManifest } = samAdapter;
 
 // The kernel's snapshot semantics (polyrun/src/kernel.mjs sanitizeReplacer):
 // drop dunder keys AND function values. Both loadGate's key comparison and
@@ -278,6 +278,129 @@ export function semanticModelCheckGate(newA, corpus, { maxStates = 100000, allow
   return done('semantic-model-check', failures, summary);
 }
 
+// ── migrate (M2) ────────────────────────────────────────────────────────────
+// polyrun's migrate validate phase, corpus-driven and composed with the rest
+// of the pipeline: the gate validates the NEW version's migrate.cjs over
+// every corpus snapshot and returns the MIGRATED corpus, which the CLI then
+// feeds to every downstream corpus gate — round-trip, pointwise, and the
+// seeded model check all run over the states the fleet will actually hold
+// after the migration applies. Apply remains `polyrun migrate --apply`.
+export function migrateGate(newA, corpus) {
+  const failures = [];
+  if (typeof newA.migrate !== 'function') {
+    failures.push({ message: 'the shape changed but the new version has no migrate.cjs — a failing round-trip in this lane needs a verified migration; start with `polyvers migrate scaffold`' });
+    return { ...done('migrate', failures, 'refused: no migrate.cjs in the new version'), migratedCorpus: null };
+  }
+  const migrated = [];
+  const contractKeys = observableKeys(newA.contract);
+  for (const { id, state } of corpus) {
+    try {
+      const next = newA.migrate(JSON.parse(JSON.stringify(state)));
+      // Purity/determinism: the same input twice must give the same output —
+      // a clock or random dependence would migrate the fleet irreproducibly.
+      const again = newA.migrate(JSON.parse(JSON.stringify(state)));
+      if (stable(next) !== stable(again)) {
+        failures.push({ id, message: 'migrate() is nondeterministic — two applications of the same snapshot differ (clock/random dependence); a migration must be pure' });
+        continue;
+      }
+      // The NEW module must accept the migrated snapshot and reproduce it
+      // exactly (polyrun migrate phase 1: stray or dropped keys would poison
+      // later rehydrations).
+      newA.module.init();
+      newA.module.setState(next);
+      const raw = sanitizedState(newA.module);
+      const projected = {};
+      for (const k of contractKeys ?? Object.keys(next)) {
+        if (raw[k] !== undefined) projected[k] = raw[k];
+      }
+      if (stable(projected) !== stable(next)) {
+        failures.push({ id, message: 'migrated state is not the module projection (stray or dropped keys)' });
+        continue;
+      }
+      // New state invariants hold on the migrated state (pointwise here; the
+      // seeded model check downstream covers what it can be DRIVEN to).
+      for (const inv of newA.invariants ?? []) {
+        let ok = false;
+        try { ok = !!inv.pred(next); } catch { ok = false; }
+        if (!ok) failures.push({ id, message: `migrated state violates '${inv.name}'` });
+      }
+      migrated.push({ id, state: next, key: stable(next), source: `${corpus[0]?.source ?? 'archive'}+migrated` });
+    } catch (err) {
+      failures.push({ id, message: `migrate() threw: ${err && err.message}` });
+    }
+  }
+  const okAll = failures.length === 0;
+  return {
+    ...done('migrate', failures, `migrate.cjs validated over ${corpus.length} snapshot(s) (pure, accepted, projection-equal, invariants hold)`),
+    // Only a fully-validated migration may redefine what downstream gates
+    // see — a partial swap would gate the deploy on a corpus mixing old and
+    // new shapes.
+    migratedCorpus: okAll ? migrated : null,
+  };
+}
+
+// ── stimuli (M2) ────────────────────────────────────────────────────────────
+// The behavioral gate: cross-version delivery, checked. Every (action, data)
+// stimulus the OLD version could still deliver (its own manifest-declared
+// domain — timers, completions, callers built against the old vocabulary) is
+// fired at the NEW machine in every corpus state, and every outcome must be
+// verified behavior: accepted, or an observable reject WITH a named reason.
+// 'unhandled' and a throw are exactly the undefined-behavior classes the
+// VERSIONING essay calls cross-version delivery's failure mode; an unnamed
+// reject would journal as unexplained. Classification mirrors the polyrun
+// kernel's dispatch (lastStep(), SamSchemaError→reject, mutate-then-reject
+// would throw) so the gate predicts what production would journal.
+export function stimuliGate(oldA, newA, corpus) {
+  const failures = [];
+  const seenFailure = new Set(); // one witness per (action, failure class)
+  const { steps } = domainFromManifest(oldA.module);
+  if (!steps.length) {
+    failures.push({ message: "the old module's manifest() yields no (action, data) stimuli — nothing to replay would pass vacuously; refusing" });
+    return done('stimuli', failures, 'refused: empty old-version stimulus set');
+  }
+  const mod = newA.module;
+  let fired = 0;
+  const record = (action, cls, id, message) => {
+    const k = `${action}:${cls}`;
+    if (seenFailure.has(k)) return;
+    seenFailure.add(k);
+    failures.push({ id, message });
+  };
+  for (const { id, state } of corpus) {
+    for (const { action, data } of steps) {
+      fired += 1;
+      const handler = mod.actions[action];
+      if (typeof handler !== 'function') {
+        record(action, 'unhandled-surface', id, `old-version stimulus '${action}' is not in the new machine's action surface — in-flight timers/completions delivering it would journal as unhandled (first witness: this snapshot; every state is affected)`);
+        continue;
+      }
+      try {
+        mod.init();
+        mod.setState(state);
+        try {
+          handler(data);
+        } catch (err) {
+          if (err && err.name === 'SamSchemaError') continue; // observable reject of a schema-invalid payload — verified behavior
+          record(action, 'throw', id, `old-version stimulus '${action}(${JSON.stringify(data)})' makes the new machine THROW (${err && err.message}) — in production this poisons the instance`);
+          continue;
+        }
+        const step = mod.instance({}).lastStep();
+        if (!step || (step.intent !== undefined && step.intent !== null && step.intent !== action)) {
+          record(action, 'unclassifiable', id, `lastStep() did not classify '${action}' — the kernel would poison the instance rather than guess`);
+        } else if (step.classification === 'unhandled') {
+          record(action, 'unhandled', id, `old-version stimulus '${action}(${JSON.stringify(data)})' is UNHANDLED in this state — neither accepted nor an observable reject; cross-version delivery becomes undefined behavior`);
+        } else if (step.classification === 'rejected') {
+          const reason = step.rejections && step.rejections[0] && step.rejections[0].reason;
+          if (!reason) record(action, 'unnamed-reject', id, `old-version stimulus '${action}(${JSON.stringify(data)})' is rejected WITHOUT a reason — the journal entry would be unexplained; name the rule (contract specialRules)`);
+        } // mutated / identity-by-mutation = accepted — verified behavior
+      } catch (err) {
+        record(action, 'setup', id, `could not deliver '${action}' at this snapshot: ${err && err.message}`);
+      }
+    }
+  }
+  return done('stimuli', failures, `${steps.length} old-version stimulus(es) × ${corpus.length} snapshot(s) = ${fired} deliveries; every outcome must be accepted or a NAMED observable reject`);
+}
+
 function done(gate, failures, summary) {
   return { gate, ok: failures.length === 0, summary, failures };
 }
@@ -287,12 +410,17 @@ function done(gate, failures, summary) {
 // demand MUST have a runner here; the CLI iterates classification.gates over
 // this map and reports a missing runner as a failing gate result — a wanted
 // gate can never silently not run.
-export const NEEDS_CORPUS = new Set(['shape-roundtrip', 'invariants-pointwise', 'semantic-model-check']);
+export const NEEDS_CORPUS = new Set(['shape-roundtrip', 'invariants-pointwise', 'semantic-model-check', 'migrate', 'stimuli']);
 
 export const GATE_RUNNERS = {
   'load': ({ newA }) => loadGate(newA),
+  // migrate runs FIRST among corpus gates (the CLI orders it so): when it
+  // fully validates, its migratedCorpus replaces the corpus every downstream
+  // gate sees — post-migration fleet states are what production will hold.
+  'migrate': ({ newA, corpus }) => migrateGate(newA, corpus),
   'shape-roundtrip': ({ newA, corpus }) => shapeRoundtripGate(newA, corpus),
   'vocabulary': ({ oldA, newA, diffs }) => vocabularyGate(oldA, newA, diffs),
+  'stimuli': ({ oldA, newA, corpus }) => stimuliGate(oldA, newA, corpus),
   'invariant-diff': ({ diffs }) => invariantDiffGate(diffs),
   'invariants-pointwise': ({ newA, corpus }) => invariantsPointwiseGate(newA, corpus),
   'semantic-model-check': ({ newA, corpus, opts }) => semanticModelCheckGate(newA, corpus, opts),

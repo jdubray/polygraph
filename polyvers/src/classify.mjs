@@ -23,14 +23,17 @@ export const LANES = {
     deferred: [],
   },
   shape: {
+    // 'migrate' is listed before the other corpus gates on purpose: the CLI
+    // runs gates in this order, and a validated migration swaps the corpus
+    // every downstream gate sees to the post-migration states.
     description: 'the sealed state shape changed',
-    gates: ['load', 'shape-roundtrip'],
-    deferred: [{ gate: 'migrate', milestone: 'M2', why: 'a failing round-trip in this lane needs a verified migrate.cjs' }],
+    gates: ['load', 'migrate', 'shape-roundtrip'],
+    deferred: [],
   },
   vocabulary: {
     description: 'the action / reject-reason / effect / terminal vocabulary changed',
-    gates: ['load', 'vocabulary'],
-    deferred: [{ gate: 'stimuli', milestone: 'M2', why: 'in-flight timers/completions from the old vocabulary replayed against the new machine' }],
+    gates: ['load', 'vocabulary', 'stimuli'],
+    deferred: [],
   },
   intent: {
     description: 'the invariants themselves changed',

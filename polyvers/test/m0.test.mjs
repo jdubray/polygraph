@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { loadArtifacts, invariantsOf } from '../src/artifacts.mjs';
 import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
-import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate, semanticModelCheckGate } from '../src/gates.mjs';
+import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate, semanticModelCheckGate, migrateGate, stimuliGate } from '../src/gates.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 import { check } from '../../scripts/check.mjs';
 
@@ -306,7 +306,7 @@ test('cli: check passes the semantic fixture (exit 0) and fails the renamed one 
   const fail = runCli(['check', '--old', fix('order-v1'), '--new', fix('order-v2-renamed'), '--synthesize']);
   assert.equal(fail.code, 1);
   assert.ok(fail.stdout.includes('Verdict: FAIL'));
-  assert.ok(fail.stdout.includes('NOT RUN (M2)')); // deferred gates are disclosed
+  assert.ok(fail.stdout.includes('stimuli | **FAIL**')); // the live M2 gate catches the removed action too
 });
 
 test('cli: --out writes compat-report.json and .md under the changeId', () => {
@@ -471,16 +471,91 @@ test('m1: cli end-to-end — the landmine pair fails check with the semantic gat
   assert.ok(!r.stdout.includes('NOT RUN (M1)')); // the gate is live, not deferred
 });
 
-test('cli: a vocabulary-only change needs no corpus (no --snapshots/--synthesize required)', () => {
+// ── M2: the migration lane + the stimuli gate ───────────────────────────────
+
+test('m2: a shape change without migrate.cjs fails the migrate gate with the scaffold hint', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-shape')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  const g = migrateGate(newA, corpus);
+  assert.equal(g.ok, false);
+  assert.ok(g.failures[0].message.includes('polyvers migrate scaffold'));
+  assert.equal(g.migratedCorpus, null);
+});
+
+test('m2: a valid migration validates and yields the migrated corpus', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-shape-migrated')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  const g = migrateGate(newA, corpus);
+  assert.equal(g.ok, true);
+  assert.equal(g.migratedCorpus.length, corpus.length);
+  assert.ok(g.migratedCorpus.every((e) => e.state.trackingId === ''));
+  // ...and the migrated fleet passes the gates the raw fleet failed:
+  assert.equal(shapeRoundtripGate(newA, g.migratedCorpus).ok, true);
+  assert.equal(shapeRoundtripGate(newA, corpus).ok, false);
+});
+
+test('m2: cli end-to-end — shape change + migration passes the full pipeline over migrated states', () => {
+  const r = runCli(['check', '--old', fix('order-v1'), '--new', fix('order-v2-shape-migrated'), '--synthesize']);
+  assert.equal(r.code, 0);
+  assert.ok(r.stdout.includes('Verdict: PASS'));
+  assert.ok(r.stdout.includes('migrate | PASS'));
+  assert.ok(r.stdout.includes('migrated through the new version'));
+  assert.ok(!r.stdout.includes('NOT RUN')); // every lane's gates are live as of M2
+});
+
+test('m2: scaffold generates a working migration for a pure-addition shape change', async () => {
+  const dir = scratchCopy('order-v2-shape'); // no migrate.cjs yet
+  try {
+    const r = runCli(['migrate', 'scaffold', '--old', fix('order-v1'), '--new', dir]);
+    assert.equal(r.code, 0);
+    assert.ok(r.stdout.includes('scaffold is complete'));
+    assert.ok(readFileSync(join(dir, 'migrate.cjs'), 'utf-8').includes('"trackingId"'));
+    assert.ok(readFileSync(join(dir, 'MIGRATION-NOTE.md'), 'utf-8').includes('MIGRATION-NOTE'));
+    // The scaffolded migration must itself pass the migrate gate.
+    const [oldA, newA] = [await load('order-v1'), await loadArtifacts(dir)];
+    const corpus = synthesizeCorpus(oldA.module).entries;
+    assert.equal(migrateGate(newA, corpus).ok, true);
+    // Refuse silent overwrite.
+    const again = runCli(['migrate', 'scaffold', '--old', fix('order-v1'), '--new', dir]);
+    assert.equal(again.code, 2);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m2: scaffold refuses when there is no shape difference', () => {
+  const r = runCli(['migrate', 'scaffold', '--old', fix('order-v1'), '--new', fix('order-v2-rules')]);
+  assert.equal(r.code, 1);
+  assert.ok(r.stderr.includes('no shape difference'));
+});
+
+test('m2: stimuli gate — old-version stimuli land as verified behavior on a rule-only change', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-rules')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  const g = stimuliGate(oldA, newA, corpus);
+  assert.equal(g.ok, true); // every delivery is accepted or a NAMED reject
+});
+
+test('m2: stimuli gate — a removed action is undefined behavior, one witness per failure class', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-renamed')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  const g = stimuliGate(oldA, newA, corpus);
+  assert.equal(g.ok, false);
+  const shipFailures = g.failures.filter((f) => f.message.includes("'SHIP'"));
+  assert.equal(shipFailures.length, 1); // deduped: one witness, not corpus × domain entries
+  assert.ok(shipFailures[0].message.includes('action surface'));
+});
+
+test('cli: a vocabulary-only change needs no corpus... unless the live stimuli gate demands one', () => {
   const dir = scratchCopy('order-v1');
   try {
     // dataDomain tweak: vocabulary lane only (no module/invariant edit).
     const c = JSON.parse(readFileSync(join(dir, 'contract.json'), 'utf-8'));
     c.dataDomain.SUBMIT.totalCents = [2500, 9900];
     writeFileSync(join(dir, 'contract.json'), JSON.stringify(c, null, 2));
-    const r = runCli(['check', '--old', fix('order-v1'), '--new', dir]);
-    assert.equal(r.code, 0); // no corpus flag passed — must not be demanded
-    assert.ok(r.stdout.includes('not required by these lanes'));
+    // As of M2 the vocabulary lane includes the stimuli gate, which replays
+    // old stimuli over fleet states — a corpus IS required now.
+    const r = runCli(['check', '--old', fix('order-v1'), '--new', dir, '--synthesize']);
+    assert.equal(r.code, 0);
+    assert.ok(r.stdout.includes('stimuli | PASS'));
     assert.ok(r.stdout.includes('Verdict: PASS'));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
