@@ -100,6 +100,15 @@ Elicitation is **ongoing and multi-person** (plan §10.1): `defer --assign
 it up in a later session; each record keeps its full predicate-version
 history until it reaches final shape.
 
+## Worked example — a real elicitation session
+
+[`examples/polynv-oms/`](../examples/polynv-oms/) is a committed, genuine
+session on the OMS order machine (its hand-written invariants removed):
+harvest → domain priors → ten designer dispositions → grade 68/113 →
+one survivor-closing rule → **88/113**, with the ledger deliberately left
+mid-flight (45 open survivor questions) as the ongoing-elicitation design
+intends. The README there tells the story with the real numbers.
+
 ## M0 worked example — templates vs the hand-written OMS invariants
 
 Harvesting `examples/polyvers-oms/order-v1` (the test fixture) yields ~20

@@ -1,0 +1,3488 @@
+{
+  "format": "polynv-ledger/1",
+  "records": [
+    {
+      "id": "terminal-absorbing:completed",
+      "source": "template",
+      "target": "transition",
+      "question": "'completed' is declared terminal. Once orderState == 'completed', can ANY action still change the state? The template proposes: terminal states are frozen — every action arriving in 'completed' is an observable no-op.",
+      "evidence": {
+        "from": "contract.terminalStates",
+        "quote": "terminalStates includes 'completed' (terminalKey: orderState)"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "terminal-absorbing",
+            "key": "orderState",
+            "value": "completed",
+            "stateKeys": [
+              "orderState",
+              "fulfillments",
+              "shipmentsDelivered",
+              "shipmentsFailed",
+              "totalCents",
+              "txId",
+              "cancelReason"
+            ]
+          },
+          "js": "(pre, action, data, post) => pre[\"orderState\"] !== \"completed\" || sameOn([\"orderState\",\"fulfillments\",\"shipmentsDelivered\",\"shipmentsFailed\",\"totalCents\",\"txId\",\"cancelReason\"])(pre, post)",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:17.239Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "terminal-absorbing:partiallyDelivered",
+      "source": "template",
+      "target": "transition",
+      "question": "'partiallyDelivered' is declared terminal. Once orderState == 'partiallyDelivered', can ANY action still change the state? The template proposes: terminal states are frozen — every action arriving in 'partiallyDelivered' is an observable no-op.",
+      "evidence": {
+        "from": "contract.terminalStates",
+        "quote": "terminalStates includes 'partiallyDelivered' (terminalKey: orderState)"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "terminal-absorbing",
+            "key": "orderState",
+            "value": "partiallyDelivered",
+            "stateKeys": [
+              "orderState",
+              "fulfillments",
+              "shipmentsDelivered",
+              "shipmentsFailed",
+              "totalCents",
+              "txId",
+              "cancelReason"
+            ]
+          },
+          "js": "(pre, action, data, post) => pre[\"orderState\"] !== \"partiallyDelivered\" || sameOn([\"orderState\",\"fulfillments\",\"shipmentsDelivered\",\"shipmentsFailed\",\"totalCents\",\"txId\",\"cancelReason\"])(pre, post)",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:19.340Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "terminal-absorbing:rejected",
+      "source": "template",
+      "target": "transition",
+      "question": "'rejected' is declared terminal. Once orderState == 'rejected', can ANY action still change the state? The template proposes: terminal states are frozen — every action arriving in 'rejected' is an observable no-op.",
+      "evidence": {
+        "from": "contract.terminalStates",
+        "quote": "terminalStates includes 'rejected' (terminalKey: orderState)"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "terminal-absorbing",
+            "key": "orderState",
+            "value": "rejected",
+            "stateKeys": [
+              "orderState",
+              "fulfillments",
+              "shipmentsDelivered",
+              "shipmentsFailed",
+              "totalCents",
+              "txId",
+              "cancelReason"
+            ]
+          },
+          "js": "(pre, action, data, post) => pre[\"orderState\"] !== \"rejected\" || sameOn([\"orderState\",\"fulfillments\",\"shipmentsDelivered\",\"shipmentsFailed\",\"totalCents\",\"txId\",\"cancelReason\"])(pre, post)",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:21.436Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "terminal-absorbing:paymentFailed",
+      "source": "template",
+      "target": "transition",
+      "question": "'paymentFailed' is declared terminal. Once orderState == 'paymentFailed', can ANY action still change the state? The template proposes: terminal states are frozen — every action arriving in 'paymentFailed' is an observable no-op.",
+      "evidence": {
+        "from": "contract.terminalStates",
+        "quote": "terminalStates includes 'paymentFailed' (terminalKey: orderState)"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "terminal-absorbing",
+            "key": "orderState",
+            "value": "paymentFailed",
+            "stateKeys": [
+              "orderState",
+              "fulfillments",
+              "shipmentsDelivered",
+              "shipmentsFailed",
+              "totalCents",
+              "txId",
+              "cancelReason"
+            ]
+          },
+          "js": "(pre, action, data, post) => pre[\"orderState\"] !== \"paymentFailed\" || sameOn([\"orderState\",\"fulfillments\",\"shipmentsDelivered\",\"shipmentsFailed\",\"totalCents\",\"txId\",\"cancelReason\"])(pre, post)",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:23.523Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "terminal-absorbing:cancelled",
+      "source": "template",
+      "target": "transition",
+      "question": "'cancelled' is declared terminal. Once orderState == 'cancelled', can ANY action still change the state? The template proposes: terminal states are frozen — every action arriving in 'cancelled' is an observable no-op.",
+      "evidence": {
+        "from": "contract.terminalStates",
+        "quote": "terminalStates includes 'cancelled' (terminalKey: orderState)"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "terminal-absorbing",
+            "key": "orderState",
+            "value": "cancelled",
+            "stateKeys": [
+              "orderState",
+              "fulfillments",
+              "shipmentsDelivered",
+              "shipmentsFailed",
+              "totalCents",
+              "txId",
+              "cancelReason"
+            ]
+          },
+          "js": "(pre, action, data, post) => pre[\"orderState\"] !== \"cancelled\" || sameOn([\"orderState\",\"fulfillments\",\"shipmentsDelivered\",\"shipmentsFailed\",\"totalCents\",\"txId\",\"cancelReason\"])(pre, post)",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:25.438Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "range:fulfillments",
+      "source": "template",
+      "target": "state",
+      "question": "The contract types 'fulfillments' as 0..2. Must every reachable state keep it in that range? (A reachable value outside it would mean the type annotation is a lie.)",
+      "evidence": {
+        "from": "contract.stateKeys.fulfillments.type",
+        "quote": "integer 0..2 — number of shipments this order splits into (0 until submitted)"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "range",
+            "field": "fulfillments",
+            "min": 0,
+            "max": 2
+          },
+          "js": "(s) => typeof s[\"fulfillments\"] === 'number' && s[\"fulfillments\"] >= 0 && s[\"fulfillments\"] <= 2",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:34.255Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "monotone:fulfillments",
+      "source": "template",
+      "target": "transition",
+      "question": "Is 'fulfillments' monotone — can it ever DECREASE across a transition? (If a decrease is legitimate — a reset, an amendment — reject this candidate and the reset becomes a recorded, deliberate answer.)",
+      "evidence": {
+        "from": "contract.stateKeys.fulfillments.type",
+        "quote": "integer 0..2 — number of shipments this order splits into (0 until submitted)"
+      },
+      "status": "rejected",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "monotone",
+            "field": "fulfillments"
+          },
+          "js": "(pre, action, data, post) => post[\"fulfillments\"] >= pre[\"fulfillments\"]",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "FAILS",
+        "detail": "violated by AMEND",
+        "kind": "transition",
+        "counterexample": [
+          {
+            "action": null,
+            "data": null,
+            "state": {
+              "orderState": "pending",
+              "fulfillments": 0,
+              "shipmentsDelivered": 0,
+              "shipmentsFailed": 0,
+              "totalCents": 0,
+              "txId": "",
+              "cancelReason": ""
+            }
+          },
+          {
+            "action": "SUBMIT",
+            "data": {
+              "fulfillments": 2,
+              "totalCents": 2500
+            },
+            "state": {
+              "orderState": "fraudCheck",
+              "fulfillments": 2,
+              "shipmentsDelivered": 0,
+              "shipmentsFailed": 0,
+              "totalCents": 2500,
+              "txId": "",
+              "cancelReason": ""
+            }
+          },
+          {
+            "action": "FRAUD_PASSED",
+            "data": {
+              "itemsAvailable": false
+            },
+            "state": {
+              "orderState": "awaitingAmend",
+              "fulfillments": 2,
+              "shipmentsDelivered": 0,
+              "shipmentsFailed": 0,
+              "totalCents": 2500,
+              "txId": "",
+              "cancelReason": ""
+            }
+          },
+          {
+            "action": "AMEND",
+            "data": {
+              "fulfillments": 1,
+              "totalCents": 1900
+            },
+            "state": {
+              "orderState": "charging",
+              "fulfillments": 1,
+              "shipmentsDelivered": 0,
+              "shipmentsFailed": 0,
+              "totalCents": 1900,
+              "txId": "",
+              "cancelReason": ""
+            }
+          }
+        ],
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "FAILS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "reject",
+          "date": "2026-07-18T13:39:07.476Z",
+          "author": "jdubray",
+          "note": "AMEND legitimately lowers the fulfillment count; intended"
+        }
+      ]
+    },
+    {
+      "id": "range:shipmentsDelivered",
+      "source": "template",
+      "target": "state",
+      "question": "The contract types 'shipmentsDelivered' as 0..2. Must every reachable state keep it in that range? (A reachable value outside it would mean the type annotation is a lie.)",
+      "evidence": {
+        "from": "contract.stateKeys.shipmentsDelivered.type",
+        "quote": "integer 0..2 — shipments that completed with outcome 'delivered'"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "range",
+            "field": "shipmentsDelivered",
+            "min": 0,
+            "max": 2
+          },
+          "js": "(s) => typeof s[\"shipmentsDelivered\"] === 'number' && s[\"shipmentsDelivered\"] >= 0 && s[\"shipmentsDelivered\"] <= 2",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:36.229Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "monotone:shipmentsDelivered",
+      "source": "template",
+      "target": "transition",
+      "question": "Is 'shipmentsDelivered' monotone — can it ever DECREASE across a transition? (If a decrease is legitimate — a reset, an amendment — reject this candidate and the reset becomes a recorded, deliberate answer.)",
+      "evidence": {
+        "from": "contract.stateKeys.shipmentsDelivered.type",
+        "quote": "integer 0..2 — shipments that completed with outcome 'delivered'"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "monotone",
+            "field": "shipmentsDelivered"
+          },
+          "js": "(pre, action, data, post) => post[\"shipmentsDelivered\"] >= pre[\"shipmentsDelivered\"]",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:42.283Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "range:shipmentsFailed",
+      "source": "template",
+      "target": "state",
+      "question": "The contract types 'shipmentsFailed' as 0..2. Must every reachable state keep it in that range? (A reachable value outside it would mean the type annotation is a lie.)",
+      "evidence": {
+        "from": "contract.stateKeys.shipmentsFailed.type",
+        "quote": "integer 0..2 — shipments that completed with outcome 'cancelledShipment'"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "range",
+            "field": "shipmentsFailed",
+            "min": 0,
+            "max": 2
+          },
+          "js": "(s) => typeof s[\"shipmentsFailed\"] === 'number' && s[\"shipmentsFailed\"] >= 0 && s[\"shipmentsFailed\"] <= 2",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:38.219Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "monotone:shipmentsFailed",
+      "source": "template",
+      "target": "transition",
+      "question": "Is 'shipmentsFailed' monotone — can it ever DECREASE across a transition? (If a decrease is legitimate — a reset, an amendment — reject this candidate and the reset becomes a recorded, deliberate answer.)",
+      "evidence": {
+        "from": "contract.stateKeys.shipmentsFailed.type",
+        "quote": "integer 0..2 — shipments that completed with outcome 'cancelledShipment'"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "monotone",
+            "field": "shipmentsFailed"
+          },
+          "js": "(pre, action, data, post) => post[\"shipmentsFailed\"] >= pre[\"shipmentsFailed\"]",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:44.317Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "nonneg:totalCents",
+      "source": "template",
+      "target": "state",
+      "question": "The contract types 'totalCents' as a non-negative integer. Must every reachable state keep it >= 0?",
+      "evidence": {
+        "from": "contract.stateKeys.totalCents.type",
+        "quote": "integer >= 0, order total in cents"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "nonneg",
+            "field": "totalCents"
+          },
+          "js": "(s) => typeof s[\"totalCents\"] === 'number' && s[\"totalCents\"] >= 0",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:40.191Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "monotone:totalCents",
+      "source": "template",
+      "target": "transition",
+      "question": "Is 'totalCents' monotone — can it ever DECREASE across a transition? (If a decrease is legitimate — a reset, an amendment — reject this candidate and the reset becomes a recorded, deliberate answer.)",
+      "evidence": {
+        "from": "contract.stateKeys.totalCents.type",
+        "quote": "integer >= 0, order total in cents"
+      },
+      "status": "rejected",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "monotone",
+            "field": "totalCents"
+          },
+          "js": "(pre, action, data, post) => post[\"totalCents\"] >= pre[\"totalCents\"]",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "FAILS",
+        "detail": "violated by AMEND",
+        "kind": "transition",
+        "counterexample": [
+          {
+            "action": null,
+            "data": null,
+            "state": {
+              "orderState": "pending",
+              "fulfillments": 0,
+              "shipmentsDelivered": 0,
+              "shipmentsFailed": 0,
+              "totalCents": 0,
+              "txId": "",
+              "cancelReason": ""
+            }
+          },
+          {
+            "action": "SUBMIT",
+            "data": {
+              "fulfillments": 1,
+              "totalCents": 2500
+            },
+            "state": {
+              "orderState": "fraudCheck",
+              "fulfillments": 1,
+              "shipmentsDelivered": 0,
+              "shipmentsFailed": 0,
+              "totalCents": 2500,
+              "txId": "",
+              "cancelReason": ""
+            }
+          },
+          {
+            "action": "FRAUD_PASSED",
+            "data": {
+              "itemsAvailable": false
+            },
+            "state": {
+              "orderState": "awaitingAmend",
+              "fulfillments": 1,
+              "shipmentsDelivered": 0,
+              "shipmentsFailed": 0,
+              "totalCents": 2500,
+              "txId": "",
+              "cancelReason": ""
+            }
+          },
+          {
+            "action": "AMEND",
+            "data": {
+              "fulfillments": 1,
+              "totalCents": 1900
+            },
+            "state": {
+              "orderState": "charging",
+              "fulfillments": 1,
+              "shipmentsDelivered": 0,
+              "shipmentsFailed": 0,
+              "totalCents": 1900,
+              "txId": "",
+              "cancelReason": ""
+            }
+          }
+        ],
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "FAILS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "reject",
+          "date": "2026-07-18T13:39:05.640Z",
+          "author": "jdubray",
+          "note": "AMEND legitimately lowers the total (items-unavailable renegotiation); the decrease is intended"
+        }
+      ]
+    },
+    {
+      "id": "set-once:txId",
+      "source": "template",
+      "target": "transition",
+      "question": "'txId' starts empty (''). Once it is set to a non-empty value, may it ever change again? The template proposes: set once, then immutable.",
+      "evidence": {
+        "from": "contract.stateKeys.txId.type + initState",
+        "quote": "string, payment transaction id ('' until charged) (initState: '')"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "set-once",
+            "field": "txId",
+            "empty": ""
+          },
+          "js": "(pre, action, data, post) => pre[\"txId\"] === \"\" || post[\"txId\"] === pre[\"txId\"]",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:27.559Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "set-once:cancelReason",
+      "source": "template",
+      "target": "transition",
+      "question": "'cancelReason' starts empty (''). Once it is set to a non-empty value, may it ever change again? The template proposes: set once, then immutable.",
+      "evidence": {
+        "from": "contract.stateKeys.cancelReason.type + initState",
+        "quote": "string, why the order ended early ('' otherwise) (initState: '')"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "set-once",
+            "field": "cancelReason",
+            "empty": ""
+          },
+          "js": "(pre, action, data, post) => pre[\"cancelReason\"] === \"\" || post[\"cancelReason\"] === pre[\"cancelReason\"]",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:46.468Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "reject-in-state:cancel-blocked-while-charging",
+      "source": "template",
+      "target": "transition",
+      "question": "The contract's rule 'cancel-blocked-while-charging' says CANCEL arriving while orderState == 'charging' is rejected. Must that rejection leave the state COMPLETELY unchanged — an observable no-op, never a partial mutation?",
+      "evidence": {
+        "from": "contract.specialRules['cancel-blocked-while-charging']",
+        "quote": "CANCEL while orderState == 'charging' is rejected (reason = this rule's name): a charge decision is in flight and must resolve first."
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "reject-in-state",
+            "actions": [
+              "CANCEL"
+            ],
+            "key": "orderState",
+            "value": "charging",
+            "stateKeys": [
+              "orderState",
+              "fulfillments",
+              "shipmentsDelivered",
+              "shipmentsFailed",
+              "totalCents",
+              "txId",
+              "cancelReason"
+            ]
+          },
+          "js": "(pre, action, data, post) => !([\"CANCEL\"].includes(action) && pre[\"orderState\"] === \"charging\") || sameOn([\"orderState\",\"fulfillments\",\"shipmentsDelivered\",\"shipmentsFailed\",\"totalCents\",\"txId\",\"cancelReason\"])(pre, post)",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:29.561Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "reject-in-state:fulfillment-in-progress",
+      "source": "template",
+      "target": "transition",
+      "question": "The contract's rule 'fulfillment-in-progress' says CANCEL arriving while orderState == 'fulfilling' is rejected. Must that rejection leave the state COMPLETELY unchanged — an observable no-op, never a partial mutation?",
+      "evidence": {
+        "from": "contract.specialRules['fulfillment-in-progress']",
+        "quote": "CANCEL while orderState == 'fulfilling' is rejected (reason = this rule's name): shipments are already with couriers; per-shipment cancellation is the shipment machine's business, not the order's."
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "reject-in-state",
+            "actions": [
+              "CANCEL"
+            ],
+            "key": "orderState",
+            "value": "fulfilling",
+            "stateKeys": [
+              "orderState",
+              "fulfillments",
+              "shipmentsDelivered",
+              "shipmentsFailed",
+              "totalCents",
+              "txId",
+              "cancelReason"
+            ]
+          },
+          "js": "(pre, action, data, post) => !([\"CANCEL\"].includes(action) && pre[\"orderState\"] === \"fulfilling\") || sameOn([\"orderState\",\"fulfillments\",\"shipmentsDelivered\",\"shipmentsFailed\",\"totalCents\",\"txId\",\"cancelReason\"])(pre, post)",
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:31.760Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "emission-at-most-once:fraudCheck",
+      "source": "template",
+      "target": "emission",
+      "question": "The manifest declares effect 'fraudCheck'. Can it ever be emitted TWICE for one instance? (For a payment effect the domain answer is usually \"never\"; if at-most-once is intended, this becomes an emission invariant for polyrun check-effects.)",
+      "evidence": {
+        "from": "effects.manifest.json",
+        "quote": "effects.fraudCheck"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "emission-at-most-once",
+            "effect": "fraudCheck"
+          },
+          "js": null,
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:40:48.464Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "emission-at-most-once:chargeCard",
+      "source": "template",
+      "target": "emission",
+      "question": "The manifest declares effect 'chargeCard'. Can it ever be emitted TWICE for one instance? (For a payment effect the domain answer is usually \"never\"; if at-most-once is intended, this becomes an emission invariant for polyrun check-effects.)",
+      "evidence": {
+        "from": "effects.manifest.json",
+        "quote": "effects.chargeCard"
+      },
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "emission-at-most-once",
+            "effect": "chargeCard"
+          },
+          "js": null,
+          "date": "2026-07-18T13:37:07.367Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:07.367Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:07.367Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:39:13.820Z",
+          "author": "jdubray"
+        }
+      ]
+    },
+    {
+      "id": "prior:no-charge-without-fraud-pass",
+      "source": "domain-prior",
+      "target": "transition",
+      "question": "Payments norm (authorization-before-capture): can a charge ever be recorded (txId set) without the fraud check having passed first — i.e. from any state other than 'charging'?",
+      "evidence": null,
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "js",
+            "target": "transition",
+            "js": "(pre, action, data, post) => post.txId === pre.txId || (action === 'CHARGE_SUCCEEDED' && pre.orderState === 'charging')"
+          },
+          "js": "(pre, action, data, post) => post.txId === pre.txId || (action === 'CHARGE_SUCCEEDED' && pre.orderState === 'charging')",
+          "date": "2026-07-18T13:37:27.705Z",
+          "author": "agent:claude-fable-5"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:27.705Z"
+      },
+      "events": [
+        {
+          "type": "added",
+          "date": "2026-07-18T13:37:27.705Z",
+          "author": "agent:claude-fable-5"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:27.705Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:39:09.500Z",
+          "author": "jdubray"
+        }
+      ],
+      "provenance": {
+        "domain": "payments",
+        "norm": "no capture without a prior authorization step",
+        "model": "claude-fable-5",
+        "date": "2026-07-18T13:37:27.705Z"
+      }
+    },
+    {
+      "id": "prior:cancel-reason-always-recorded",
+      "source": "domain-prior",
+      "target": "transition",
+      "question": "Audit norm: when an order ends by cancellation or rejection, must the reason ALWAYS be recorded (cancelReason non-empty in 'cancelled' and 'rejected')?",
+      "evidence": null,
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "js",
+            "target": "transition",
+            "js": "(pre, action, data, post) => !['cancelled','rejected'].includes(post.orderState) || post.cancelReason !== ''"
+          },
+          "js": "(pre, action, data, post) => !['cancelled','rejected'].includes(post.orderState) || post.cancelReason !== ''",
+          "date": "2026-07-18T13:37:29.863Z",
+          "author": "agent:claude-fable-5"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:37:29.863Z"
+      },
+      "events": [
+        {
+          "type": "added",
+          "date": "2026-07-18T13:37:29.863Z",
+          "author": "agent:claude-fable-5"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:37:29.863Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:39:11.687Z",
+          "author": "jdubray"
+        }
+      ],
+      "provenance": {
+        "domain": "payments",
+        "norm": "terminal failure states carry an auditable reason",
+        "model": "claude-fable-5",
+        "date": "2026-07-18T13:37:29.863Z"
+      }
+    },
+    {
+      "id": "mutation-survivor:drop:AMEND@\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject). Concretely: AMEND({\"fulfillments\":1,\"totalCents\":1900}) on {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:AMEND_WINDOW_EXPIRED@\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND_WINDOW_EXPIRED' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject). Concretely: AMEND_WINDOW_EXPIRED({}) on {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"cancelled\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"amend-window-expired\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND_WINDOW_EXPIRED' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:CANCEL@\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CANCEL' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject). Concretely: CANCEL({\"reason\":\"customer-request\"}) on {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"cancelled\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"customer-request\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CANCEL' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:CANCEL@\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CANCEL' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject). Concretely: CANCEL({\"reason\":\"customer-request\"}) on {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"cancelled\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"customer-request\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CANCEL' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:CANCEL@\"pending\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CANCEL' in orderState=\"pending\" no longer does anything (guard negated to a reject). Concretely: CANCEL({\"reason\":\"customer-request\"}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"cancelled\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"customer-request\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CANCEL' in orderState=\"pending\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:CHARGE_FAILED@\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_FAILED' in orderState=\"charging\" no longer does anything (guard negated to a reject). Concretely: CHARGE_FAILED({\"reason\":\"declined\"}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"paymentFailed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"declined\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_FAILED' in orderState=\"charging\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:CHARGE_SUCCEEDED@\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_SUCCEEDED' in orderState=\"charging\" no longer does anything (guard negated to a reject). Concretely: CHARGE_SUCCEEDED({\"txId\":\"tx-1\"}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_SUCCEEDED' in orderState=\"charging\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:CHARGE_TIMED_OUT@\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_TIMED_OUT' in orderState=\"charging\" no longer does anything (guard negated to a reject). Concretely: CHARGE_TIMED_OUT({}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"paymentFailed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"charge-timed-out\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_TIMED_OUT' in orderState=\"charging\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:FRAUD_FAILED@\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_FAILED' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject). Concretely: FRAUD_FAILED({\"reason\":\"suspicious\"}) on {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"rejected\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"suspicious\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_FAILED' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:FRAUD_PASSED@\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_PASSED' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject). Concretely: FRAUD_PASSED({\"itemsAvailable\":true}) on {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_PASSED' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:SHIPMENT_COMPLETED@\"fulfilling\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'SHIPMENT_COMPLETED' in orderState=\"fulfilling\" no longer does anything (guard negated to a reject). Concretely: SHIPMENT_COMPLETED({\"childKey\":\"f1\",\"childState\":{\"shipState\":\"delivered\"}}) on {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"completed\",\"fulfillments\":1,\"shipmentsDelivered\":1,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'SHIPMENT_COMPLETED' in orderState=\"fulfilling\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:drop:SUBMIT@\"pending\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'SUBMIT' in orderState=\"pending\" no longer does anything (guard negated to a reject). Concretely: SUBMIT({\"fulfillments\":1,\"totalCents\":2500}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'SUBMIT' in orderState=\"pending\" no longer does anything (guard negated to a reject)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:retarget:CHARGE_SUCCEEDED@\"charging\"->\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_SUCCEEDED' in orderState=\"charging\" lands in orderState=\"awaitingAmend\" instead. Concretely: CHARGE_SUCCEEDED({\"txId\":\"tx-1\"}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_SUCCEEDED' in orderState=\"charging\" lands in orderState=\"awaitingAmend\" instead"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:retarget:SUBMIT@\"pending\"->\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'SUBMIT' in orderState=\"pending\" lands in orderState=\"awaitingAmend\" instead. Concretely: SUBMIT({\"fulfillments\":1,\"totalCents\":2500}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'SUBMIT' in orderState=\"pending\" lands in orderState=\"awaitingAmend\" instead"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:AMEND@\"charging\"<-\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"awaitingAmend\"). Concretely: AMEND({\"fulfillments\":1,\"totalCents\":1900}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"awaitingAmend\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:AMEND@\"fraudCheck\"<-\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"awaitingAmend\"). Concretely: AMEND({\"fulfillments\":1,\"totalCents\":1900}) on {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"awaitingAmend\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:AMEND@\"pending\"<-\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"awaitingAmend\"). Concretely: AMEND({\"fulfillments\":1,\"totalCents\":1900}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"awaitingAmend\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:AMEND_WINDOW_EXPIRED@\"charging\"<-\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND_WINDOW_EXPIRED' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"awaitingAmend\"). Concretely: AMEND_WINDOW_EXPIRED({}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"cancelled\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"amend-window-expired\"} (the real machine yields {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND_WINDOW_EXPIRED' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"awaitingAmend\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:AMEND_WINDOW_EXPIRED@\"fraudCheck\"<-\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND_WINDOW_EXPIRED' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"awaitingAmend\"). Concretely: AMEND_WINDOW_EXPIRED({}) on {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"cancelled\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"amend-window-expired\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND_WINDOW_EXPIRED' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"awaitingAmend\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:AMEND_WINDOW_EXPIRED@\"fulfilling\"<-\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND_WINDOW_EXPIRED' now ACCEPTED in orderState=\"fulfilling\" (applied as it is in orderState=\"awaitingAmend\"). Concretely: AMEND_WINDOW_EXPIRED({}) on {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} would yield {\"orderState\":\"cancelled\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"amend-window-expired\"} (the real machine yields {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND_WINDOW_EXPIRED' now ACCEPTED in orderState=\"fulfilling\" (applied as it is in orderState=\"awaitingAmend\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:40:50.298Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:40:50.298Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:40:50.298Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:AMEND_WINDOW_EXPIRED@\"pending\"<-\"awaitingAmend\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'AMEND_WINDOW_EXPIRED' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"awaitingAmend\"). Concretely: AMEND_WINDOW_EXPIRED({}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"cancelled\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"amend-window-expired\"} (the real machine yields {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'AMEND_WINDOW_EXPIRED' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"awaitingAmend\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:CHARGE_FAILED@\"awaitingAmend\"<-\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_FAILED' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"charging\"). Concretely: CHARGE_FAILED({\"reason\":\"declined\"}) on {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"paymentFailed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"declined\"} (the real machine yields {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_FAILED' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"charging\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:CHARGE_FAILED@\"fraudCheck\"<-\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_FAILED' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"charging\"). Concretely: CHARGE_FAILED({\"reason\":\"declined\"}) on {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"paymentFailed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"declined\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_FAILED' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"charging\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:CHARGE_FAILED@\"fulfilling\"<-\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_FAILED' now ACCEPTED in orderState=\"fulfilling\" (applied as it is in orderState=\"charging\"). Concretely: CHARGE_FAILED({\"reason\":\"declined\"}) on {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} would yield {\"orderState\":\"paymentFailed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"declined\"} (the real machine yields {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_FAILED' now ACCEPTED in orderState=\"fulfilling\" (applied as it is in orderState=\"charging\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:CHARGE_FAILED@\"pending\"<-\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_FAILED' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"charging\"). Concretely: CHARGE_FAILED({\"reason\":\"declined\"}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"paymentFailed\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"declined\"} (the real machine yields {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_FAILED' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"charging\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:CHARGE_TIMED_OUT@\"awaitingAmend\"<-\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_TIMED_OUT' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"charging\"). Concretely: CHARGE_TIMED_OUT({}) on {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"paymentFailed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"charge-timed-out\"} (the real machine yields {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_TIMED_OUT' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"charging\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:CHARGE_TIMED_OUT@\"fraudCheck\"<-\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_TIMED_OUT' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"charging\"). Concretely: CHARGE_TIMED_OUT({}) on {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"paymentFailed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"charge-timed-out\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_TIMED_OUT' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"charging\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:CHARGE_TIMED_OUT@\"fulfilling\"<-\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_TIMED_OUT' now ACCEPTED in orderState=\"fulfilling\" (applied as it is in orderState=\"charging\"). Concretely: CHARGE_TIMED_OUT({}) on {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} would yield {\"orderState\":\"paymentFailed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"charge-timed-out\"} (the real machine yields {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_TIMED_OUT' now ACCEPTED in orderState=\"fulfilling\" (applied as it is in orderState=\"charging\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:CHARGE_TIMED_OUT@\"pending\"<-\"charging\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'CHARGE_TIMED_OUT' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"charging\"). Concretely: CHARGE_TIMED_OUT({}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"paymentFailed\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"charge-timed-out\"} (the real machine yields {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'CHARGE_TIMED_OUT' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"charging\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:FRAUD_FAILED@\"awaitingAmend\"<-\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_FAILED' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"fraudCheck\"). Concretely: FRAUD_FAILED({\"reason\":\"suspicious\"}) on {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"rejected\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"suspicious\"} (the real machine yields {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_FAILED' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"fraudCheck\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:FRAUD_FAILED@\"charging\"<-\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_FAILED' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"fraudCheck\"). Concretely: FRAUD_FAILED({\"reason\":\"suspicious\"}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"rejected\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"suspicious\"} (the real machine yields {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_FAILED' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"fraudCheck\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:FRAUD_FAILED@\"fulfilling\"<-\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_FAILED' now ACCEPTED in orderState=\"fulfilling\" (applied as it is in orderState=\"fraudCheck\"). Concretely: FRAUD_FAILED({\"reason\":\"suspicious\"}) on {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} would yield {\"orderState\":\"rejected\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"suspicious\"} (the real machine yields {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_FAILED' now ACCEPTED in orderState=\"fulfilling\" (applied as it is in orderState=\"fraudCheck\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:FRAUD_FAILED@\"pending\"<-\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_FAILED' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"fraudCheck\"). Concretely: FRAUD_FAILED({\"reason\":\"suspicious\"}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"rejected\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"suspicious\"} (the real machine yields {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_FAILED' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"fraudCheck\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:FRAUD_PASSED@\"awaitingAmend\"<-\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_PASSED' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"fraudCheck\"). Concretely: FRAUD_PASSED({\"itemsAvailable\":true}) on {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_PASSED' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"fraudCheck\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:FRAUD_PASSED@\"charging\"<-\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_PASSED' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"fraudCheck\"). Concretely: FRAUD_PASSED({\"itemsAvailable\":false}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_PASSED' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"fraudCheck\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:FRAUD_PASSED@\"pending\"<-\"fraudCheck\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'FRAUD_PASSED' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"fraudCheck\"). Concretely: FRAUD_PASSED({\"itemsAvailable\":true}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"charging\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'FRAUD_PASSED' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"fraudCheck\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:SHIPMENT_COMPLETED@\"charging\"<-\"fulfilling\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'SHIPMENT_COMPLETED' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"fulfilling\"). Concretely: SHIPMENT_COMPLETED({\"childKey\":\"f1\",\"childState\":{\"shipState\":\"delivered\"}}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"completed\",\"fulfillments\":1,\"shipmentsDelivered\":1,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'SHIPMENT_COMPLETED' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"fulfilling\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:SUBMIT@\"awaitingAmend\"<-\"pending\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'SUBMIT' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"pending\"). Concretely: SUBMIT({\"fulfillments\":1,\"totalCents\":2500}) on {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"awaitingAmend\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'SUBMIT' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"pending\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:SUBMIT@\"charging\"<-\"pending\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'SUBMIT' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"pending\"). Concretely: SUBMIT({\"fulfillments\":1,\"totalCents\":2500}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'SUBMIT' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"pending\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:widen:SUBMIT@\"fraudCheck\"<-\"pending\"",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: 'SUBMIT' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"pending\"). Concretely: SUBMIT({\"fulfillments\":2,\"totalCents\":2500}) on {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fraudCheck\",\"fulfillments\":2,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "'SUBMIT' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"pending\")"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:freeze:fulfillments",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: updates to 'fulfillments' are silently dropped (every post keeps the pre value). Concretely: SUBMIT({\"fulfillments\":1,\"totalCents\":2500}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fraudCheck\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "updates to 'fulfillments' are silently dropped (every post keeps the pre value)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:freeze:shipmentsDelivered",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: updates to 'shipmentsDelivered' are silently dropped (every post keeps the pre value). Concretely: SHIPMENT_COMPLETED({\"childKey\":\"f1\",\"childState\":{\"shipState\":\"delivered\"}}) on {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} would yield {\"orderState\":\"completed\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"completed\",\"fulfillments\":1,\"shipmentsDelivered\":1,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "updates to 'shipmentsDelivered' are silently dropped (every post keeps the pre value)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:freeze:shipmentsFailed",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: updates to 'shipmentsFailed' are silently dropped (every post keeps the pre value). Concretely: SHIPMENT_COMPLETED({\"childKey\":\"f1\",\"childState\":{\"shipState\":\"cancelledShipment\"}}) on {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} would yield {\"orderState\":\"partiallyDelivered\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"partiallyDelivered\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":1,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "updates to 'shipmentsFailed' are silently dropped (every post keeps the pre value)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:freeze:totalCents",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: updates to 'totalCents' are silently dropped (every post keeps the pre value). Concretely: SUBMIT({\"fulfillments\":1,\"totalCents\":2500}) on {\"orderState\":\"pending\",\"fulfillments\":0,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fraudCheck\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "updates to 'totalCents' are silently dropped (every post keeps the pre value)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "mutation-survivor:freeze:txId",
+      "source": "mutation-survivor",
+      "target": "transition",
+      "question": "NO confirmed invariant constrains this behavior change: updates to 'txId' are silently dropped (every post keeps the pre value). Concretely: CHARGE_SUCCEEDED({\"txId\":\"tx-1\"}) on {\"orderState\":\"charging\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} would yield {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\",\"cancelReason\":\"\"} (the real machine yields {\"orderState\":\"fulfilling\",\"fulfillments\":1,\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\",\"cancelReason\":\"\"}). Which rule should forbid it? Supply one (disposition modify, then confirm) — or abandon it as genuinely out-of-intent.",
+      "evidence": {
+        "from": "mutation-survivor",
+        "quote": "updates to 'txId' are silently dropped (every post keeps the pre value)"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [],
+      "precheck": {
+        "verdict": "NOT-RUN",
+        "note": "no predicate yet — supply the rule via `record --disposition modify`, or abandon as out-of-intent",
+        "date": "2026-07-18T13:41:09.039Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-07-18T13:41:09.039Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "NOT-RUN",
+          "date": "2026-07-18T13:41:09.039Z"
+        }
+      ]
+    },
+    {
+      "id": "designer:stale-completions-are-noops",
+      "source": "designer",
+      "target": "transition",
+      "question": "Completions/timers arriving in any state other than the one awaiting them must leave the state completely unchanged (at-least-once delivery).",
+      "evidence": null,
+      "status": "confirmed",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "js",
+            "target": "transition",
+            "js": "(pre, action, data, post) => { const AW = { FRAUD_PASSED: 'fraudCheck', FRAUD_FAILED: 'fraudCheck', CHARGE_SUCCEEDED: 'charging', CHARGE_FAILED: 'charging', CHARGE_TIMED_OUT: 'charging', AMEND_WINDOW_EXPIRED: 'awaitingAmend', SHIPMENT_COMPLETED: 'fulfilling' }; return !(action in AW) || pre.orderState === AW[action] || ['orderState','fulfillments','shipmentsDelivered','shipmentsFailed','totalCents','txId','cancelReason'].every((k) => pre[k] === post[k]); }"
+          },
+          "js": "(pre, action, data, post) => { const AW = { FRAUD_PASSED: 'fraudCheck', FRAUD_FAILED: 'fraudCheck', CHARGE_SUCCEEDED: 'charging', CHARGE_FAILED: 'charging', CHARGE_TIMED_OUT: 'charging', AMEND_WINDOW_EXPIRED: 'awaitingAmend', SHIPMENT_COMPLETED: 'fulfilling' }; return !(action in AW) || pre.orderState === AW[action] || ['orderState','fulfillments','shipmentsDelivered','shipmentsFailed','totalCents','txId','cancelReason'].every((k) => pre[k] === post[k]); }",
+          "date": "2026-07-18T13:42:35.881Z",
+          "author": "agent:claude-fable-5"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 33,
+        "date": "2026-07-18T13:42:35.881Z"
+      },
+      "events": [
+        {
+          "type": "added",
+          "date": "2026-07-18T13:42:35.881Z",
+          "author": "agent:claude-fable-5"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-07-18T13:42:35.881Z"
+        },
+        {
+          "type": "disposition",
+          "disposition": "confirm",
+          "date": "2026-07-18T13:42:38.032Z",
+          "author": "jdubray"
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "milestone": "M2",
+    "total": 118,
+    "dropped": 0,
+    "equivalent": 5,
+    "harnessKilled": 0,
+    "distinct": 113,
+    "killed": 88,
+    "survivors": [
+      {
+        "id": "drop:AMEND@\"awaitingAmend\"",
+        "describe": "'AMEND' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "AMEND",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 1900
+          },
+          "mutantPost": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "drop:AMEND_WINDOW_EXPIRED@\"awaitingAmend\"",
+        "describe": "'AMEND_WINDOW_EXPIRED' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "AMEND_WINDOW_EXPIRED",
+          "data": {},
+          "mutantPost": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "cancelled",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "amend-window-expired"
+          }
+        }
+      },
+      {
+        "id": "drop:CANCEL@\"awaitingAmend\"",
+        "describe": "'CANCEL' in orderState=\"awaitingAmend\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "CANCEL",
+          "data": {
+            "reason": "customer-request"
+          },
+          "mutantPost": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "cancelled",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "customer-request"
+          }
+        }
+      },
+      {
+        "id": "drop:CANCEL@\"fraudCheck\"",
+        "describe": "'CANCEL' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "CANCEL",
+          "data": {
+            "reason": "customer-request"
+          },
+          "mutantPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "cancelled",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "customer-request"
+          }
+        }
+      },
+      {
+        "id": "drop:CANCEL@\"pending\"",
+        "describe": "'CANCEL' in orderState=\"pending\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "CANCEL",
+          "data": {
+            "reason": "customer-request"
+          },
+          "mutantPost": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "cancelled",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": "customer-request"
+          }
+        }
+      },
+      {
+        "id": "drop:CHARGE_FAILED@\"charging\"",
+        "describe": "'CHARGE_FAILED' in orderState=\"charging\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "CHARGE_FAILED",
+          "data": {
+            "reason": "declined"
+          },
+          "mutantPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "paymentFailed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "declined"
+          }
+        }
+      },
+      {
+        "id": "drop:CHARGE_SUCCEEDED@\"charging\"",
+        "describe": "'CHARGE_SUCCEEDED' in orderState=\"charging\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "CHARGE_SUCCEEDED",
+          "data": {
+            "txId": "tx-1"
+          },
+          "mutantPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "drop:CHARGE_TIMED_OUT@\"charging\"",
+        "describe": "'CHARGE_TIMED_OUT' in orderState=\"charging\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "CHARGE_TIMED_OUT",
+          "data": {},
+          "mutantPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "paymentFailed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "charge-timed-out"
+          }
+        }
+      },
+      {
+        "id": "drop:FRAUD_FAILED@\"fraudCheck\"",
+        "describe": "'FRAUD_FAILED' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "FRAUD_FAILED",
+          "data": {
+            "reason": "suspicious"
+          },
+          "mutantPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "rejected",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "suspicious"
+          }
+        }
+      },
+      {
+        "id": "drop:FRAUD_PASSED@\"fraudCheck\"",
+        "describe": "'FRAUD_PASSED' in orderState=\"fraudCheck\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "FRAUD_PASSED",
+          "data": {
+            "itemsAvailable": true
+          },
+          "mutantPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "drop:SHIPMENT_COMPLETED@\"fulfilling\"",
+        "describe": "'SHIPMENT_COMPLETED' in orderState=\"fulfilling\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          },
+          "action": "SHIPMENT_COMPLETED",
+          "data": {
+            "childKey": "f1",
+            "childState": {
+              "shipState": "delivered"
+            }
+          },
+          "mutantPost": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "completed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 1,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "drop:SUBMIT@\"pending\"",
+        "describe": "'SUBMIT' in orderState=\"pending\" no longer does anything (guard negated to a reject)",
+        "witness": {
+          "pre": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "SUBMIT",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 2500
+          },
+          "mutantPost": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "retarget:CHARGE_SUCCEEDED@\"charging\"->\"awaitingAmend\"",
+        "describe": "'CHARGE_SUCCEEDED' in orderState=\"charging\" lands in orderState=\"awaitingAmend\" instead",
+        "witness": {
+          "pre": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "CHARGE_SUCCEEDED",
+          "data": {
+            "txId": "tx-1"
+          },
+          "mutantPost": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "retarget:SUBMIT@\"pending\"->\"awaitingAmend\"",
+        "describe": "'SUBMIT' in orderState=\"pending\" lands in orderState=\"awaitingAmend\" instead",
+        "witness": {
+          "pre": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "SUBMIT",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 2500
+          },
+          "mutantPost": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "widen:AMEND@\"charging\"<-\"awaitingAmend\"",
+        "describe": "'AMEND' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"awaitingAmend\")",
+        "witness": {
+          "pre": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "AMEND",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 1900
+          },
+          "mutantPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "widen:AMEND@\"fraudCheck\"<-\"awaitingAmend\"",
+        "describe": "'AMEND' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"awaitingAmend\")",
+        "witness": {
+          "pre": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "AMEND",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 1900
+          },
+          "mutantPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "widen:AMEND@\"pending\"<-\"awaitingAmend\"",
+        "describe": "'AMEND' now ACCEPTED in orderState=\"pending\" (applied as it is in orderState=\"awaitingAmend\")",
+        "witness": {
+          "pre": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "AMEND",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 1900
+          },
+          "mutantPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "widen:SUBMIT@\"awaitingAmend\"<-\"pending\"",
+        "describe": "'SUBMIT' now ACCEPTED in orderState=\"awaitingAmend\" (applied as it is in orderState=\"pending\")",
+        "witness": {
+          "pre": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "SUBMIT",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 2500
+          },
+          "mutantPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "widen:SUBMIT@\"charging\"<-\"pending\"",
+        "describe": "'SUBMIT' now ACCEPTED in orderState=\"charging\" (applied as it is in orderState=\"pending\")",
+        "witness": {
+          "pre": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "SUBMIT",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 2500
+          },
+          "mutantPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "widen:SUBMIT@\"fraudCheck\"<-\"pending\"",
+        "describe": "'SUBMIT' now ACCEPTED in orderState=\"fraudCheck\" (applied as it is in orderState=\"pending\")",
+        "witness": {
+          "pre": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "SUBMIT",
+          "data": {
+            "fulfillments": 2,
+            "totalCents": 2500
+          },
+          "mutantPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "freeze:fulfillments",
+        "describe": "updates to 'fulfillments' are silently dropped (every post keeps the pre value)",
+        "witness": {
+          "pre": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "SUBMIT",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 2500
+          },
+          "mutantPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "freeze:shipmentsDelivered",
+        "describe": "updates to 'shipmentsDelivered' are silently dropped (every post keeps the pre value)",
+        "witness": {
+          "pre": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          },
+          "action": "SHIPMENT_COMPLETED",
+          "data": {
+            "childKey": "f1",
+            "childState": {
+              "shipState": "delivered"
+            }
+          },
+          "mutantPost": {
+            "orderState": "completed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "completed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 1,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "freeze:shipmentsFailed",
+        "describe": "updates to 'shipmentsFailed' are silently dropped (every post keeps the pre value)",
+        "witness": {
+          "pre": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          },
+          "action": "SHIPMENT_COMPLETED",
+          "data": {
+            "childKey": "f1",
+            "childState": {
+              "shipState": "cancelledShipment"
+            }
+          },
+          "mutantPost": {
+            "orderState": "partiallyDelivered",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "partiallyDelivered",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 1,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "freeze:totalCents",
+        "describe": "updates to 'totalCents' are silently dropped (every post keeps the pre value)",
+        "witness": {
+          "pre": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "SUBMIT",
+          "data": {
+            "fulfillments": 1,
+            "totalCents": 2500
+          },
+          "mutantPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          }
+        }
+      },
+      {
+        "id": "freeze:txId",
+        "describe": "updates to 'txId' are silently dropped (every post keeps the pre value)",
+        "witness": {
+          "pre": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "action": "CHARGE_SUCCEEDED",
+          "data": {
+            "txId": "tx-1"
+          },
+          "mutantPost": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": ""
+          },
+          "originalPost": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": ""
+          }
+        }
+      }
+    ],
+    "clusters": [
+      [
+        "range:fulfillments",
+        "range:shipmentsDelivered",
+        "range:shipmentsFailed",
+        "nonneg:totalCents",
+        "set-once:txId"
+      ]
+    ],
+    "notes": [],
+    "ledgerOracleHash": "ed1434a76e717bb1",
+    "extraOracleCount": 0,
+    "date": "2026-07-18T13:42:39.783Z"
+  }
+}
