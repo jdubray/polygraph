@@ -60,8 +60,11 @@ per report): outbox effects recorded not executed, timers not fired.
 All four milestones are now landed. Remaining recorded follow-ups: joint
 mid-flight seeding (polyrun joint-export), grandchildren, the shared
 delivery ladder (deliver vs stimulusOutcome), the shared seeded-BFS driver,
-and cascadeStep()/classifyStep() extraction — each becomes less urgent now
-that the parity walk checks the mirror structurally on every simulate run.
+and cascadeStep()/classifyStep() extraction. The parity walk REDUCES the
+mirror-drift risk these last address — it asserts model≡kernel at every
+step of every seeded schedule — but it is SAMPLED coverage, not structural:
+a divergent kernel branch outside the schedules stays invisible, so the
+extraction follow-ups remain the real fix, de-risked rather than obsoleted.
 Addresses: the reviewer comment that "real fleets fail in the interleavings" — the
 parent×child product model check declared open in `docs/polyrun-spec.md` FR-8.3,
 `docs/VERSIONING.md` ("What remains genuinely open"), `polyrun/README.md` scope
@@ -204,6 +207,13 @@ Convention: review-per-milestone, as with polyvers M0–M3.
    invariant counterexample, same UX as the semantic gate.
 
 ### CP-M4 — DST harness (falsification beyond the model's bounds)
+**LANDED — shipped as `polyrun/src/simulate.mjs` + `polyrun simulate`, NOT
+by growing soak.test.mjs (see the status section's recorded deviation: the
+soak stays the nondeterministic worker/timer storm; the simulator is the
+deterministic, seed-replayable half). The `cascadeStep()` mention below
+describes a design that shipped differently: parity is checked by stepping
+`productStep` in lockstep with the real kernel, not by a shared extraction.**
+Original sketch, kept for the record:
 1. Grow `polyrun/test/soak.test.mjs` into a seeded deterministic fleet
    simulator: in-memory store, injected clock, scripted+randomized stimulus
    schedules, store fault injection; assert the same `invariants.compose.mjs`
@@ -220,6 +230,7 @@ Convention: review-per-milestone, as with polyvers M0–M3.
 - Nothing here touches polynv.
 
 ## 5. Sequencing / effort
+(Historical — all four milestones are landed; see the status section.)
 CP-M0 is small (docs + fixture) and de-risks everything. CP-M1 is the
 substantial one — the `cascadeStep()` extraction is the only kernel-adjacent
 surgery and doubles as the recorded shared-`classifyStep()` follow-up. CP-M2/M3

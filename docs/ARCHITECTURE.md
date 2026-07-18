@@ -195,9 +195,15 @@ flowchart TB
 - **The verification flywheel**: `polyrun check-effects` explores the
   machine ∘ mapper composition against emission invariants ("no path emits
   chargeCard twice", "spawns exactly N children") reproducing the kernel's
-  poison rules statically; `polyrun deploy` gates releases over live state;
-  `polyrun audit` replays the production journal through the module and
-  reports drift, version-aware.
+  poison rules statically; `polyrun check-product` explores the JOINT
+  parent×child state space against cross-machine invariants ("no shipment
+  delivers under a cancelled order") — the composition class no
+  single-machine check can see; `polyrun simulate` drives the same fleet
+  through the REAL kernel on seeded schedules (store faults, duplicate
+  deliveries, stale actions) with the model stepped in lockstep, so
+  model↔kernel drift surfaces as a finding; `polyrun deploy` gates releases
+  over live state; `polyrun audit` replays the production journal through
+  the module and reports drift, version-aware.
 
 ## Engine 4 — polyvers (evolve)
 
@@ -283,8 +289,9 @@ anchoring: `docs/polynv-plan.md`; worked example + calibration:
 | data abstraction (declared domain vs real data) | **human judgment** — someone picks the representative values; no gate measures whether they exercise every boundary the code branches on |
 | invariant-set strength | **partially measured**: polynv's mutation adequacy grade (kill ratio over behaviorally distinct machine mutants, equivalents discarded by graph comparison, disclosed in the compat-report) — with its blind spot stated: behavior-REMOVING mutants largely evade safety invariants |
 | machine ∘ mapper composition | check-effects path exploration incl. emissions, spawns, timer validity |
+| parent×child composition (joint interleavings) | `polyrun check-product` exhaustive joint-state check vs cross-machine invariants (abstraction/PCT for scale); `polyvers product` per rollout-window version pairing; `polyrun simulate` falsifies the same invariants against the real kernel — open: grandchildren, joint mid-flight seeding |
 | version compatibility | polyvers lanes/gates over fleet snapshots — exactly as good as the stated invariants and the corpus tier (both disclosed in the report) |
-| kernel + stores + workers | conventional: fault-injection tests, soak, adversarial review — small, fixed, logic-free by design |
+| kernel + stores + workers | `polyrun simulate` — seeded DST over the real kernel: model-in-lockstep parity per dispatch, injected store faults + at-least-once redelivery, duplicate/stale deliveries, continuous journal audit (sampled schedules, not exhaustive) — plus the nondeterministic soak, fault-injection tests, and adversarial review; small, fixed, logic-free by design |
 | effect handlers | **yours**: must be idempotent under the provided key (same division as Temporal activities) |
 | contract & invariants | **human judgment** — the one thing no tool derives; a converged run against wrong intent proves nothing. polynv makes the judgment cheaper to exercise (harvested, pre-checked candidates; consequence-anchored questions; an attributed ledger) — the designer's disposition remains the gate |
 

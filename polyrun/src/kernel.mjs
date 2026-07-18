@@ -27,12 +27,12 @@ import { loadSpec, stable } from '../../scripts/load-spec.mjs';
 import { Store } from './store.mjs';
 import { resolveFireAt } from './duration.mjs';
 
-const CREATE_ACTION = '$create';
-// MAX_CASCADE_DEPTH and sanitizeReplacer live in constants.mjs (store-free)
-// so check-product.mjs and polyvers can share them without importing the
-// kernel's sqlite-backed module graph; re-exported here for kernel consumers.
-export { MAX_CASCADE_DEPTH, sanitizeReplacer } from './constants.mjs';
-import { MAX_CASCADE_DEPTH, sanitizeReplacer } from './constants.mjs';
+// CREATE_ACTION, MAX_CASCADE_DEPTH, and sanitizeReplacer live in
+// constants.mjs (store-free) so check-product.mjs, simulate.mjs, and
+// polyvers can share them without importing the kernel's sqlite-backed
+// module graph; re-exported here for kernel consumers.
+export { CREATE_ACTION, MAX_CASCADE_DEPTH, sanitizeReplacer } from './constants.mjs';
+import { CREATE_ACTION, MAX_CASCADE_DEPTH, sanitizeReplacer } from './constants.mjs';
 
 function isSamV2Module(mod) {
   return !!mod

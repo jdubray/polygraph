@@ -276,12 +276,20 @@ Two run modes, both byte-reproducible from the seed:
 
 - **Parity runs** step the checker's model in LOCKSTEP with the kernel:
   after every dispatch, the durable joint state must equal the model's
-  `productStep` result exactly, and a kernel poison must coincide with a
-  model defect. This is the STRUCTURAL kernel-parity check — the
-  counterexample-replay tests sample parity at a few points; the parity
-  walk asserts it at every step of every seeded schedule, so drift between
-  `_dispatchInTxn` and its mirror surfaces as a `parity-divergence` finding
-  naming the exact stimulus.
+  `productStep` result exactly, a kernel poison must coincide with a model
+  defect, and the model's doctrine findings (unhandled deliveries, unnamed
+  rejects, childKey collisions) are recorded rather than discarded — a
+  fleet `check-product` fails must not simulate clean. The counterexample-
+  replay tests sample parity at a few points; the parity walk asserts it at
+  every step of every seeded schedule, so drift between `_dispatchInTxn`
+  and its mirror surfaces as a `parity-divergence` finding naming the exact
+  stimulus. This is broad SAMPLED coverage, not a structural guarantee: a
+  divergent kernel branch no seeded schedule reaches stays invisible, which
+  is why the shared-ladder extraction remains a recorded follow-up.
+  (A childKey collision ends the parity walk deliberately — the kernel
+  creates a second instance behind the key while the model keeps the first,
+  so the joint spaces diverge by design; the doctrine finding is the
+  verdict, not a `parity-divergence` mislabel.)
 - **Chaos runs** add what the model deliberately excludes: duplicate
   actionIds (must hit the dedupe path with no state change), deliveries to
   terminal instances (must land as the FR-1.2 status-reject), and store
@@ -290,11 +298,20 @@ Two run modes, both byte-reproducible from the seed:
   cleanly). After every run the journals audit against the soak invariants:
   dense seqs, chained accepted steps, snapshot = last accepted post.
 
-Boundary, disclosed in every report: outbox effects are recorded but not
-executed and timers are not fired (no worker loop) — the actions their
-completions would deliver are already in the external-stimulus superset
-(§3/§4), the same boundary the checker draws. The nondeterministic
-worker/timer surface remains the soak test's job (`polyrun/test/
-soak.test.mjs`, the Jepsen-style storm). A simulator falsifies; a clean run
-is evidence, never a proof — pair it with `polyrun check-product`. Every
-finding carries `{seed, run, step, trail}` for exact reproduction.
+The cascades handed to transition invariants are filtered to the model's
+shape (the kernel's `$create` journal rows are excluded), so the same
+predicate sees the same input in both engines.
+
+Boundary, disclosed in every report and NAMING the declared effect kinds
+that go unexercised: outbox effects are recorded but not executed and
+timers are not fired (no worker loop) — the actions their completions would
+deliver are already in the external-stimulus superset (§3/§4), the same
+boundary the checker draws. The nondeterministic worker/timer surface
+remains the soak test's job (`polyrun/test/soak.test.mjs`, the Jepsen-style
+storm). A simulator falsifies; a clean run is evidence, never a proof —
+pair it with `polyrun check-product`. Every finding carries
+`{seed, run, step, trail}` for exact reproduction, where the trail includes
+chaos moves (duplicate redeliveries, stale-to-terminal deliveries), not
+just scheduled stimuli. The chaos rates (`--dup-rate`, `--stale-rate`,
+`--fault-rate`) are flags, not constants: a fault-heavy bisection campaign
+never requires editing source, which would silently break seed replay.

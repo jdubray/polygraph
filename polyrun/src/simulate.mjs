@@ -8,38 +8,55 @@
 // - the SIMULATOR drives the real kernel (in-memory store, injected clock,
 //   seeded schedules) and, on parity runs, steps the checker's model in
 //   LOCKSTEP — after every dispatch the durable joint state must equal the
-//   model's joint state exactly. Any divergence is a bug in one of them:
-//   this is the structural kernel-parity check the counterexample-replay
-//   tests only sample.
+//   model's joint state exactly, and the model's doctrine findings
+//   (unhandled deliveries, unnamed rejects, childKey collisions) are
+//   recorded, never discarded. Any divergence is a bug in the kernel or the
+//   mirror: a per-step check the counterexample-replay tests only sample.
+//   (Sampled coverage, not structural: the walk asserts parity on every
+//   step of every SEEDED schedule — paths outside the schedules are not
+//   visited.)
 //
 // Chaos runs add what the model deliberately does not cover: duplicate
 // actionIds (the dedupe path), deliveries to terminal instances, and store
 // faults injected mid-commit (the store's fault hook) followed by
 // at-least-once redelivery — after every step the durable journal must
-// still audit clean (dense seqs, chained accepted steps, snapshot = last
-// accepted post; the soak test's invariants, evaluated continuously).
-// Cross-machine invariants (invariants.compose.mjs) are asserted on the
-// reconstructed joint state after every top-level dispatch in both modes.
+// still audit clean (dense seqs, unique actionIds, chained accepted steps,
+// snapshot = last accepted post; the soak test's invariants). Cross-machine
+// invariants (invariants.compose.mjs) are asserted on the reconstructed
+// joint state after every top-level dispatch in both modes; the cascades
+// handed to transition invariants are filtered to the model's shape
+// (creation rows excluded), so the same predicate sees the same input in
+// both engines.
 //
 // Determinism: mulberry32 seed, injected clock, no workers (see boundary
 // below), no Math.random/Date.now — the same seed replays byte-identically,
-// and every finding carries {seed, run, step, trail} for exact reproduction.
+// and every finding carries {seed, run, step, trail} for exact reproduction
+// (the trail includes chaos moves — duplicates and stale deliveries — not
+// just scheduled stimuli). A run is created per seed schedule with its own
+// in-memory store: isolation by construction, at the deliberate cost of
+// per-run module loads (determinism over speed).
 //
-// Honest boundary (disclosed in every report): outbox effects are recorded
-// but not executed and timers are not fired (no worker loop) — the actions
-// their completions would deliver are already in the external-stimulus
-// superset, the same boundary the model checker draws (semantics §3/§4).
-// A simulator FALSIFIES; no findings is evidence, never a proof.
+// Honest boundary (disclosed in every report, with the DECLARED effect
+// kinds named): outbox effects are recorded but not executed and timers are
+// not fired (no worker loop) — the actions their completions would deliver
+// are already in the external-stimulus superset, the same boundary the
+// model checker draws (semantics §3/§4). A simulator FALSIFIES; no findings
+// is evidence, never a proof.
 'use strict';
 
 import { createRuntime, PoisonedError } from './index.mjs';
+import { CREATE_ACTION } from './constants.mjs';
 import { stable } from '../../scripts/load-spec.mjs';
 import { loadProduct, productStep, alphabetFor, mulberry32 } from './check-product.mjs';
 
-/** Reconstruct the model-shaped joint state from the durable store. */
-async function jointFromRuntime(rt, parentId, parentMachineId) {
+/** One durable-fleet snapshot: the model-shaped joint state plus the
+ *  instance-id maps every consumer of this step needs (stimulus routing,
+ *  cascade target naming) — ONE getState + ONE listChildren per call. */
+async function snapshotFleet(rt, parentId, parentMachineId) {
   const inst = await rt.getState(parentId);
   const children = {};
+  const keyToId = new Map();
+  const idToKey = new Map([[parentId, 'parent']]);
   for (const row of await rt.store.listChildren(parentId)) {
     children[row.child_key] = {
       machineId: row.machine_id,
@@ -48,16 +65,51 @@ async function jointFromRuntime(rt, parentId, parentMachineId) {
       onComplete: row.on_complete ?? null,
       onParentTerminal: row.on_parent_terminal ?? null,
     };
+    keyToId.set(row.child_key, row.instance_id);
+    idToKey.set(row.instance_id, row.child_key);
   }
-  return { parent: { machineId: parentMachineId, state: inst.state, status: inst.status }, children };
+  return {
+    joint: { parent: { machineId: parentMachineId, state: inst.state, status: inst.status }, children },
+    keyToId,
+    idToKey,
+  };
+}
+
+/** End-of-run journal audit — the soak test's durable-state invariants
+ *  (soak.test.mjs), including actionId uniqueness (the property the chaos
+ *  duplicate branch exists to stress). */
+async function auditJournals(rt, parentId, record, where) {
+  const ids = [parentId, ...(await rt.store.listChildren(parentId)).map((r) => r.instance_id)];
+  for (const id of ids) {
+    const journal = await rt.getJournal(id);
+    const inst = await rt.getState(id);
+    let state = journal[0]?.post;
+    let chainOk = true;
+    journal.forEach((row, i) => { if (row.seq !== i) { chainOk = false; record('journal', `${id}: seq gap at ${i}`, where()); } });
+    const seenIds = new Set();
+    for (const row of journal) {
+      if (seenIds.has(row.action_id)) record('journal', `${id}: duplicate actionId '${row.action_id}' journaled twice — the dedupe path executed a redelivery`, where());
+      seenIds.add(row.action_id);
+    }
+    for (const row of journal.slice(1)) {
+      if (stable(row.pre) !== stable(state)) { chainOk = false; record('journal', `${id}#${row.seq}: pre does not chain`, where()); break; }
+      if (row.step_kind === 'accepted') state = row.post;
+      else if (stable(row.post) !== stable(row.pre)) { chainOk = false; record('journal', `${id}#${row.seq}: a non-accepted step mutated state`, where()); break; }
+    }
+    if (chainOk && journal.length && stable(inst.state) !== stable(state)) {
+      record('journal', `${id}: snapshot diverged from the journal's last accepted post`, where());
+    }
+  }
 }
 
 /**
  * runFleetSim({ parent, children, invariants, parityRuns, chaosRuns, steps,
- *               seed })
+ *               seed, dupRate, staleRate, faultRate })
  * parent/children/invariants: the same artifact-path options checkProduct
  * takes (abstraction options are not accepted — the simulator drives real
- * machines only).
+ * machines only). The chaos rates are seeded-schedule tunables (0..1);
+ * changing any input changes the schedule, so findings replay only against
+ * the same {seed, rates, runs, steps}.
  * Returns { simulated: true, findings, stats, notes, parityRuns, chaosRuns,
  *           steps, seed } — findings is the verdict; empty = nothing
  * falsified (not a proof).
@@ -66,12 +118,19 @@ export async function runFleetSim(opts) {
   if (opts.abstractChildren?.length) throw new Error('runFleetSim drives real machines only — abstraction is a model-checker device (use polyrun check-product)');
   const { parentDef, machineDefs, mapper, declaredKinds, stateInv, transInv, notes, initJoint } = await loadProduct(opts);
   const ctx = { parentDef, machineDefs, mapper, declaredKinds };
+  const alphaMemo = new Map();
   const parityRuns = opts.parityRuns ?? 25;
   const chaosRuns = opts.chaosRuns ?? 25;
   const steps = opts.steps ?? 20;
   const seed = opts.seed ?? 1;
+  const dupRate = opts.dupRate ?? 0.2;
+  const staleRate = opts.staleRate ?? 0.15;
+  const faultRate = opts.faultRate ?? 0.15;
   if (parityRuns < 0 || chaosRuns < 0 || steps < 1 || parityRuns + chaosRuns < 1) {
     throw new Error(`invalid simulation bounds: parityRuns=${parityRuns} chaosRuns=${chaosRuns} steps=${steps}`);
+  }
+  for (const [name, rate] of [['dupRate', dupRate], ['staleRate', staleRate], ['faultRate', faultRate]]) {
+    if (!(rate >= 0 && rate <= 1)) throw new Error(`invalid simulation bounds: ${name}=${rate} must be within 0..1`);
   }
   const rng = mulberry32(seed);
 
@@ -83,7 +142,7 @@ export async function runFleetSim(opts) {
     seen.add(k);
     findings.push({ kind, detail, ...where });
   };
-  const stats = { dispatches: 0, deduped: 0, duplicatesSent: 0, staleToTerminal: 0, faultsInjected: 0, poisons: 0 };
+  const stats = { dispatches: 0, deduped: 0, duplicatesSent: 0, staleToTerminal: 0, faultsArmed: 0, faultsFired: 0, poisons: 0 };
 
   const machinesConfig = [
     { machineId: opts.parent.machineId, module: opts.parent.module, contract: opts.parent.contract, effects: { mapper: opts.parent.mapper, manifest: opts.parent.manifest } },
@@ -100,65 +159,56 @@ export async function runFleetSim(opts) {
       const parentId = `sim-${mode}-${runIx}`;
       await rt.create(opts.parent.machineId, parentId);
       let modelJoint = initJoint();
+      let fleet = await snapshotFleet(rt, parentId, opts.parent.machineId);
       const trail = [];
-      // Per-dispatch cascade capture: every journaled sub-step emits one
-      // 'step' event post-commit — sliced per dispatch for the transition
-      // invariants (the same {target, action, stepKind} shape the model's
-      // cascade carries).
+      let lastStep = 0;
       const events = [];
       rt.events.on('step', (e) => events.push(e));
-      const keyOf = async (instanceId) => {
-        if (instanceId === parentId) return 'parent';
-        for (const row of await rt.store.listChildren(parentId)) {
-          if (row.instance_id === instanceId) return row.child_key;
-        }
-        return instanceId; // unknown — surfaces verbatim in the finding
-      };
       const where = (step, extra = {}) => ({ mode, run: runIx, step, seed, trail: [...trail], ...extra });
-      const sent = []; // {instanceId, action, data, actionId} — duplicate pool
+      const sent = []; // {target, instanceId, action, data, actionId} — duplicate pool
 
       for (let step = 1; step <= steps; step++) {
+        lastStep = step;
         simNow += 1;
-        const runtimeJoint = await jointFromRuntime(rt, parentId, opts.parent.machineId);
-        const preJoint = mode === 'parity' ? modelJoint : runtimeJoint;
-        const stimuli = alphabetFor(preJoint, parentDef, machineDefs);
+        const preJoint = mode === 'parity' ? modelJoint : fleet.joint;
+        const stimuli = alphabetFor(preJoint, parentDef, machineDefs, { memo: alphaMemo });
         if (stimuli.length === 0) break; // fleet fully terminal — run done
 
         // ---- chaos-only moves: duplicates, stale-to-terminal, faults ----
-        if (mode === 'chaos' && sent.length && rng() < 0.2) {
+        if (mode === 'chaos' && sent.length && rng() < dupRate) {
           const dup = sent[Math.floor(rng() * sent.length)];
           stats.duplicatesSent += 1;
-          const before = await jointFromRuntime(rt, parentId, opts.parent.machineId);
+          // The move is part of the reproduction trail, like any stimulus.
+          trail.push({ target: dup.target, action: dup.action, data: dup.data, move: 'duplicate-redelivery' });
+          const before = fleet.joint;
           const res = await rt.dispatch(dup.instanceId, dup.action, dup.data, dup.actionId);
-          const after = await jointFromRuntime(rt, parentId, opts.parent.machineId);
+          fleet = await snapshotFleet(rt, parentId, opts.parent.machineId);
           if (res.deduped) stats.deduped += 1;
           else record('dedupe', `redelivered actionId '${dup.actionId}' was EXECUTED, not deduped`, where(step));
-          if (stable(before) !== stable(after)) record('dedupe', `redelivered actionId '${dup.actionId}' changed durable state`, where(step));
+          if (stable(before) !== stable(fleet.joint)) record('dedupe', `redelivered actionId '${dup.actionId}' changed durable state`, where(step));
           continue;
         }
-        if (mode === 'chaos' && rng() < 0.15) {
-          const terminals = Object.entries(runtimeJoint.children).filter(([, c]) => c.status === 'terminal');
+        if (mode === 'chaos' && rng() < staleRate) {
+          const terminals = Object.entries(fleet.joint.children).filter(([, c]) => c.status === 'terminal');
           if (terminals.length) {
             const [key, child] = terminals[Math.floor(rng() * terminals.length)];
             const def = machineDefs.get(child.machineId);
             const s = def.steps[Math.floor(rng() * def.steps.length)];
-            const childRow = await rt.store.findChild(parentId, key);
+            trail.push({ target: key, action: s.action, data: s.data, move: 'stale-to-terminal' });
             stats.staleToTerminal += 1;
             stats.dispatches += 1;
-            const res = await rt.dispatch(childRow.instance_id, s.action, s.data, `sim:${mode}:${runIx}:${step}:stale`);
+            const res = await rt.dispatch(fleet.keyToId.get(key), s.action, s.data, `sim:${mode}:${runIx}:${step}:stale`);
             if (res.stepKind !== 'rejected' || res.rejectReason !== 'terminal') {
               record('doctrine', `delivery to a terminal instance was '${res.stepKind}' (${res.rejectReason ?? 'no reason'}), not the FR-1.2 status-reject`, where(step));
             }
-            continue;
+            continue; // a status-reject cannot change the joint state
           }
         }
 
         // ---- the scheduled stimulus ----
         const stim = stimuli[Math.floor(rng() * stimuli.length)];
         trail.push(stim);
-        const instanceId = stim.target === 'parent'
-          ? parentId
-          : (await rt.store.findChild(parentId, stim.target))?.instance_id;
+        const instanceId = stim.target === 'parent' ? parentId : fleet.keyToId.get(stim.target);
         if (!instanceId) {
           record('parity-divergence', `model has child '${stim.target}' but the kernel has no such child`, where(step));
           break;
@@ -167,12 +217,20 @@ export async function runFleetSim(opts) {
 
         // Chaos: inject a store fault mid-commit, then redeliver (the
         // at-least-once crash-retry path). The txn must roll back cleanly.
-        let injectFault = mode === 'chaos' && rng() < 0.15;
+        // The injected error is TAGGED — only a tagged error is treated as
+        // the fault; anything else thrown while a fault is armed is a real
+        // finding, never silently retried away.
+        const injectFault = mode === 'chaos' && rng() < faultRate;
         if (injectFault) {
           const point = FAULT_POINTS[Math.floor(rng() * FAULT_POINTS.length)];
-          stats.faultsInjected += 1;
+          stats.faultsArmed += 1;
           let armed = true;
-          rt.store.fault = (p) => { if (armed && p === point) { armed = false; throw new Error(`injected fault at ${point}`); } };
+          rt.store.fault = (p) => {
+            if (armed && p === point) {
+              armed = false;
+              throw Object.assign(new Error(`injected fault at ${point}`), { simInjected: true });
+            }
+          };
         }
 
         const eventsBefore = events.length;
@@ -184,34 +242,56 @@ export async function runFleetSim(opts) {
           rt.store.fault = null;
           if (err instanceof PoisonedError) {
             stats.poisons += 1;
-            const modelDefect = mode === 'parity'
-              ? productStep(modelJoint, stim, ctx).defect
-              : null;
-            if (mode === 'parity' && !modelDefect) {
-              record('parity-divergence', `kernel POISONED on [${stim.target}] ${stim.action} but the model sees no defect: ${err.message}`, where(step));
-            } else if (mode === 'chaos') {
+            if (mode === 'parity') {
+              const m = productStep(modelJoint, stim, ctx);
+              for (const d of m.findings) record(`doctrine:${d.kind}`, d.message, where(step));
+              if (!m.defect) record('parity-divergence', `kernel POISONED on [${stim.target}] ${stim.action} but the model sees no defect: ${err.message}`, where(step));
+            } else {
               record('poisoned', `kernel poisoned on [${stim.target}] ${stim.action}: ${err.message}`, where(step));
             }
             break; // the instance is halted — end the run
           }
-          if (injectFault) {
+          if (injectFault && err.simInjected === true) {
             // The crash-retry path: the txn rolled back; redeliver with the
-            // SAME actionId (at-least-once). It must succeed cleanly now.
-            stats.dispatches += 1;
-            res = await rt.dispatch(instanceId, stim.action, stim.data, actionId);
+            // SAME actionId (at-least-once). It must succeed cleanly now —
+            // a throwing retry is a finding with full context, not a crash.
+            stats.faultsFired += 1;
+            try {
+              stats.dispatches += 1;
+              res = await rt.dispatch(instanceId, stim.action, stim.data, actionId);
+            } catch (err2) {
+              record('crash-retry', `redelivery after an injected fault threw: ${err2 && err2.message}`, where(step));
+              break;
+            }
           } else {
-            throw err;
+            // A REAL error (not our injected fault) — the exact class the
+            // DST exists to catch; recorded with context, never masked by a
+            // blind retry and never a bare crash of the whole sim.
+            record('unexpected-error', `dispatch threw outside the injected-fault path: ${err && err.message}`, where(step));
+            break;
           }
         }
         rt.store.fault = null;
         if (res.deduped) stats.deduped += 1;
-        sent.push({ instanceId, action: stim.action, data: stim.data, actionId });
+        sent.push({ target: stim.target, instanceId, action: stim.action, data: stim.data, actionId });
 
-        const postJoint = await jointFromRuntime(rt, parentId, opts.parent.machineId);
+        fleet = await snapshotFleet(rt, parentId, opts.parent.machineId);
+        const postJoint = fleet.joint;
 
         // ---- parity: the model in lockstep ----
         if (mode === 'parity') {
           const m = productStep(modelJoint, stim, ctx);
+          // The model's doctrine findings are findings HERE too — discarding
+          // them would let a fleet check-product FAILs simulate clean.
+          for (const d of m.findings) record(`doctrine:${d.kind}`, d.message, where(step));
+          if (m.findings.some((d) => d.kind === 'childkey-collision')) {
+            // The kernel creates a second instance behind the colliding key;
+            // the model deliberately keeps the first — the joint spaces
+            // diverge BY DESIGN from here, so comparing them would mislabel
+            // the doctrine defect as model/kernel drift. The doctrine
+            // finding above is the verdict; end the run.
+            break;
+          }
           if (m.defect) {
             record('parity-divergence', `model says production POISONS on [${stim.target}] ${stim.action} (${m.defect.message}) but the kernel completed with '${res.stepKind}'`, where(step));
             break;
@@ -224,10 +304,12 @@ export async function runFleetSim(opts) {
         }
 
         // ---- invariants on the DURABLE joint, every step ----
-        const cascade = [];
-        for (const e of events.slice(eventsBefore)) {
-          cascade.push({ target: await keyOf(e.instanceId), action: e.action, data: e.data, stepKind: e.stepKind, ...(e.rejectReason ? { reason: e.rejectReason } : {}) });
-        }
+        // Creation rows are filtered so transition invariants see the SAME
+        // cascade shape here as in the checker (whose cascades never carry
+        // $create entries).
+        const cascade = events.slice(eventsBefore)
+          .filter((e) => e.action !== CREATE_ACTION)
+          .map((e) => ({ target: fleet.idToKey.get(e.instanceId) ?? e.instanceId, action: e.action, data: e.data, stepKind: e.stepKind, ...(e.rejectReason ? { reason: e.rejectReason } : {}) }));
         for (const inv of stateInv) {
           let ok; try { ok = inv.pred(postJoint); } catch { ok = false; }
           if (!ok) record(`invariant:${inv.name}`, `state invariant '${inv.name}' violated on the durable joint state`, where(step, { joint: postJoint }));
@@ -238,23 +320,7 @@ export async function runFleetSim(opts) {
         }
       }
 
-      // ---- end-of-run journal audit (the soak invariants, per instance) ----
-      const auditIds = [parentId, ...(await rt.store.listChildren(parentId)).map((r) => r.instance_id)];
-      for (const id of auditIds) {
-        const journal = await rt.getJournal(id);
-        const inst = await rt.getState(id);
-        let state = journal[0]?.post;
-        let chainOk = true;
-        journal.forEach((row, i) => { if (row.seq !== i) { chainOk = false; record('journal', `${id}: seq gap at ${i}`, where(steps)); } });
-        for (const row of journal.slice(1)) {
-          if (stable(row.pre) !== stable(state)) { chainOk = false; record('journal', `${id}#${row.seq}: pre does not chain`, where(steps)); break; }
-          if (row.step_kind === 'accepted') state = row.post;
-          else if (stable(row.post) !== stable(row.pre)) { chainOk = false; record('journal', `${id}#${row.seq}: a non-accepted step mutated state`, where(steps)); break; }
-        }
-        if (chainOk && journal.length && stable(inst.state) !== stable(state)) {
-          record('journal', `${id}: snapshot diverged from the journal's last accepted post`, where(steps));
-        }
-      }
+      await auditJournals(rt, parentId, record, () => where(lastStep));
     } finally {
       await rt.close();
     }
@@ -263,8 +329,8 @@ export async function runFleetSim(opts) {
   for (let i = 0; i < parityRuns; i++) await runOne(i, 'parity');
   for (let i = 0; i < chaosRuns; i++) await runOne(i, 'chaos');
 
-  notes.push(`DST simulation: ${parityRuns} parity run(s) (model in lockstep with the real kernel) + ${chaosRuns} chaos run(s) (duplicates, stale deliveries, store faults + at-least-once redelivery) × ≤${steps} step(s), seed ${seed} — deterministic; a simulator FALSIFIES, no findings is not a proof`);
-  notes.push('boundary: outbox effects are recorded but not executed and timers are not fired (no worker loop) — their completion actions are already in the external-stimulus superset (semantics §3/§4)');
+  notes.push(`DST simulation: ${parityRuns} parity run(s) (model in lockstep with the real kernel) + ${chaosRuns} chaos run(s) (duplicates ${dupRate}, stale ${staleRate}, store faults ${faultRate} + at-least-once redelivery) × ≤${steps} step(s), seed ${seed} — deterministic; a simulator FALSIFIES, no findings is not a proof`);
+  notes.push(`boundary: outbox effects are recorded but not executed${declaredKinds.size ? ` (declared kinds NOT exercised: ${[...declaredKinds].sort().join(', ')})` : ''} and timers are not fired (no worker loop) — their completion actions are already in the external-stimulus superset (semantics §3/§4)`);
   return { simulated: true, findings, stats, notes, parityRuns, chaosRuns, steps, seed };
 }
 
@@ -272,7 +338,7 @@ export function renderSim(result) {
   const L = [];
   L.push(`DST fleet simulation: ${result.parityRuns} parity + ${result.chaosRuns} chaos run(s) × ≤${result.steps} step(s), seed ${result.seed}`);
   const s = result.stats;
-  L.push(`stats: ${s.dispatches} dispatches · ${s.deduped} deduped · ${s.duplicatesSent} duplicates sent · ${s.staleToTerminal} stale-to-terminal · ${s.faultsInjected} store faults injected · ${s.poisons} poisons`);
+  L.push(`stats: ${s.dispatches} dispatches · ${s.deduped} deduped · ${s.duplicatesSent} duplicates sent · ${s.staleToTerminal} stale-to-terminal · ${s.faultsArmed} faults armed / ${s.faultsFired} fired · ${s.poisons} poisons`);
   for (const n of result.notes ?? []) L.push(`note: ${n}`);
   if (result.findings.length === 0) {
     L.push('NO FINDINGS — falsification only, not a proof (pair with polyrun check-product)');
@@ -282,7 +348,7 @@ export function renderSim(result) {
   for (const f of result.findings) {
     L.push(`\n  ✗ [${f.kind}] ${f.detail}`);
     L.push(`    reproduce: seed ${f.seed}, ${f.mode} run ${f.run}, step ${f.step}`);
-    L.push(`    trail: ${f.trail.map((t) => `[${t.target}] ${t.action}(${JSON.stringify(t.data)})`).join(' → ') || '(init)'}`);
+    L.push(`    trail: ${f.trail.map((t) => `[${t.target}] ${t.action}(${JSON.stringify(t.data)})${t.move ? ` <${t.move}>` : ''}`).join(' → ') || '(init)'}`);
     if (f.model) L.push(`    model : ${stable(f.model)}`);
     if (f.kernel) L.push(`    kernel: ${stable(f.kernel)}`);
     if (f.joint) L.push(`    joint : ${stable(f.joint)}`);

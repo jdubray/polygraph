@@ -6,7 +6,7 @@
 //   polyrun archive       --config <cfg> --before <ms|ISO date> --out <dir> [--apply]
 //   polyrun check-effects --config <cfg> [--machine <id>] [--depth N] [--max-paths N] [--allow-bounded]
 //   polyrun check-product --config <cfg> --parent <machineId> --invariants <compose.mjs> [--max-states N] [--allow-bounded] [--abstract-child <id[,id]> [--abstract-max-states N]] [--pct N [--pct-depth D] [--pct-steps L] [--seed S] [--allow-sampled]] [--json <out>]
-//   polyrun simulate      --config <cfg> --parent <machineId> --invariants <compose.mjs> [--parity-runs N] [--chaos-runs N] [--steps L] [--seed S] [--json <out>]
+//   polyrun simulate      --config <cfg> --parent <machineId> --invariants <compose.mjs> [--parity-runs N] [--chaos-runs N] [--steps L] [--seed S] [--dup-rate R] [--stale-rate R] [--fault-rate R] [--json <out>]
 //   polyrun audit         --config <cfg> [--machine <id>] [--instance <id>] [--since <ms-epoch>]
 //   polyrun export-traces --config <cfg> --instance <id> [--out <file>]
 //   polyrun dlq ls        --config <cfg>
@@ -38,7 +38,7 @@ const numFlag = (name, dflt, min = 1) => {
 };
 
 const usage = () => {
-  console.error('usage: polyrun <deploy|export-traces|dlq ls|dlq retry|dlq discard> --config <polyrun.config.mjs> [--instance <id>] [--intent <intentId>] [--out <file>]');
+  console.error('usage: polyrun <deploy|check-effects|check-product|simulate|audit|migrate|archive|export-traces|dlq ls|dlq retry|dlq discard> --config <polyrun.config.mjs> [command flags — see the header of this file]');
   process.exit(2);
 };
 
@@ -60,38 +60,30 @@ if (command === 'check-product' || command === 'simulate') {
     process.exit(2);
   }
   const pm = (config.machines ?? []).find((m) => m.machineId === parentId);
-  if (!pm) { console.error(`check-product: no machine '${parentId}' in the config`); process.exit(2); }
+  if (!pm) { console.error(`${command}: no machine '${parentId}' in the config`); process.exit(2); }
   if (!pm.effects || !pm.contract) {
-    console.error(`check-product: machine '${parentId}' needs a contract and an effects mapper in the config (the cascade IS the mapper's output)`);
+    console.error(`${command}: machine '${parentId}' needs a contract and an effects mapper in the config (the cascade IS the mapper's output)`);
     process.exit(2);
   }
   // Every other configured machine is a candidate spawn target. A machine
   // without a contract cannot enter the product model (no projection, no
   // terminal metadata) — disclose the exclusion loudly instead of silently
-  // reporting its spawns as 'not registered'. A child WITH its own mapper
-  // is passed through so checkProduct refuses (v1 models only the parent's
-  // cascades — a silent drop would certify an unexplored fleet).
+  // dropping it. A child WITH its own mapper is passed through so the
+  // library refuses (only the parent's cascades are modeled — a silent drop
+  // would certify an unexplored fleet).
   const children = [];
   for (const m of config.machines ?? []) {
     if (m.machineId === parentId) continue;
     if (!m.contract) {
-      console.error(`check-product: machine '${m.machineId}' has no contract — it cannot enter the product model, and a spawnChild targeting it will be reported as unregistered (add a contract to include it)`);
+      console.error(`${command}: machine '${m.machineId}' has no contract — it cannot enter the product model; a spawnChild targeting it ${command === 'simulate' ? 'POISONS the parent in the simulated kernel (unregistered machine)' : 'is reported as unregistered'} (add a contract to include it)`);
       continue;
     }
     children.push({ machineId: m.machineId, module: m.module, contract: m.contract, mapper: m.effects?.mapper });
   }
-  // CP-M2 surfaces: --abstract-child <id[,id]> collapses those children to
-  // running + terminal outcomes (refinement-checked, own cap via
-  // --abstract-max-states); --pct N switches to seeded PCT sampling
-  // (--pct-depth, --pct-steps, --seed — seed 0 is legal) — a sampler is
-  // never a pass without --allow-sampled (BOUNDED doctrine).
-  const productOpts = {
+  const baseOpts = {
     parent: { machineId: pm.machineId, module: pm.module, contract: pm.contract, mapper: pm.effects.mapper, manifest: pm.effects.manifest },
     children,
     invariants: invariantsPath,
-    abstractChildren: (flag('abstract-child') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
-    maxStates: numFlag('max-states', undefined),
-    abstractMaxStates: numFlag('abstract-max-states', undefined),
   };
   let productExit = 0;
   try {
@@ -100,19 +92,48 @@ if (command === 'check-product' || command === 'simulate') {
       // stores, injected clock; parity runs step the model in lockstep,
       // chaos runs add duplicates/stale deliveries/store faults. Findings
       // are the verdict; a clean run is falsification evidence, not a proof.
+      // Checker-only flags are REFUSED, never silently swallowed — a user
+      // reusing a check-product invocation must learn the difference, not
+      // believe an abstraction/bound was honored.
+      const notForSim = ['abstract-child', 'abstract-max-states', 'pct', 'pct-depth', 'pct-steps', 'max-states', 'allow-bounded', 'allow-sampled']
+        .filter((f) => args.includes(`--${f}`));
+      if (notForSim.length) {
+        console.error(`simulate does not accept ${notForSim.map((f) => `--${f}`).join(', ')} — the simulator drives real machines with its own bounds (--parity-runs/--chaos-runs/--steps/--seed/--dup-rate/--stale-rate/--fault-rate); abstraction, PCT, and exploration caps are model-checker devices (use polyrun check-product)`);
+        process.exit(2);
+      }
+      const rateFlag = (name) => {
+        const raw = flag(name);
+        if (raw === undefined) return undefined;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || n > 1) { console.error(`invalid --${name} '${raw}' (0..1)`); process.exit(2); }
+        return n;
+      };
       const result = await runFleetSim({
-        ...productOpts,
-        abstractChildren: [],
+        ...baseOpts,
         parityRuns: numFlag('parity-runs', undefined, 0),
         chaosRuns: numFlag('chaos-runs', undefined, 0),
         steps: numFlag('steps', undefined),
         seed: numFlag('seed', undefined, 0),
+        dupRate: rateFlag('dup-rate'),
+        staleRate: rateFlag('stale-rate'),
+        faultRate: rateFlag('fault-rate'),
       });
       console.log(renderSim(result));
       if (result.findings.length > 0) productExit = 1;
       const jsonOut = flag('json');
       if (jsonOut) writeFileSync(jsonOut, JSON.stringify(result, null, 2));
     } else {
+      // CP-M2 surfaces: --abstract-child <id[,id]> collapses those children
+      // to running + terminal outcomes (refinement-checked, own cap via
+      // --abstract-max-states); --pct N switches to seeded PCT sampling
+      // (--pct-depth, --pct-steps, --seed — seed 0 is legal) — a sampler is
+      // never a pass without --allow-sampled (BOUNDED doctrine).
+      const productOpts = {
+        ...baseOpts,
+        abstractChildren: (flag('abstract-child') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+        maxStates: numFlag('max-states', undefined),
+        abstractMaxStates: numFlag('abstract-max-states', undefined),
+      };
       const pct = numFlag('pct', undefined);
       const result = pct !== undefined
         ? await pctSample({ ...productOpts, schedules: pct, pctDepth: numFlag('pct-depth', undefined), pctSteps: numFlag('pct-steps', undefined), seed: numFlag('seed', undefined, 0) })

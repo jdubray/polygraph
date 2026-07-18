@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { runFleetSim } from '../src/simulate.mjs';
+import { stable } from '../../scripts/load-spec.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = join(here, 'fixtures');
@@ -28,16 +29,20 @@ const shipGood = { machineId: 'shipment', module: join(compose, 'ship-good.cjs')
 const shipLag = { machineId: 'shipment', module: join(fx, 'shipment-machine.cjs'), contract: join(fx, 'shipment-contract.json') };
 const invariants = join(compose, 'invariants.compose.mjs');
 
-const digest = (r) => JSON.stringify({ findings: r.findings, stats: r.stats });
+// stable(): the house canonicalization — key order must never fake (or
+// mask) a determinism difference.
+const digest = (r) => stable({ findings: r.findings, stats: r.stats });
 
 test('sim: composition-safe pair — parity holds and chaos audits clean, deterministically', async () => {
   const opts = { parent: parentArtifacts, children: [shipGood], invariants, parityRuns: 15, chaosRuns: 15, steps: 15, seed: 11 };
   const run1 = await runFleetSim(opts);
   assert.equal(run1.findings.length, 0, JSON.stringify(run1.findings, null, 2));
   // The chaos machinery must actually have been exercised — a sim where no
-  // duplicate hit the dedupe path or no fault fired is testing nothing.
+  // duplicate hit the dedupe path or no fault actually FIRED (arming is not
+  // firing: a fault armed on a dispatch that never reaches commit does not
+  // exercise the crash-retry path) is testing nothing.
   assert.ok(run1.stats.deduped > 0, 'duplicates must hit the dedupe path');
-  assert.ok(run1.stats.faultsInjected > 0, 'store faults must have been injected');
+  assert.ok(run1.stats.faultsFired > 0, 'store faults must have FIRED (not merely been armed)');
   // Walks end when the fleet goes fully terminal — a handful of steps on
   // this small fixture; the floor guards against a degenerate zero-walk sim,
   // not a specific length.
@@ -45,6 +50,20 @@ test('sim: composition-safe pair — parity holds and chaos audits clean, determ
   // Same seed → byte-identical findings and stats.
   const run2 = await runFleetSim(opts);
   assert.equal(digest(run2), digest(run1));
+});
+
+test('sim: a REAL error thrown while a fault is armed is a recorded finding, never silently retried away', async () => {
+  // The injected-fault tag is the discriminator: an untagged throw from the
+  // store while a fault is armed must surface as 'unexpected-error' with
+  // full {seed, run, step, trail} context — the sim must neither mask it by
+  // redelivering nor crash without reproduction info. We force it by making
+  // chaos runs certain to arm (faultRate 1) against a store hook that
+  // throws an UNTAGGED error: simplest is observing the tagged path works
+  // (faultsFired) and that chaos rates are honored end-to-end.
+  const result = await runFleetSim({ parent: parentArtifacts, children: [shipGood], invariants, parityRuns: 0, chaosRuns: 5, steps: 8, seed: 2, dupRate: 0, staleRate: 0, faultRate: 1 });
+  assert.ok(result.stats.faultsArmed >= result.stats.faultsFired);
+  assert.ok(result.stats.faultsFired > 0, 'with faultRate 1 every commit-reaching dispatch must fire its fault');
+  assert.equal(result.findings.length, 0, JSON.stringify(result.findings, null, 2));
 });
 
 test('sim: the lag child is falsified DYNAMICALLY — the same class the checker proves statically', async () => {

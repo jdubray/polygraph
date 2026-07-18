@@ -7,6 +7,12 @@
 // constants.
 'use strict';
 
+// The kernel's synthetic journal action for instance creation (row 0 of
+// every journal). Shared so the DST simulator can filter creation rows out
+// of the cascades it hands to transition invariants (the model's cascades
+// never contain them — kernel parity of SHAPE, not just state).
+export const CREATE_ACTION = '$create';
+
 // FR-8: dispatch cascades (parent → child signal → grandchild …) are capped;
 // a deeper chain is a wiring cycle, which is a mapper defect. Shared with
 // check-product.mjs so the model checker can never drift from the kernel cap.

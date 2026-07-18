@@ -78,10 +78,14 @@ M2 (verification flywheel + composition) provides:
   instead of waiting for a wrong verdict. Chaos runs add duplicate
   actionIds (dedupe path), stale deliveries to terminal instances (FR-1.2
   status-reject), and mid-commit store faults with same-actionId redelivery
-  (crash-retry atomicity), auditing the journals continuously. Every
-  finding carries {seed, run, step, trail} for exact replay; a clean run is
-  falsification evidence, never a proof — pair with check-product. Timers/
-  outbox execution stay with the soak's worker storm (disclosed boundary).
+  (crash-retry atomicity), auditing the journals continuously (dense seqs,
+  unique actionIds, chained steps, snapshot = last accepted post). Rates are
+  tunable (`--dup-rate/--stale-rate/--fault-rate`) so a bisection campaign
+  never needs a source edit. Every finding carries {seed, run, step, trail}
+  — chaos moves included — for exact replay; a clean run is falsification
+  evidence over SAMPLED schedules, never a proof — pair with check-product.
+  Timers/outbox execution stay with the soak's worker storm (the report
+  names the declared effect kinds it did not exercise).
 - **Continuous audit** (`src/audit.mjs`, `polyrun audit`) — replays the
   production journal (which IS a Polygraph trace corpus) through the module:
   post-state mismatches and journaled-rejections-the-module-now-accepts
