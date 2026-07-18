@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { loadArtifacts } from '../src/artifacts.mjs';
 import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
-import { loadGate, shapeRoundtripGate, vocabularyGate, invariantsPointwiseGate } from '../src/gates.mjs';
+import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate } from '../src/gates.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -21,6 +21,13 @@ const fix = (name) => join(here, 'fixtures', name);
 const cli = join(here, '..', 'bin', 'polyvers.mjs');
 
 const load = async (name) => loadArtifacts(fix(name));
+
+// A scratch copy of a fixture dir the test can mutate.
+const scratchCopy = (name) => {
+  const dir = mkdtempSync(join(tmpdir(), 'polyvers-fix-'));
+  cpSync(fix(name), dir, { recursive: true });
+  return dir;
+};
 
 // ── classification ──────────────────────────────────────────────────────────
 
@@ -56,7 +63,7 @@ test('classify: new state key → shape + semantic', async () => {
 test('classify: invariants-only change → intent lane only', async () => {
   const c = classify(await load('order-v1'), await load('order-v2-stricter'));
   assert.deepEqual(c.lanes, ['intent']);
-  assert.deepEqual(c.diffs.intent.added, ['total-positive']);
+  assert.deepEqual(c.diffs.intent.added, ['state:total-positive']);
   assert.equal(c.diffs.moduleChanged, false);
 });
 
@@ -64,6 +71,92 @@ test('classify: changeId is deterministic', async () => {
   const c1 = classify(await load('order-v1'), await load('order-v2-rules'));
   const c2 = classify(await load('order-v1'), await load('order-v2-rules'));
   assert.equal(c1.changeId, c2.changeId);
+});
+
+test('classify: reformatting contract.json fires no lane (stable comparison)', async () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    // Reorder keys + reformat — semantically identical contract.
+    const c = JSON.parse(readFileSync(join(dir, 'contract.json'), 'utf-8'));
+    const reordered = Object.fromEntries(Object.entries(c).reverse());
+    writeFileSync(join(dir, 'contract.json'), JSON.stringify(reordered));
+    const cls = classify(await load('order-v1'), await loadArtifacts(dir));
+    assert.equal(cls.identical, false); // bytes differ
+    assert.deepEqual(cls.lanes, []);    // but nothing semantic changed
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('classify: removing a terminal state fires the vocabulary lane and fails the gate', async () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    const c = JSON.parse(readFileSync(join(dir, 'contract.json'), 'utf-8'));
+    c.terminalStates = c.terminalStates.filter((s) => s !== 'cancelled');
+    writeFileSync(join(dir, 'contract.json'), JSON.stringify(c, null, 2));
+    const oldA = await load('order-v1');
+    const newA = await loadArtifacts(dir);
+    const cls = classify(oldA, newA);
+    assert.ok(cls.lanes.includes('vocabulary'));
+    assert.deepEqual(cls.diffs.vocabulary.terminal.removed, ['cancelled']);
+    const g = vocabularyGate(oldA, newA, cls.diffs);
+    assert.ok(g.failures.some((f) => f.message.includes("'cancelled'") && f.message.includes('no longer terminal')));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('classify: invariant rename (identical predicate) is a rename, not a weakening', async () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    const src = readFileSync(join(dir, 'invariants.mjs'), 'utf-8');
+    writeFileSync(join(dir, 'invariants.mjs'), src.replace("name: 'total-nonnegative'", "name: 'total-nonneg'"));
+    const cls = classify(await load('order-v1'), await loadArtifacts(dir));
+    assert.deepEqual(cls.lanes, ['intent']);
+    assert.deepEqual(cls.diffs.intent.renamed, [{ from: 'state:total-nonnegative', to: 'state:total-nonneg' }]);
+    assert.deepEqual(cls.diffs.intent.removed, []);
+    const g = invariantDiffGate(cls.diffs);
+    assert.equal(g.ok, true); // a rename must not FAIL as 'weakening'
+    assert.ok(g.summary.includes('renamed'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('classify: deleting a transition invariant is a removal, never a mere edit', async () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    const src = readFileSync(join(dir, 'invariants.mjs'), 'utf-8');
+    writeFileSync(join(dir, 'invariants.mjs'), src.slice(0, src.indexOf('export const transitionInvariants')));
+    const cls = classify(await load('order-v1'), await loadArtifacts(dir));
+    assert.deepEqual(cls.diffs.intent.removed, ['transition:total-never-decreases']);
+    const g = invariantDiffGate(cls.diffs);
+    assert.equal(g.ok, false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('classify: deferred gates are deduped across lanes', async () => {
+  // module + invariants change → semantic AND intent lanes, both deferring
+  // semantic-model-check; the classification must list it once.
+  const dir = scratchCopy('order-v2-rules');
+  try {
+    cpSync(fix('order-v2-stricter/invariants.mjs'), join(dir, 'invariants.mjs'));
+    const cls = classify(await load('order-v1'), await loadArtifacts(dir));
+    assert.deepEqual(cls.lanes.sort(), ['intent', 'semantic']);
+    const rows = cls.deferred.filter((d) => d.gate === 'semantic-model-check');
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0].lanes.sort(), ['intent', 'semantic']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ── artifacts ───────────────────────────────────────────────────────────────
+
+test('artifacts: an invariants.mjs exporting no invariants is refused, never vacuous', async () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    writeFileSync(join(dir, 'invariants.mjs'), 'export default [];\n');
+    await assert.rejects(() => loadArtifacts(dir), /exports no invariants/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('artifacts: transition invariants are loaded alongside state invariants', async () => {
+  const a = await load('order-v1');
+  assert.equal(a.invariants.length, 2);
+  assert.equal(a.transitionInvariants.length, 1);
 });
 
 // ── corpus ──────────────────────────────────────────────────────────────────
@@ -75,7 +168,7 @@ test('synthesize: BFS over the old machine yields its full reachable set', async
   // cancelled(from charging, totalCents 2500) — 6 distinct states.
   assert.equal(entries.length, 6);
   assert.equal(truncated, false);
-  assert.ok(entries.every((e) => e.source === 'synthesized'));
+  assert.ok(entries.every((e) => e.source === 'synthesized' && typeof e.key === 'string'));
 });
 
 test('synthesize: cap reports truncation instead of passing silently', async () => {
@@ -85,7 +178,21 @@ test('synthesize: cap reports truncation instead of passing silently', async () 
   assert.ok(entries.length <= 2);
 });
 
-test('loadCorpus: polyrun archive ndjson, bare ndjson, json array — deduped', () => {
+test('synthesize: a throwing action narrows the corpus with a note, never aborts', async () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    const src = readFileSync(join(dir, 'next.cjs'), 'utf-8');
+    writeFileSync(join(dir, 'next.cjs'), src.replace(
+      "if (model.orderState !== 'fulfilling') return reject('not-fulfilling');",
+      "throw new Error('SHIP handler defect');"));
+    const a = await loadArtifacts(dir);
+    const { entries, notes } = synthesizeCorpus(a.module);
+    assert.ok(entries.length >= 4); // exploration continued past the throwing action
+    assert.ok(notes.some((n) => n.includes('SHIP') && n.includes('threw')));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('loadCorpus: polyrun archive ndjson, bare ndjson, json array — deduped, relative ids', () => {
   const dir = mkdtempSync(join(tmpdir(), 'polyvers-corpus-'));
   try {
     // polyrun archive shape: header {archived}, then journal rows
@@ -101,6 +208,24 @@ test('loadCorpus: polyrun archive ndjson, bare ndjson, json array — deduped', 
       JSON.stringify([{ orderState: 'pending', totalCents: 0, txId: '' }]));
     const corpus = loadCorpus(dir);
     assert.equal(corpus.length, 3); // completed, charging, pending — dup collapsed
+    // ids are RELATIVE (no machine-local absolute paths in reports)
+    assert.ok(corpus.every((e) => !e.id.includes(tmpdir())));
+    assert.ok(corpus.some((e) => e.id === 'a.ndjson#archived:i-1'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('loadCorpus: a bare state dump with a truthy `archived` field is not misrouted', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'polyvers-corpus2-'));
+  try {
+    writeFileSync(join(dir, 'dump.ndjson'), [
+      JSON.stringify({ docState: 'filed', archived: true }),
+      JSON.stringify({ docState: 'open', archived: false }),
+    ].join('\n'));
+    const corpus = loadCorpus(dir);
+    assert.equal(corpus.length, 2); // both bare states survive, none parsed as archive header
+    assert.ok(corpus.every((e) => e.state.docState !== undefined));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -208,4 +333,30 @@ test('cli: an empty corpus is refused, never a vacuous PASS', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('cli: a cosmetic contract edit reports "no lane fired", never a PASS over zero gates', () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    const c = JSON.parse(readFileSync(join(dir, 'contract.json'), 'utf-8'));
+    writeFileSync(join(dir, 'contract.json'), JSON.stringify(Object.fromEntries(Object.entries(c).reverse())));
+    const r = runCli(['check', '--old', fix('order-v1'), '--new', dir]);
+    assert.equal(r.code, 0);
+    assert.ok(r.stdout.includes('no lane fired'));
+    assert.ok(!r.stdout.includes('Verdict'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('cli: a vocabulary-only change needs no corpus (no --snapshots/--synthesize required)', () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    // dataDomain tweak: vocabulary lane only (no module/invariant edit).
+    const c = JSON.parse(readFileSync(join(dir, 'contract.json'), 'utf-8'));
+    c.dataDomain.SUBMIT.totalCents = [2500, 9900];
+    writeFileSync(join(dir, 'contract.json'), JSON.stringify(c, null, 2));
+    const r = runCli(['check', '--old', fix('order-v1'), '--new', dir]);
+    assert.equal(r.code, 0); // no corpus flag passed — must not be demanded
+    assert.ok(r.stdout.includes('not required by these lanes'));
+    assert.ok(r.stdout.includes('Verdict: PASS'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

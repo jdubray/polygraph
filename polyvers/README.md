@@ -45,12 +45,16 @@ refused, never a vacuous PASS.
 |---|---|---|---|
 | semantic | the module changed | load · shape-roundtrip · invariants-pointwise | semantic model check (M1) |
 | shape | contract `stateKeys` changed | load · shape-roundtrip | migrate (M2) |
-| vocabulary | actions / reject reasons / effect kinds changed | load · vocabulary | stimuli (M2) |
-| intent | `invariants.mjs` changed | load · invariant-diff · invariants-pointwise | semantic model check (M1) |
+| vocabulary | actions / reject reasons / effect kinds / terminal states changed | load · vocabulary | stimuli (M2) |
+| intent | `invariants.mjs` changed (state or transition invariants) | load · invariant-diff · invariants-pointwise | semantic model check (M1) |
 
 Gate doctrine, from the SDLC best-practices: a removed action fails the
 vocabulary gate (deprecate, don't delete — in-flight stimuli still arrive);
-reject-reason renames are vocabulary breaks (they are public API); a
-strengthened invariant is a fleet event — the gate names the states that
+reject-reason renames are vocabulary breaks (they are public API); removing
+a terminal state re-animates every instance resting in it, so it fails too;
+a strengthened invariant is a fleet event — the gate names the states that
 already violate it, so the decision about what they mean happens before
-the deploy, not after.
+the deploy, not after. An invariant renamed with an identical predicate is
+reported as a rename, not a weakening. Machine modules load through the
+pipeline's one loader (`scripts/load-spec.mjs`): fresh instance per load,
+SAM library pinned to the vendored bundle, module console output to stderr.

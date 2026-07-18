@@ -5,15 +5,18 @@
 //
 // Loading is content-first: every artifact gets a sha256 so version identity
 // can be derived, not declared. Deterministic, no API key.
+//
+// Known M0 limitation (recorded): versionHash covers the four artifact files
+// only. A machine module that requires local helper files is hashed and
+// compared by its entry file alone — polygen output is single-file, and
+// multi-file machines are out of scope until the dependency graph is walked.
 'use strict';
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require_ = createRequire(import.meta.url);
+import { loadSpec } from '../../scripts/load-spec.mjs';
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
@@ -29,11 +32,16 @@ function findModulePath(dir) {
 
 /**
  * Load one version's artifact family from a directory.
- * Returns { dir, contract, contractHash, modulePath, moduleHash, module,
- *           invariantsPath?, invariantsHash?, invariants?, manifestPath?,
- *           manifestHash?, manifest?, versionHash }.
- * The module is loaded fresh (require cache busted) so old and new versions
- * of the same filename never alias each other.
+ * Returns { contract, contractHash, module, moduleHash,
+ *           invariants?, transitionInvariants?, invariantsHash?,
+ *           manifest?, manifestHash?, versionHash }.
+ *
+ * The machine module is loaded through the pipeline's ONE loader
+ * (scripts/load-spec.mjs): every call compiles a fresh module instance (old
+ * and new versions can never alias), require of the SAM library is pinned to
+ * the vendored bundle (the compat verdict compares machine versions, never
+ * library versions), and module console output goes to stderr (a top-level
+ * console.log cannot corrupt `--json` stdout).
  */
 export async function loadArtifacts(dir) {
   const abs = resolve(dir);
@@ -44,17 +52,11 @@ export async function loadArtifacts(dir) {
 
   const modulePath = findModulePath(abs);
   const moduleBytes = readFileSync(modulePath);
-  // Bust the require cache: `polyvers check --old a/ --new b/` loads two
-  // modules that both `require('@cognitive-fab/sam-pattern')` and both may be
-  // named next.cjs; each must get its own module instance.
-  delete require_.cache[require_.resolve(modulePath)];
-  const module = require_(modulePath);
+  const module = loadSpec(modulePath);
 
   const out = {
-    dir: abs,
     contract,
     contractHash: sha256(contractBytes),
-    modulePath,
     moduleHash: sha256(moduleBytes),
     module,
   };
@@ -62,19 +64,25 @@ export async function loadArtifacts(dir) {
   const invariantsPath = join(abs, 'invariants.mjs');
   if (existsSync(invariantsPath)) {
     const bytes = readFileSync(invariantsPath);
-    out.invariantsPath = invariantsPath;
     out.invariantsHash = sha256(bytes);
-    // Cache-bust dynamic import the same way require is busted above: a query
-    // string keyed on content hash keeps same-content loads cached while
-    // guaranteeing different contents never alias.
+    // Content-hash query keeps same-content loads cached while guaranteeing
+    // different contents never alias. (Recorded limitation: the suffix does
+    // not propagate to the invariants module's own relative imports — like
+    // versionHash, the intent artifact is treated as single-file at M0.)
     const mod = await import(`${pathToFileURL(invariantsPath).href}?h=${out.invariantsHash}`);
     out.invariants = mod.stateInvariants ?? mod.invariants ?? [];
+    out.transitionInvariants = mod.transitionInvariants ?? [];
+    // A present-but-empty intent artifact must fail loudly, not gate
+    // vacuously: a renamed export (default export, a typo) would otherwise
+    // yield zero predicates and a green invariants-pointwise over 0 checks.
+    if (out.invariants.length === 0 && out.transitionInvariants.length === 0) {
+      throw new Error(`'${invariantsPath}' exports no invariants — expected stateInvariants (and/or transitionInvariants) arrays of {name, pred}; refusing to gate vacuously against an empty intent artifact`);
+    }
   }
 
   const manifestPath = join(abs, 'effects.manifest.json');
   if (existsSync(manifestPath)) {
     const bytes = readFileSync(manifestPath);
-    out.manifestPath = manifestPath;
     out.manifestHash = sha256(bytes);
     out.manifest = JSON.parse(bytes.toString('utf-8'));
   }
@@ -89,4 +97,12 @@ export async function loadArtifacts(dir) {
 /** Observable keys, by the same convention the polyrun kernel uses. */
 export function observableKeys(contract) {
   return Array.isArray(contract.stateKeys) ? contract.stateKeys.map((k) => k.name) : null;
+}
+
+/** The effective terminal key, by the kernel's convention: an explicit
+ *  terminalKey, else the FIRST stateKey's name. */
+export function terminalKeyOf(contract) {
+  return contract.terminalKey
+    ?? (Array.isArray(contract.stateKeys) && contract.stateKeys[0] && contract.stateKeys[0].name)
+    ?? null;
 }

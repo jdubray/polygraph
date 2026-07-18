@@ -3,7 +3,7 @@
 // require.
 //
 //   polyvers classify --old <dir> --new <dir> [--json]
-//   polyvers check    --old <dir> --new <dir> (--snapshots <path> | --synthesize)
+//   polyvers check    --old <dir> --new <dir> [--snapshots <path> | --synthesize]
 //                     [--max-states N] [--out <dir>] [--json]
 //
 // An artifact dir holds contract.json + the machine module (next.cjs /
@@ -14,11 +14,11 @@
 'use strict';
 
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { loadArtifacts } from '../src/artifacts.mjs';
 import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
-import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate } from '../src/gates.mjs';
+import { GATE_RUNNERS, NEEDS_CORPUS } from '../src/gates.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 
 const args = process.argv.slice(2);
@@ -33,11 +33,15 @@ const usage = () => {
 
 const oldDir = flag('old');
 const newDir = flag('new');
-if (!command || !oldDir || !newDir) usage();
+// Validate the command BEFORE any I/O — loading an artifact dir executes the
+// machine module's top-level code, which a typo'd command must never trigger.
+if (!oldDir || !newDir || !['classify', 'check'].includes(command)) usage();
 
-let exitCode = 0;
 try {
-  const [oldA, newA] = [await loadArtifacts(oldDir), await loadArtifacts(newDir)];
+  // Deliberately sequential (not Promise.all): both loads compile modules and
+  // touch the ESM/CJS loader state; interleaving buys nothing in a CLI.
+  const oldA = await loadArtifacts(oldDir);
+  const newA = await loadArtifacts(newDir);
   const classification = classify(oldA, newA);
 
   if (command === 'classify') {
@@ -47,65 +51,80 @@ try {
       console.log(`polyvers classify — change ${classification.changeId}`);
       console.log(`  old ${classification.oldVersion} → new ${classification.newVersion}`);
       if (classification.identical) console.log('  identical artifacts — nothing to gate');
+      else if (classification.lanes.length === 0) console.log('  no lane fired — the artifacts differ, but only in ways no compatibility lane classifies (cosmetic edit)');
       else {
-        console.log(`  lanes: ${classification.lanes.join(', ') || '(none)'}`);
-        console.log(`  gates required: ${classification.gates.join(', ') || '(none)'}`);
+        console.log(`  lanes: ${classification.lanes.join(', ')}`);
+        console.log(`  gates required: ${classification.gates.join(', ')}`);
         for (const d of classification.deferred) console.log(`  deferred (${d.milestone}): ${d.gate} — ${d.why}`);
       }
     }
-  } else if (command === 'check') {
+  } else {
     if (classification.identical) {
       console.log('polyvers check: identical artifacts — nothing to gate');
-      process.exit(0);
-    }
-    // ── corpus ──
-    const snapshotsPath = flag('snapshots');
-    let corpus, corpusInfo;
-    if (snapshotsPath) {
-      corpus = loadCorpus(snapshotsPath);
-      corpusInfo = { source: `archive (${snapshotsPath})`, count: corpus.length };
-    } else if (has('synthesize')) {
-      const maxStates = Number(flag('max-states') ?? 20000);
-      if (!Number.isFinite(maxStates) || maxStates < 1) { console.error(`invalid --max-states`); process.exit(2); }
-      const { entries, truncated } = synthesizeCorpus(oldA.module, { maxStates });
-      corpus = entries;
-      corpusInfo = { source: 'synthesized (BFS-reachable states of the OLD machine — the weakest tier; prefer live or archived snapshots)', count: corpus.length, truncated };
+    } else if (classification.lanes.length === 0) {
+      // Not identical, but no lane fired: a cosmetic artifact edit
+      // (reformat, description text). Say so explicitly — never render a
+      // PASS verdict over an empty gate table.
+      console.log('polyvers check: no lane fired — the artifacts differ, but only in ways no compatibility lane classifies (cosmetic edit); zero gates apply');
     } else {
-      console.error('check needs a corpus: --snapshots <path> or --synthesize');
-      process.exit(2);
-    }
-    if (corpus.length === 0) {
-      console.error('corpus is empty — every pointwise gate would pass vacuously; refusing to report PASS over nothing');
-      process.exit(1);
-    }
+      const wanted = classification.gates;
 
-    // ── gates (only what the lanes require) ──
-    const wanted = new Set(classification.gates);
-    const gateResults = [];
-    if (wanted.has('load')) gateResults.push(loadGate(newA));
-    if (wanted.has('shape-roundtrip')) gateResults.push(shapeRoundtripGate(newA, corpus));
-    if (wanted.has('vocabulary')) gateResults.push(vocabularyGate(oldA, newA, classification.diffs));
-    if (wanted.has('invariant-diff')) gateResults.push(invariantDiffGate(classification.diffs));
-    if (wanted.has('invariants-pointwise')) gateResults.push(invariantsPointwiseGate(newA, corpus));
+      // ── corpus (only if a wanted gate consumes one) ──
+      const needsCorpus = wanted.some((g) => NEEDS_CORPUS.has(g));
+      let corpus = [];
+      let corpusInfo = { source: 'not required by these lanes', count: 0 };
+      if (needsCorpus) {
+        const snapshotsPath = flag('snapshots');
+        if (snapshotsPath) {
+          corpus = loadCorpus(snapshotsPath);
+          // basename, not the raw CLI path: report bytes must not depend on
+          // the machine or working directory the check ran from.
+          corpusInfo = { source: `archive (${basename(snapshotsPath)})`, count: corpus.length };
+        } else if (has('synthesize')) {
+          const rawMax = flag('max-states');
+          const maxStates = Number(rawMax ?? 20000);
+          if (!Number.isFinite(maxStates) || maxStates < 1) { console.error(`invalid --max-states '${rawMax}'`); process.exit(2); }
+          const { entries, truncated, notes } = synthesizeCorpus(oldA.module, { maxStates });
+          corpus = entries;
+          corpusInfo = { source: 'synthesized (BFS-reachable states of the OLD machine — the weakest tier; prefer live or archived snapshots)', count: corpus.length, truncated, notes };
+        } else {
+          console.error(`check needs a corpus for the ${wanted.filter((g) => NEEDS_CORPUS.has(g)).join('/')} gate(s): --snapshots <path> or --synthesize`);
+          process.exit(2);
+        }
+        if (corpus.length === 0) {
+          console.error('corpus is empty — every pointwise gate would pass vacuously; refusing to report PASS over nothing');
+          process.exit(1);
+        }
+      }
 
-    const report = buildReport({ classification, corpusInfo, gateResults });
-    if (has('json')) console.log(JSON.stringify(report, null, 2));
-    else console.log(renderReport(report));
+      // ── gates: iterate the classification's demands over the registry —
+      // a wanted gate with no runner is a failing result, never a silent
+      // omission the verdict overlooks. ──
+      const ctx = { oldA, newA, corpus, diffs: classification.diffs };
+      const gateResults = wanted.map((name) => {
+        const run = GATE_RUNNERS[name];
+        if (!run) return { gate: name, ok: false, summary: 'required by the classified lanes but NOT IMPLEMENTED in this build', failures: [{ message: `no runner registered for gate '${name}' — the verdict below cannot be trusted until it runs` }] };
+        return run(ctx);
+      });
 
-    const outDir = flag('out');
-    if (outDir) {
-      const dir = join(outDir, report.changeId);
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'compat-report.json'), JSON.stringify(report, null, 2) + '\n');
-      writeFileSync(join(dir, 'compat-report.md'), renderReport(report));
-      console.error(`wrote ${join(dir, 'compat-report.{json,md}')}`);
+      const report = buildReport({ classification, corpusInfo, gateResults });
+      if (has('json')) console.log(JSON.stringify(report, null, 2));
+      else console.log(renderReport(report));
+
+      const outDir = flag('out');
+      if (outDir) {
+        const dir = join(outDir, report.changeId);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, 'compat-report.json'), JSON.stringify(report, null, 2) + '\n');
+        writeFileSync(join(dir, 'compat-report.md'), renderReport(report));
+        console.error(`wrote ${join(dir, 'compat-report.{json,md}')}`);
+      }
+      if (report.verdict !== 'PASS') process.exitCode = 1;
     }
-    if (report.verdict !== 'PASS') exitCode = 1;
-  } else {
-    usage();
   }
 } catch (err) {
   console.error(String(err && err.message));
-  exitCode = 1;
+  process.exitCode = 1;
 }
-process.exit(exitCode);
+// No process.exit() here: a large --json report piped downstream must flush
+// before the process ends (exit() would truncate pending async stdout writes).
