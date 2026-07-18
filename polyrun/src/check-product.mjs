@@ -557,9 +557,10 @@ export function productStep(joint, stim, ctx) {
 
 // ── explore ────────────────────────────────────────────────────────────────
 
-/** Shared loader for the exhaustive checker and the PCT sampler: machine
- *  defs, mapper, invariants, abstraction construction, disclosure notes. */
-async function loadProduct(opts) {
+/** Shared loader for the exhaustive checker, the PCT sampler, and the DST
+ *  fleet simulator (simulate.mjs): machine defs, mapper, invariants,
+ *  abstraction construction, disclosure notes. */
+export async function loadProduct(opts) {
   const parentDef = loadMachineDef(opts.parent);
   const machineDefs = new Map();
   const abstractIds = new Set(opts.abstractChildren ?? []);
@@ -648,7 +649,7 @@ const makeRecorder = (violations) => {
  *  values, so results are memoized by that signature; callers share the
  *  returned array and must not mutate it. `excluded` collects the
  *  cascade-owned exclusions for disclosure. */
-function alphabetFor(joint, parentDef, machineDefs, { memo, excluded } = {}) {
+export function alphabetFor(joint, parentDef, machineDefs, { memo, excluded } = {}) {
   const signature = memo && stable({
     p: joint.parent.status,
     c: Object.entries(joint.children).map(([k, c]) => [k, c.machineId, c.status, c.abstract ?? false, c.onComplete, c.onParentTerminal]),
@@ -804,8 +805,9 @@ export async function checkProduct(opts) {
 
 // ── PCT sampling (CP-M2, semantics §8) ─────────────────────────────────────
 
-/** Deterministic PRNG (mulberry32) — seeded, no Math.random/Date.now. */
-const mulberry32 = (a) => () => {
+/** Deterministic PRNG (mulberry32) — seeded, no Math.random/Date.now.
+ *  Shared with the DST fleet simulator (simulate.mjs). */
+export const mulberry32 = (a) => () => {
   a |= 0; a = (a + 0x6D2B79F5) | 0;
   let t = Math.imul(a ^ (a >>> 15), 1 | a);
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;

@@ -6,6 +6,7 @@
 //   polyrun archive       --config <cfg> --before <ms|ISO date> --out <dir> [--apply]
 //   polyrun check-effects --config <cfg> [--machine <id>] [--depth N] [--max-paths N] [--allow-bounded]
 //   polyrun check-product --config <cfg> --parent <machineId> --invariants <compose.mjs> [--max-states N] [--allow-bounded] [--abstract-child <id[,id]> [--abstract-max-states N]] [--pct N [--pct-depth D] [--pct-steps L] [--seed S] [--allow-sampled]] [--json <out>]
+//   polyrun simulate      --config <cfg> --parent <machineId> --invariants <compose.mjs> [--parity-runs N] [--chaos-runs N] [--steps L] [--seed S] [--json <out>]
 //   polyrun audit         --config <cfg> [--machine <id>] [--instance <id>] [--since <ms-epoch>]
 //   polyrun export-traces --config <cfg> --instance <id> [--out <file>]
 //   polyrun dlq ls        --config <cfg>
@@ -21,6 +22,7 @@ import { createRuntime } from '../src/index.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { checkEffects, renderReport } from '../src/check-effects.mjs';
 import { checkProduct, pctSample, renderProduct } from '../src/check-product.mjs';
+import { runFleetSim, renderSim } from '../src/simulate.mjs';
 import { auditMachine, renderAudit } from '../src/audit.mjs';
 import { stable } from '../../scripts/load-spec.mjs';
 
@@ -45,16 +47,16 @@ if (!configPath || !command) usage();
 
 const config = await loadConfig(configPath);
 
-// check-product is a PURE static model check: it loads modules from the
-// config paths itself (loadProduct's own gates) and never touches the store —
-// so it dispatches BEFORE the runtime is built. Opening the store here would
-// both double the module loads and make an unreachable production DB fail a
-// check that needs no DB at all.
-if (command === 'check-product') {
+// check-product (static model check) and simulate (DST against fresh
+// in-memory runtimes) never touch the CONFIGURED store — they dispatch
+// BEFORE the runtime is built. Opening the production store here would both
+// double the module loads and make an unreachable DB fail commands that do
+// not need it.
+if (command === 'check-product' || command === 'simulate') {
   const parentId = flag('parent');
   const invariantsPath = flag('invariants');
   if (!parentId || !invariantsPath) {
-    console.error('check-product requires --parent <machineId> and --invariants <compose.mjs>');
+    console.error(`${command} requires --parent <machineId> and --invariants <compose.mjs>`);
     process.exit(2);
   }
   const pm = (config.machines ?? []).find((m) => m.machineId === parentId);
@@ -93,22 +95,41 @@ if (command === 'check-product') {
   };
   let productExit = 0;
   try {
-    const pct = numFlag('pct', undefined);
-    const result = pct !== undefined
-      ? await pctSample({ ...productOpts, schedules: pct, pctDepth: numFlag('pct-depth', undefined), pctSteps: numFlag('pct-steps', undefined), seed: numFlag('seed', undefined, 0) })
-      : await checkProduct(productOpts);
-    console.log(renderProduct(result));
-    if (result.violations.length > 0) productExit = 1;
-    if (result.capHit && !args.includes('--allow-bounded')) {
-      console.error('check-product: BOUNDED exploration is not a full pass (use --allow-bounded to accept)');
-      productExit = productExit || 1;
+    if (command === 'simulate') {
+      // CP-M4: the seeded DST fleet simulator — real kernel, in-memory
+      // stores, injected clock; parity runs step the model in lockstep,
+      // chaos runs add duplicates/stale deliveries/store faults. Findings
+      // are the verdict; a clean run is falsification evidence, not a proof.
+      const result = await runFleetSim({
+        ...productOpts,
+        abstractChildren: [],
+        parityRuns: numFlag('parity-runs', undefined, 0),
+        chaosRuns: numFlag('chaos-runs', undefined, 0),
+        steps: numFlag('steps', undefined),
+        seed: numFlag('seed', undefined, 0),
+      });
+      console.log(renderSim(result));
+      if (result.findings.length > 0) productExit = 1;
+      const jsonOut = flag('json');
+      if (jsonOut) writeFileSync(jsonOut, JSON.stringify(result, null, 2));
+    } else {
+      const pct = numFlag('pct', undefined);
+      const result = pct !== undefined
+        ? await pctSample({ ...productOpts, schedules: pct, pctDepth: numFlag('pct-depth', undefined), pctSteps: numFlag('pct-steps', undefined), seed: numFlag('seed', undefined, 0) })
+        : await checkProduct(productOpts);
+      console.log(renderProduct(result));
+      if (result.violations.length > 0) productExit = 1;
+      if (result.capHit && !args.includes('--allow-bounded')) {
+        console.error('check-product: BOUNDED exploration is not a full pass (use --allow-bounded to accept)');
+        productExit = productExit || 1;
+      }
+      if (result.sampled && result.violations.length === 0 && !args.includes('--allow-sampled')) {
+        console.error('check-product: a clean SAMPLED run is not a proof of absence (use --allow-sampled to accept, or run exhaustively)');
+        productExit = productExit || 1;
+      }
+      const jsonOut = flag('json');
+      if (jsonOut) writeFileSync(jsonOut, JSON.stringify(result, null, 2));
     }
-    if (result.sampled && result.violations.length === 0 && !args.includes('--allow-sampled')) {
-      console.error('check-product: a clean SAMPLED run is not a proof of absence (use --allow-sampled to accept, or run exhaustively)');
-      productExit = productExit || 1;
-    }
-    const jsonOut = flag('json');
-    if (jsonOut) writeFileSync(jsonOut, JSON.stringify(result, null, 2));
   } catch (err) {
     console.error(String(err && err.message));
     productExit = 1;

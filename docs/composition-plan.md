@@ -43,7 +43,25 @@ below as the main CP-M3 follow-up; per-machine mid-flight coverage remains
 the seeded semantic gate's job. Gate wiring into `polyrun deploy` was NOT
 done (deploy is store-backed and per-machine; the product check needs
 version PAIRS, which deploy does not know — `polyvers product` in CI is the
-right seam). CP-M4 (DST harness) remains open.
+right seam).
+
+CP-M4 LANDED (2026-07-18): `polyrun simulate` (polyrun/src/simulate.mjs,
+semantics §10) — the seeded DST fleet simulator against the REAL kernel:
+parity runs step the checker's model in lockstep (joint-state equality after
+every dispatch — the structural kernel-parity check the replay tests only
+sample), chaos runs add duplicate actionIds, stale-to-terminal deliveries,
+and mid-commit store faults with same-actionId redelivery, with the soak
+journal audit after every run. Deviation from the plan's sketch: implemented
+as a first-class src module + CLI rather than growing soak.test.mjs — the
+soak keeps the nondeterministic worker/timer storm; the simulator is the
+deterministic, invariant-bearing, seed-replayable half. Boundary (disclosed
+per report): outbox effects recorded not executed, timers not fired.
+
+All four milestones are now landed. Remaining recorded follow-ups: joint
+mid-flight seeding (polyrun joint-export), grandchildren, the shared
+delivery ladder (deliver vs stimulusOutcome), the shared seeded-BFS driver,
+and cascadeStep()/classifyStep() extraction — each becomes less urgent now
+that the parity walk checks the mirror structurally on every simulate run.
 Addresses: the reviewer comment that "real fleets fail in the interleavings" — the
 parent×child product model check declared open in `docs/polyrun-spec.md` FR-8.3,
 `docs/VERSIONING.md` ("What remains genuinely open"), `polyrun/README.md` scope

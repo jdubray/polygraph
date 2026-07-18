@@ -263,3 +263,38 @@ requires.) The genuine explosion is the product itself (`M^K`), which
 abstraction (§7) attacks directly and sampling (§8) falls back on. Recorded
 here so a future maintainer facing product blow-up does not re-derive POR
 and ship the unsound variant.
+
+## 10. The DST fleet simulator (CP-M4)
+
+`polyrun simulate` closes the loop from the other side: where the checker
+explores a MODEL of the kernel exhaustively, the simulator drives the REAL
+kernel — fresh in-memory stores, an injected clock, seeded mulberry32
+schedules — and asserts the same `invariants.compose.mjs` on the durable
+joint state after every dispatch.
+
+Two run modes, both byte-reproducible from the seed:
+
+- **Parity runs** step the checker's model in LOCKSTEP with the kernel:
+  after every dispatch, the durable joint state must equal the model's
+  `productStep` result exactly, and a kernel poison must coincide with a
+  model defect. This is the STRUCTURAL kernel-parity check — the
+  counterexample-replay tests sample parity at a few points; the parity
+  walk asserts it at every step of every seeded schedule, so drift between
+  `_dispatchInTxn` and its mirror surfaces as a `parity-divergence` finding
+  naming the exact stimulus.
+- **Chaos runs** add what the model deliberately excludes: duplicate
+  actionIds (must hit the dedupe path with no state change), deliveries to
+  terminal instances (must land as the FR-1.2 status-reject), and store
+  faults injected mid-commit followed by same-actionId redelivery (the
+  at-least-once crash-retry path — the transaction must have rolled back
+  cleanly). After every run the journals audit against the soak invariants:
+  dense seqs, chained accepted steps, snapshot = last accepted post.
+
+Boundary, disclosed in every report: outbox effects are recorded but not
+executed and timers are not fired (no worker loop) — the actions their
+completions would deliver are already in the external-stimulus superset
+(§3/§4), the same boundary the checker draws. The nondeterministic
+worker/timer surface remains the soak test's job (`polyrun/test/
+soak.test.mjs`, the Jepsen-style storm). A simulator falsifies; a clean run
+is evidence, never a proof — pair it with `polyrun check-product`. Every
+finding carries `{seed, run, step, trail}` for exact reproduction.

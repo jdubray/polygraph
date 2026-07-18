@@ -69,6 +69,19 @@ M2 (verification flywheel + composition) provides:
   schedules; `--pct-depth` orders inter-target stimuli) — a sampler
   falsifies reproducibly but never proves, so a sampled result carries
   `ok: false` and a clean run fails unless `--allow-sampled`.
+- **DST fleet simulator** (`src/simulate.mjs`, `polyrun simulate --parent
+  <machineId> --invariants <compose.mjs>`) — CP-M4: seeded deterministic
+  falsification against the REAL kernel (in-memory stores, injected clock,
+  mulberry32 schedules). Parity runs step the product checker's model in
+  lockstep — the durable joint state must equal the model's after every
+  dispatch, so mirror drift surfaces as a `parity-divergence` finding
+  instead of waiting for a wrong verdict. Chaos runs add duplicate
+  actionIds (dedupe path), stale deliveries to terminal instances (FR-1.2
+  status-reject), and mid-commit store faults with same-actionId redelivery
+  (crash-retry atomicity), auditing the journals continuously. Every
+  finding carries {seed, run, step, trail} for exact replay; a clean run is
+  falsification evidence, never a proof — pair with check-product. Timers/
+  outbox execution stay with the soak's worker storm (disclosed boundary).
 - **Continuous audit** (`src/audit.mjs`, `polyrun audit`) — replays the
   production journal (which IS a Polygraph trace corpus) through the module:
   post-state mismatches and journaled-rejections-the-module-now-accepts
