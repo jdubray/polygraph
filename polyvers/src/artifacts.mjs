@@ -25,9 +25,26 @@ function findModulePath(dir) {
     const p = join(dir, name);
     if (existsSync(p)) return p;
   }
-  const cjs = readdirSync(dir).filter((f) => f.endsWith('.cjs'));
+  // migrate.cjs is a sibling ARTIFACT, never the machine — without this
+  // exclusion, scaffolding a migration into a custom-named-machine dir would
+  // make the dir unloadable (two .cjs files), bricking the very `polyvers
+  // check` the scaffold tells the user to run next.
+  const cjs = readdirSync(dir).filter((f) => f.endsWith('.cjs') && f !== 'migrate.cjs');
   if (cjs.length === 1) return join(dir, cjs[0]);
-  throw new Error(`cannot locate the machine module in '${dir}' — expected next.cjs, machine.cjs, or exactly one .cjs file${cjs.length ? ` (found: ${cjs.join(', ')})` : ''}`);
+  throw new Error(`cannot locate the machine module in '${dir}' — expected next.cjs, machine.cjs, or exactly one non-migrate .cjs file${cjs.length ? ` (found: ${cjs.join(', ')})` : ''}`);
+}
+
+/**
+ * Contracts-only load — for the scaffold workflow, which runs BEFORE the new
+ * version's module exists (contract-first authoring) and must neither execute
+ * machine code nor demand invariants.
+ */
+export function loadContractOnly(dir) {
+  const abs = resolve(dir);
+  const contractPath = join(abs, 'contract.json');
+  if (!existsSync(contractPath)) throw new Error(`'${abs}' has no contract.json`);
+  const bytes = readFileSync(contractPath);
+  return { contract: JSON.parse(bytes.toString('utf-8')), contractHash: sha256(bytes) };
 }
 
 /**

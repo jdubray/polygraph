@@ -317,6 +317,7 @@ test('cli: --out writes compat-report.json and .md under the changeId', () => {
     const report = JSON.parse(r.stdout);
     const j = JSON.parse(readFileSync(join(dir, report.changeId, 'compat-report.json'), 'utf-8'));
     assert.equal(j.verdict, 'PASS');
+    assert.equal(j.milestone, 'M2'); // the ONE milestone constant, not prose
     assert.ok(readFileSync(join(dir, report.changeId, 'compat-report.md'), 'utf-8').includes('# polyvers compat-report'));
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -542,6 +543,115 @@ test('m2: stimuli gate — a removed action is undefined behavior, one witness p
   const shipFailures = g.failures.filter((f) => f.message.includes("'SHIP'"));
   assert.equal(shipFailures.length, 1); // deduped: one witness, not corpus × domain entries
   assert.ok(shipFailures[0].message.includes('action surface'));
+});
+
+test('m2-review: scaffolding into a custom-named-machine dir does not brick it', async () => {
+  const dir = scratchCopy('order-v1');
+  try {
+    // machine at a custom name (valid via the single-.cjs fallback)…
+    cpSync(join(dir, 'next.cjs'), join(dir, 'order.cjs'));
+    rmSync(join(dir, 'next.cjs'));
+    await loadArtifacts(dir); // loads via fallback
+    // …then a migration lands beside it — the dir must STAY loadable.
+    writeFileSync(join(dir, 'migrate.cjs'), "'use strict';\nmodule.exports.migrate = (s) => ({ ...s });\n");
+    const a = await loadArtifacts(dir);
+    assert.equal(typeof a.migrate, 'function');
+    assert.equal(typeof a.module.init, 'function'); // order.cjs, not migrate.cjs
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m2-review: a migrate.cjs-only change fires the migration lane, never "cosmetic"', async () => {
+  const dir = scratchCopy('order-v2-shape-migrated');
+  try {
+    const src = readFileSync(join(dir, 'migrate.cjs'), 'utf-8');
+    writeFileSync(join(dir, 'migrate.cjs'), src.replace("trackingId: '',", "trackingId: 'MIGRATED',"));
+    const cls = classify(await load('order-v2-shape-migrated'), await loadArtifacts(dir));
+    assert.deepEqual(cls.lanes, ['migration']);
+    assert.ok(cls.gates.includes('migrate'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m2-review: the migration transition is checked against transition invariants', async () => {
+  const dir = scratchCopy('order-v2-shape-migrated');
+  try {
+    // A migration that halves totals performs exactly the transition
+    // 'total-never-decreases' forbids — every state invariant still holds.
+    writeFileSync(join(dir, 'migrate.cjs'), [
+      "'use strict';",
+      'module.exports.migrate = function migrate(oldState) {',
+      '  return { orderState: oldState.orderState, totalCents: Math.floor(oldState.totalCents / 2), txId: oldState.txId, trackingId: "" };',
+      '};',
+    ].join('\n'));
+    const oldA = await load('order-v1');
+    const newA = await loadArtifacts(dir);
+    const corpus = synthesizeCorpus(oldA.module).entries;
+    const g = migrateGate(newA, corpus);
+    assert.equal(g.ok, false);
+    assert.ok(g.failures.some((f) => f.message.includes("'total-never-decreases'") && f.message.includes('migration transition')));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m2-review: many-to-one migrations dedup the migrated corpus, first id wins', async () => {
+  const dir = scratchCopy('order-v2-shape-migrated');
+  try {
+    // Collapse totals upward: the two distinct cancelled states (totals 0 and
+    // 2500) migrate to one state — no invariant is violated (totals only rise).
+    writeFileSync(join(dir, 'migrate.cjs'), [
+      "'use strict';",
+      'module.exports.migrate = function migrate(oldState) {',
+      '  return { orderState: oldState.orderState, totalCents: Math.max(oldState.totalCents, 2500), txId: oldState.txId, trackingId: "" };',
+      '};',
+    ].join('\n'));
+    const oldA = await load('order-v1');
+    const newA = await loadArtifacts(dir);
+    const corpus = synthesizeCorpus(oldA.module).entries;
+    const g = migrateGate(newA, corpus);
+    assert.equal(g.ok, true);
+    assert.ok(g.migratedCorpus.length < corpus.length, 'duplicates collapsed');
+    const keys = g.migratedCorpus.map((e) => e.key);
+    assert.equal(new Set(keys).size, keys.length, 'no duplicate keys survive');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m2-review: stimuli gate catches mutate-then-reject (production poison class)', async () => {
+  const dir = scratchCopy('order-v2-rules');
+  try {
+    const src = readFileSync(join(dir, 'next.cjs'), 'utf-8');
+    writeFileSync(join(dir, 'next.cjs'), src.replace(
+      "if (model.orderState !== 'pending') return reject('not-cancellable');",
+      "if (model.orderState !== 'pending') { model.totalCents = 1; return reject('not-cancellable'); }"));
+    const oldA = await load('order-v1');
+    const newA = await loadArtifacts(dir);
+    const corpus = synthesizeCorpus(oldA.module).entries;
+    const g = stimuliGate(oldA, newA, corpus);
+    assert.equal(g.ok, false);
+    assert.ok(g.failures.some((f) => f.message.includes('mutates the observable model and then rejects')));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m2-review: scaffold works contracts-only (new module need not exist yet)', () => {
+  const dir = scratchCopy('order-v2-shape');
+  try {
+    rmSync(join(dir, 'next.cjs')); // contract-first authoring: no module yet
+    const r = runCli(['migrate', 'scaffold', '--old', fix('order-v1'), '--new', dir]);
+    assert.equal(r.code, 0);
+    assert.ok(readFileSync(join(dir, 'migrate.cjs'), 'utf-8').includes('"trackingId"'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m2-review: when migration fails, downstream corpus gates are refused, not noisy', () => {
+  const dir = scratchCopy('order-v2-shape');
+  try {
+    // shape + vocabulary lanes together (rename SHIP too), still no migrate.cjs:
+    for (const f of ['contract.json', 'next.cjs']) {
+      writeFileSync(join(dir, f), readFileSync(join(dir, f), 'utf-8').replaceAll('SHIP', 'DISPATCH'));
+    }
+    const r = runCli(['check', '--old', fix('order-v1'), '--new', dir, '--synthesize']);
+    assert.equal(r.code, 1);
+    assert.ok(r.stdout.includes('polyvers migrate scaffold')); // the real cause, front and center
+    assert.ok(r.stdout.includes('refused: the corpus could not be migrated'));
+    assert.ok(!r.stdout.includes('could not deliver')); // no per-action setup noise
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('cli: a vocabulary-only change needs no corpus... unless the live stimuli gate demands one', () => {

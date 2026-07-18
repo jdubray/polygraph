@@ -39,6 +39,18 @@ const { isSamV2Module, domainFromManifest } = samAdapter;
 const sanitizeReplacer = (k, v) =>
   (typeof k === 'string' && k.startsWith('__')) || typeof v === 'function' ? undefined : v;
 const sanitizedState = (mod) => JSON.parse(JSON.stringify(mod.getState(), sanitizeReplacer));
+// The ONE projection: sanitize the module state, keep `keys` (or, with null,
+// the raw post-setState keys — polyrun's convention, which keeps module-added
+// stray keys visible), never fabricating explicit-undefined entries (stable()
+// renders those as a sentinel distinct from an absent key).
+const projectState = (mod, keys) => {
+  const raw = sanitizedState(mod);
+  const projected = {};
+  for (const k of keys ?? Object.keys(raw)) {
+    if (raw[k] !== undefined) projected[k] = raw[k];
+  }
+  return projected;
+};
 
 // ── load ────────────────────────────────────────────────────────────────────
 export function loadGate(newA) {
@@ -107,18 +119,11 @@ export function shapeRoundtripGate(newA, corpus) {
     try {
       mod.init();
       mod.setState(state);
-      const raw = sanitizedState(mod);
       // Project over the contract's observable keys; without a contract key
       // list, project over the SNAPSHOT's own keys — never over raw's, whose
       // extras could be merge-leaks from a previous iteration (setState is
       // merge-only in the strict profile).
-      const projected = {};
-      for (const k of contractKeys ?? Object.keys(state)) {
-        // Never fabricate an explicit-undefined entry for a key absent from
-        // raw — stable() renders it as a sentinel distinct from an absent
-        // key, which would fail a snapshot the module reproduced exactly.
-        if (raw[k] !== undefined) projected[k] = raw[k];
-      }
+      const projected = projectState(mod, contractKeys ?? Object.keys(state));
       // Corpus entries always carry their stable() key (the corpus contract;
       // both producers set it) — no silent recompute fallback.
       if (stable(projected) !== key) {
@@ -292,28 +297,29 @@ export function migrateGate(newA, corpus) {
     return { ...done('migrate', failures, 'refused: no migrate.cjs in the new version'), migratedCorpus: null };
   }
   const migrated = [];
+  const seen = new Set(); // many-to-one migrations collapse — the corpus contract (one entry per distinct state, FIRST id wins) must survive the swap
   const contractKeys = observableKeys(newA.contract);
   for (const { id, state } of corpus) {
     try {
-      const next = newA.migrate(JSON.parse(JSON.stringify(state)));
+      const frozen = JSON.stringify(state); // one stringify, two fresh parses
+      const next = newA.migrate(JSON.parse(frozen));
       // Purity/determinism: the same input twice must give the same output —
       // a clock or random dependence would migrate the fleet irreproducibly.
-      const again = newA.migrate(JSON.parse(JSON.stringify(state)));
-      if (stable(next) !== stable(again)) {
+      const again = newA.migrate(JSON.parse(frozen));
+      const nextKey = stable(next);
+      if (nextKey !== stable(again)) {
         failures.push({ id, message: 'migrate() is nondeterministic — two applications of the same snapshot differ (clock/random dependence); a migration must be pure' });
         continue;
       }
       // The NEW module must accept the migrated snapshot and reproduce it
       // exactly (polyrun migrate phase 1: stray or dropped keys would poison
-      // later rehydrations).
+      // later rehydrations). Without contract keys, project over the RAW
+      // post-setState keys (polyrun's convention) so a stray key the module
+      // ADDS on rehydration is visible to the comparison.
       newA.module.init();
       newA.module.setState(next);
-      const raw = sanitizedState(newA.module);
-      const projected = {};
-      for (const k of contractKeys ?? Object.keys(next)) {
-        if (raw[k] !== undefined) projected[k] = raw[k];
-      }
-      if (stable(projected) !== stable(next)) {
+      const projected = projectState(newA.module, contractKeys);
+      if (stable(projected) !== nextKey) {
         failures.push({ id, message: 'migrated state is not the module projection (stray or dropped keys)' });
         continue;
       }
@@ -324,14 +330,30 @@ export function migrateGate(newA, corpus) {
         try { ok = !!inv.pred(next); } catch { ok = false; }
         if (!ok) failures.push({ id, message: `migrated state violates '${inv.name}'` });
       }
-      migrated.push({ id, state: next, key: stable(next), source: `${corpus[0]?.source ?? 'archive'}+migrated` });
+      // The migration IS a transition — the one every live instance takes at
+      // deploy — and the intent artifact's transition invariants apply to it
+      // like any other. A migration the rules forbid must fail here, not slip
+      // through because only machine actions were ever checked. (If the
+      // migration legitimately breaks an old rule, the rule moves first —
+      // VERSIONING doctrine — and the diff shows it.)
+      for (const inv of newA.transitionInvariants ?? []) {
+        let ok = false;
+        try { ok = !!inv.pred(state, '$migrate', {}, next); } catch { ok = false; }
+        if (!ok) failures.push({ id, message: `the migration transition violates '${inv.name}' — the fleet-wide $migrate step would perform precisely the transition the intent forbids` });
+      }
+      if (!seen.has(nextKey)) {
+        seen.add(nextKey);
+        migrated.push({ id, state: next, key: nextKey, source: 'migrated' });
+      }
     } catch (err) {
       failures.push({ id, message: `migrate() threw: ${err && err.message}` });
     }
   }
   const okAll = failures.length === 0;
+  // Provenance-scoped: this validates against THIS corpus tier — polyrun
+  // migrate's dry run over live snapshots remains the apply-time gate.
   return {
-    ...done('migrate', failures, `migrate.cjs validated over ${corpus.length} snapshot(s) (pure, accepted, projection-equal, invariants hold)`),
+    ...done('migrate', failures, `migrate.cjs validated over ${corpus.length} snapshot(s) (pure, accepted, projection-equal, state+transition invariants hold) — against this corpus tier; polyrun migrate's live dry run remains the apply-time gate`),
     // Only a fully-validated migration may redefine what downstream gates
     // see — a partial swap would gate the deploy on a corpus mixing old and
     // new shapes.
@@ -352,53 +374,82 @@ export function migrateGate(newA, corpus) {
 // would throw) so the gate predicts what production would journal.
 export function stimuliGate(oldA, newA, corpus) {
   const failures = [];
-  const seenFailure = new Set(); // one witness per (action, failure class)
-  const { steps } = domainFromManifest(oldA.module);
+  // The stimulus set is the FULL declared domain — a deliberate conservative
+  // SUPERSET of what could actually be in flight: the strict profile makes
+  // every not-applicable delivery an observable reject, so the superset can
+  // only fail on genuine undefined behavior, never on doctrine-compliant
+  // rejection.
+  if (typeof oldA.module.instance({}).manifest !== 'function') {
+    failures.push({ message: "the old module's instance accessor exposes no manifest() — the old-version stimulus set cannot be read (module predates the SAM structural registry); the gate refuses rather than replaying nothing" });
+    return done('stimuli', failures, 'refused: old-version stimulus set unreadable');
+  }
+  const { steps, notes } = domainFromManifest(oldA.module);
   if (!steps.length) {
     failures.push({ message: "the old module's manifest() yields no (action, data) stimuli — nothing to replay would pass vacuously; refusing" });
     return done('stimuli', failures, 'refused: empty old-version stimulus set');
   }
   const mod = newA.module;
-  let fired = 0;
+  const seenFailure = new Set(); // one witness per (action, failure class)
+  // Messages are built lazily: record() discards duplicates, so the string
+  // (with its JSON.stringify of the payload) is only assembled on first sight.
   const record = (action, cls, id, message) => {
     const k = `${action}:${cls}`;
     if (seenFailure.has(k)) return;
     seenFailure.add(k);
-    failures.push({ id, message });
+    failures.push({ id, message: message() });
   };
+  // Action-surface misses cannot vary by state — settle them in ONE pass over
+  // the stimulus set, then deliver only the deliverable.
+  const deliverable = [];
+  for (const s of steps) {
+    if (typeof mod.actions[s.action] !== 'function') {
+      record(s.action, 'unhandled-surface', corpus[0]?.id, () => `old-version stimulus '${s.action}' is not in the new machine's action surface — in-flight timers/completions delivering it would journal as unhandled (every state is affected)`);
+    } else {
+      deliverable.push(s);
+    }
+  }
+  let fired = 0;
   for (const { id, state } of corpus) {
-    for (const { action, data } of steps) {
+    for (const { action, data } of deliverable) {
       fired += 1;
       const handler = mod.actions[action];
-      if (typeof handler !== 'function') {
-        record(action, 'unhandled-surface', id, `old-version stimulus '${action}' is not in the new machine's action surface — in-flight timers/completions delivering it would journal as unhandled (first witness: this snapshot; every state is affected)`);
-        continue;
-      }
       try {
         mod.init();
         mod.setState(state);
         try {
           handler(data);
         } catch (err) {
-          if (err && err.name === 'SamSchemaError') continue; // observable reject of a schema-invalid payload — verified behavior
-          record(action, 'throw', id, `old-version stimulus '${action}(${JSON.stringify(data)})' makes the new machine THROW (${err && err.message}) — in production this poisons the instance`);
+          if (err && err.name === 'SamSchemaError') continue; // observable reject of a schema-invalid payload — verified behavior (kernel parity)
+          record(action, 'throw', id, () => `old-version stimulus '${action}(${JSON.stringify(data)})' makes the new machine THROW (${err && err.message}) — in production this poisons the instance`);
           continue;
         }
+        // Classification parity note: like the kernel, the gate reads
+        // lastStep() after a synchronous handler call — polyrun machines are
+        // synchronous by construction (FR-2.6), and an async module would
+        // mislead the kernel identically, so parity is the honest contract.
         const step = mod.instance({}).lastStep();
         if (!step || (step.intent !== undefined && step.intent !== null && step.intent !== action)) {
-          record(action, 'unclassifiable', id, `lastStep() did not classify '${action}' — the kernel would poison the instance rather than guess`);
+          record(action, 'unclassifiable', id, () => `lastStep() did not classify '${action}' — the kernel would poison the instance rather than guess`);
         } else if (step.classification === 'unhandled') {
-          record(action, 'unhandled', id, `old-version stimulus '${action}(${JSON.stringify(data)})' is UNHANDLED in this state — neither accepted nor an observable reject; cross-version delivery becomes undefined behavior`);
+          record(action, 'unhandled', id, () => `old-version stimulus '${action}(${JSON.stringify(data)})' is UNHANDLED in this state — neither accepted nor an observable reject; cross-version delivery becomes undefined behavior`);
         } else if (step.classification === 'rejected') {
           const reason = step.rejections && step.rejections[0] && step.rejections[0].reason;
-          if (!reason) record(action, 'unnamed-reject', id, `old-version stimulus '${action}(${JSON.stringify(data)})' is rejected WITHOUT a reason — the journal entry would be unexplained; name the rule (contract specialRules)`);
+          if (!reason) record(action, 'unnamed-reject', id, () => `old-version stimulus '${action}(${JSON.stringify(data)})' is rejected WITHOUT a reason — the journal entry would be unexplained; name the rule (contract specialRules)`);
+          // Mutate-then-reject is a poison class in production (kernel
+          // FR-2.5): a rejected step must leave the observable model
+          // untouched.
+          const projected = projectState(mod, Object.keys(state));
+          if (stable(projected) !== stable(state)) {
+            record(action, 'mutate-then-reject', id, () => `the acceptor for '${action}' mutates the observable model and then rejects — in production the kernel poisons the instance for exactly this`);
+          }
         } // mutated / identity-by-mutation = accepted — verified behavior
       } catch (err) {
-        record(action, 'setup', id, `could not deliver '${action}' at this snapshot: ${err && err.message}`);
+        record(action, 'setup', id, () => `could not deliver '${action}' at this snapshot: ${err && err.message}`);
       }
     }
   }
-  return done('stimuli', failures, `${steps.length} old-version stimulus(es) × ${corpus.length} snapshot(s) = ${fired} deliveries; every outcome must be accepted or a NAMED observable reject`);
+  const exclusions = (notes ?? []).length;
+  return done('stimuli', failures, `${steps.length} old-version stimulus(es) (full declared domain — a conservative superset of in-flight stimuli) × ${corpus.length} snapshot(s) = ${fired} deliveries; every outcome must be accepted or a NAMED observable reject${exclusions ? `; ${exclusions} intent(s) excluded by the domain builder: ${notes.join('; ')}` : ''}`);
 }
 
 function done(gate, failures, summary) {

@@ -5,11 +5,15 @@
 // diffs cleanly in a PR.
 'use strict';
 
+// The ONE milestone label — stamped into every report; bump it with the
+// build, never in prose alone (both prior reviews caught a stale copy).
+export const MILESTONE = 'M2';
+
 export function buildReport({ classification, corpusInfo, gateResults }) {
   const ok = gateResults.every((g) => g.ok);
   return {
     tool: 'polyvers',
-    milestone: 'M1',
+    milestone: MILESTONE,
     changeId: classification.changeId,
     oldVersion: classification.oldVersion,
     newVersion: classification.newVersion,
@@ -29,7 +33,7 @@ export function renderReport(r) {
   lines.push(`old version \`${r.oldVersion}\` → new version \`${r.newVersion}\``);
   lines.push('');
   lines.push(`**Lanes:** ${r.lanes.join(', ')}`);
-  lines.push(`**Corpus:** ${r.corpus.count} snapshot(s), source: ${r.corpus.source}${r.corpus.truncated ? ' (TRUNCATED — raise --max-states)' : ''}${r.corpus.migrated ? ' — migrated through the new version\'s migrate.cjs before the downstream gates' : ''}`);
+  lines.push(`**Corpus:** ${r.corpus.count} snapshot(s), source: ${r.corpus.source}${r.corpus.truncated ? ' (TRUNCATED — raise --max-states)' : ''}${r.corpus.migrated ? ` — migrated through the new version's migrate.cjs before the downstream gates${r.corpus.migratedCount !== r.corpus.count ? ` (${r.corpus.migratedCount} distinct post-migration state(s) — the migration collapses some old states together)` : ''}` : ''}`);
   for (const n of r.corpus.notes ?? []) lines.push(`> corpus note: ${n}`);
   lines.push('');
   lines.push('| gate | verdict | summary |');
@@ -37,6 +41,10 @@ export function renderReport(r) {
   for (const g of r.gates) {
     lines.push(`| ${g.gate} | ${g.ok ? 'PASS' : `**FAIL** (${g.failures.length})`} | ${g.summary} |`);
   }
+  // Dormant, not dead: every lane's gates are live as of M2, so deferred is
+  // currently always empty — this rendering (and classify's dedup/merge) is
+  // deliberately retained for any future deferred gate; deleting it would
+  // reintroduce silent PASS-over-gates-that-never-ran.
   for (const d of r.deferred) {
     lines.push(`| ${d.gate} | NOT RUN (${d.milestone}) | ${d.why} — required by: ${d.lanes.join(', ')} |`);
   }

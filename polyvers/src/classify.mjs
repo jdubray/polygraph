@@ -40,6 +40,14 @@ export const LANES = {
     gates: ['load', 'invariant-diff', 'invariants-pointwise', 'semantic-model-check'],
     deferred: [],
   },
+  migration: {
+    // A new or edited migrate.cjs with everything else unchanged is NOT
+    // cosmetic — it is the artifact that rewrites every fleet instance's
+    // state under `polyrun migrate --apply`, and it must be revalidated.
+    description: 'the migration itself changed (new or edited migrate.cjs)',
+    gates: ['load', 'migrate', 'shape-roundtrip'],
+    deferred: [],
+  },
 };
 
 const keyTypeMap = (contract) =>
@@ -50,7 +58,10 @@ const setDiff = (a, b) => [...a].filter((x) => !b.has(x));
 // read as a vocabulary change (stable() is THE canonical comparator).
 const sameJson = (a, b) => stable(a ?? null) === stable(b ?? null);
 
-function diffShape(oldA, newA) {
+// Exported: the ONE definition of "the shape changed" — the scaffold consumes
+// it too, so classify and `migrate scaffold` can never disagree about whether
+// a migration is needed. Reads only .contract, so contract-only loads work.
+export function diffShape(oldA, newA) {
   const oldKeys = keyTypeMap(oldA.contract);
   const newKeys = keyTypeMap(newA.contract);
   const added = setDiff(new Set(newKeys.keys()), new Set(oldKeys.keys()));
@@ -163,10 +174,18 @@ export function classify(oldA, newA) {
     vocabulary: diffVocabulary(oldA, newA),
     intent: diffIntent(oldA, newA),
     moduleChanged: oldA.moduleHash !== newA.moduleHash,
+    // The migration lane fires when the NEW version ships a migration that
+    // the old version didn't have byte-identically. (Removing a migration
+    // with no shape change is drained-fleet housekeeping — no lane.)
+    migrationChanged: newA.migrateHash !== undefined && oldA.migrateHash !== newA.migrateHash,
   };
 
   const lanes = [];
+  // Order is load-bearing: 'shape' (and 'migration') come first so the
+  // migrate gate precedes every corpus consumer; the CLI additionally
+  // enforces this ordering structurally.
   if (diffs.shape.changed) lanes.push('shape');
+  if (diffs.migrationChanged) lanes.push('migration');
   if (diffs.vocabulary.changed) lanes.push('vocabulary');
   if (diffs.intent.changed) lanes.push('intent');
   // Any module edit is at least a semantic change; a pure contract/invariant
@@ -174,10 +193,10 @@ export function classify(oldA, newA) {
   if (diffs.moduleChanged) lanes.push('semantic');
 
   const gates = [...new Set(lanes.flatMap((l) => LANES[l].gates))];
-  // Dedupe deferred gates by name, merging the lanes that demand each. As of
-  // M1 the remaining deferred gates (migrate, stimuli) each live in exactly
-  // one lane, so the merge branch is currently unreachable — it stays because
-  // any future gate deferred by two lanes (M2+) must not print twice.
+  // Dedupe deferred gates by name, merging the lanes that demand each. Every
+  // gate is live as of M2 (all deferred lists are empty), so this machinery
+  // is dormant — deliberately retained: any future deferred gate demanded by
+  // two lanes must print one NOT RUN row, not two.
   const deferredByGate = new Map();
   for (const l of lanes) {
     for (const d of LANES[l].deferred) {

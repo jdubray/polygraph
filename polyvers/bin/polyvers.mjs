@@ -16,7 +16,7 @@
 
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { loadArtifacts } from '../src/artifacts.mjs';
+import { loadArtifacts, loadContractOnly } from '../src/artifacts.mjs';
 import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
 import { GATE_RUNNERS, NEEDS_CORPUS } from '../src/gates.mjs';
@@ -40,27 +40,35 @@ const newDir = flag('new');
 if (!oldDir || !newDir || !['classify', 'check', 'migrate-scaffold'].includes(command)) usage();
 
 try {
-  // Deliberately sequential (not Promise.all): both loads compile modules and
-  // touch the ESM/CJS loader state; interleaving buys nothing in a CLI.
-  const oldA = await loadArtifacts(oldDir);
-  const newA = await loadArtifacts(newDir);
-  const classification = classify(oldA, newA);
-
   if (command === 'migrate-scaffold') {
+    // Contracts-only: the scaffold runs BEFORE the new module exists
+    // (contract-first authoring) — it must not execute machine code, demand
+    // invariants, or require a loadable module.
+    const oldC = loadContractOnly(oldDir);
+    const newC = loadContractOnly(newDir);
     const migratePath = join(newDir, 'migrate.cjs');
     const notePath = join(newDir, 'MIGRATION-NOTE.md');
     if (existsSync(migratePath) && !has('force')) {
       console.error(`${migratePath} already exists — refusing to overwrite (use --force after reading it)`);
       process.exit(2);
     }
-    const scaffold = scaffoldMigrate(oldA, newA);
+    const scaffold = scaffoldMigrate(oldC, newC);
     writeFileSync(migratePath, scaffold.code);
-    writeFileSync(notePath, migrationNoteTemplate(oldA, newA, scaffold));
+    writeFileSync(notePath, migrationNoteTemplate(oldC, newC, scaffold));
     console.log(`scaffolded ${migratePath} (+ MIGRATION-NOTE.md)`);
     console.log(`  added: ${scaffold.added.join(', ') || '(none)'} · removed: ${scaffold.removed.join(', ') || '(none)'} · retyped: ${scaffold.retyped.join(', ') || '(none)'}`);
     for (const n of scaffold.notes) console.log(`  TODO: ${n}`);
-    if (!scaffold.notes.length) console.log('  scaffold is complete (pure addition) — validate it with `polyvers check`, apply with `polyrun migrate --apply`');
-  } else if (command === 'classify') {
+    if (!scaffold.notes.length) console.log('  scaffold is complete (pure addition) — validate it with `polyvers check`; `polyrun migrate` (dry run, then --apply) remains the apply-time gate over live snapshots');
+    process.exit(0);
+  }
+
+  // Deliberately sequential (not Promise.all): both loads compile modules and
+  // touch the ESM/CJS loader state; interleaving buys nothing in a CLI.
+  const oldA = await loadArtifacts(oldDir);
+  const newA = await loadArtifacts(newDir);
+  const classification = classify(oldA, newA);
+
+  if (command === 'classify') {
     if (has('json')) {
       console.log(JSON.stringify(classification, null, 2));
     } else {
@@ -123,21 +131,44 @@ try {
         oldA, newA, corpus, diffs: classification.diffs,
         opts: { maxStates, allowBounded: has('allow-bounded') },
       };
+      // Ordering is enforced STRUCTURALLY, not by lane-array convention:
+      // non-corpus gates first, then 'migrate' (whose validated output
+      // redefines the corpus), then every other corpus consumer. A future
+      // lane reorder cannot break the swap-before-consume invariant.
+      const ordered = [
+        ...wanted.filter((g) => !NEEDS_CORPUS.has(g)),
+        ...wanted.filter((g) => g === 'migrate'),
+        ...wanted.filter((g) => NEEDS_CORPUS.has(g) && g !== 'migrate'),
+      ];
       const gateResults = [];
-      for (const name of wanted) {
+      let migrateFailed = false;
+      for (const name of ordered) {
         const run = GATE_RUNNERS[name];
         if (!run) {
           gateResults.push({ gate: name, ok: false, summary: 'required by the classified lanes but NOT IMPLEMENTED in this build', failures: [{ message: `no runner registered for gate '${name}' — the verdict below cannot be trusted until it runs` }] });
           continue;
         }
+        // When the migration failed, the corpus is still in the OLD shape —
+        // running the remaining corpus gates over it would bury the real
+        // cause under per-snapshot noise (a strict module rejecting
+        // old-shape states). Refuse them explicitly instead.
+        if (migrateFailed && NEEDS_CORPUS.has(name)) {
+          gateResults.push({ gate: name, ok: false, summary: 'refused: the corpus could not be migrated (migrate gate failed)', failures: [{ message: 'not run — fix the migration first; results over an unmigrated old-shape corpus would misdiagnose the failure' }] });
+          continue;
+        }
         const result = run(ctx);
         gateResults.push(result);
-        // A fully-validated migration redefines the fleet: every later
-        // corpus gate (round-trip, stimuli, pointwise, seeded model check)
-        // runs over the states production will hold AFTER the migration.
-        if (name === 'migrate' && result.migratedCorpus) {
-          ctx.corpus = result.migratedCorpus;
-          corpusInfo = { ...corpusInfo, migrated: true };
+        if (name === 'migrate') {
+          if (result.migratedCorpus) {
+            // A fully-validated migration redefines the fleet: every later
+            // corpus gate (round-trip, stimuli, pointwise, seeded model
+            // check) runs over the states production will hold AFTER the
+            // migration applies.
+            ctx.corpus = result.migratedCorpus;
+            corpusInfo = { ...corpusInfo, migrated: true, migratedCount: result.migratedCorpus.length };
+          } else {
+            migrateFailed = true;
+          }
         }
       }
 
