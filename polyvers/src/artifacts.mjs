@@ -106,3 +106,13 @@ export function terminalKeyOf(contract) {
     ?? (Array.isArray(contract.stateKeys) && contract.stateKeys[0] && contract.stateKeys[0].name)
     ?? null;
 }
+
+/** The ONE bridge from artifact invariant fields to the checker's input
+ *  shape — every check() caller (gate and test alike) goes through this so
+ *  the mapping can never silently diverge into a vacuous {undefined}. */
+export function invariantsOf(artifacts) {
+  return {
+    stateInvariants: artifacts.invariants ?? [],
+    transitionInvariants: artifacts.transitionInvariants ?? [],
+  };
+}

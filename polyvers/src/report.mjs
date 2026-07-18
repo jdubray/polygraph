@@ -9,7 +9,7 @@ export function buildReport({ classification, corpusInfo, gateResults }) {
   const ok = gateResults.every((g) => g.ok);
   return {
     tool: 'polyvers',
-    milestone: 'M0',
+    milestone: 'M1',
     changeId: classification.changeId,
     oldVersion: classification.oldVersion,
     newVersion: classification.newVersion,
@@ -90,7 +90,7 @@ export function renderReport(r) {
   lines.push(`## Verdict: ${r.verdict}`);
   if (r.deferred.length) {
     lines.push('');
-    lines.push(`> Scope note: ${r.deferred.length} gate(s) this change's lanes require are not implemented at M0 (see the NOT RUN rows). A PASS here is a pass over the gates that ran — nothing more.`);
+    lines.push(`> Scope note: ${r.deferred.length} gate(s) this change's lanes require are not implemented in this build (see the NOT RUN rows). A PASS here is a pass over the gates that ran — nothing more.`);
   }
   lines.push('');
   return lines.join('\n');

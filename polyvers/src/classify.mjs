@@ -171,8 +171,10 @@ export function classify(oldA, newA) {
   if (diffs.moduleChanged) lanes.push('semantic');
 
   const gates = [...new Set(lanes.flatMap((l) => LANES[l].gates))];
-  // Dedupe deferred gates by name (a module+invariants change would otherwise
-  // list semantic-model-check once per lane); merge the lanes that demand it.
+  // Dedupe deferred gates by name, merging the lanes that demand each. As of
+  // M1 the remaining deferred gates (migrate, stimuli) each live in exactly
+  // one lane, so the merge branch is currently unreachable — it stays because
+  // any future gate deferred by two lanes (M2+) must not print twice.
   const deferredByGate = new Map();
   for (const l of lanes) {
     for (const d of LANES[l].deferred) {

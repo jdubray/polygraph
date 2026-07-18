@@ -13,8 +13,8 @@
 //
 // Deterministic: no API, no randomness, no clock.
 //
-// Module usage:  check({ specPath, contract, invariants, windows, maxStates })
-// CLI:  node check.mjs --spec <mod.js> --contract <c.json> --invariants <inv.mjs> [--traces <dir>] [--max-states N] [--json out]
+// Module usage:  check({ specPath, contract, invariants, windows, maxStates, initialStates })
+// CLI:  node check.mjs --spec <mod.js> --contract <c.json> --invariants <inv.mjs> [--traces <dir>] [--initial-states <states.json>] [--max-states N] [--json out]
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -150,8 +150,6 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   const stateInv = invariants.stateInvariants || [];
   const transInv = invariants.transitionInvariants || [];
 
-  const clone = (o) => JSON.parse(JSON.stringify(o));
-
   // One full BFS exploration. Kept as an inner function so the determinism
   // double-pass below can run it twice under identical inputs.
   const explore = () => {
@@ -160,42 +158,62 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
     let capHit = false;
     let init;
     try { init = mod.init(); }
-    catch (e) { return { error: `init() threw: ${e && e.message}`, parent: new Map(), violations, capHit }; }
+    catch (e) { return { error: `init() threw: ${e && e.message}`, parent: new Map(), violations, capHit, seededStates: 0 }; }
     const initKey = stable(init);
     const parent = new Map([[initKey, { prev: null, action: null, data: null, state: init, origin: 'init' }]]);
-    const queue = [init];
+    // Roots are collected EXPLICITLY (not inferred from "parent has only roots
+    // right now") so the root-invariant loop below cannot silently reclassify
+    // BFS-discovered states if code is ever inserted between here and there.
+    const roots = [[initKey, parent.get(initKey)]];
+    const queue = [[init, initKey]];
     // Seed the frontier with the provided initial states (deduped against
-    // init and each other) — each is explored exactly like init.
+    // init and each other) — each is explored exactly like init. Seeds are
+    // EXEMPT from the maxStates cap: the cap bounds what exploration
+    // DISCOVERS, not how many fleet snapshots the caller already has —
+    // otherwise a fleet at or above the cap would report BOUNDED with zero
+    // transitions tried.
     for (const s of initialStates) {
       const k = stable(s);
-      if (!parent.has(k)) { parent.set(k, { prev: null, action: null, data: null, state: s, origin: 'seed' }); queue.push(s); }
+      if (!parent.has(k)) {
+        const node = { prev: null, action: null, data: null, state: s, origin: 'seed' };
+        parent.set(k, node);
+        roots.push([k, node]);
+        queue.push([s, k]);
+      }
     }
+    const seededStates = roots.length - 1;
 
     const pathTo = (key) => {
       const chain = [];
       let k = key;
-      while (k !== null && parent.has(k)) { const n = parent.get(k); chain.push({ action: n.action, data: n.data, state: n.state, ...(n.origin ? { origin: n.origin } : {}) }); k = n.prev; }
+      while (k !== null && parent.has(k)) { const n = parent.get(k); chain.push({ action: n.action, data: n.data, state: n.state, origin: n.origin }); k = n.prev; }
       return chain.reverse();
     };
     // Dedup by (kind, name): a state invariant and a transition invariant may
     // legitimately share a name; keying on the name alone would hide one.
+    // NOTE the consequence for seeded runs: ONE witness per invariant — the
+    // first root (init, then seeds in input order) whose region reaches the
+    // violation. The verdict is "compatible or not", not the affected-instance
+    // list; callers must not read a single named seed as the blast radius.
     const record = (name, kind, path, detail) => { const k = `${kind}:${name}`; if (seen.has(k)) return; seen.add(k); violations.push({ invariant: name, kind, path, detail }); };
 
     // invariants on every root of the exploration (init + seeds)
-    for (const [rk, node] of parent) {
+    for (const [rk, node] of roots) {
       for (const inv of stateInv) {
         let ok; try { ok = inv.pred(node.state); } catch { ok = false; }
         if (!ok) record(inv.name, 'state', pathTo(rk), node.origin === 'seed' ? 'violated in a seeded initial state' : 'violated in the initial state');
       }
     }
 
+    // The cap counts DISCOVERED states (init + everything BFS finds); seeds
+    // are excluded so discovered = parent.size - seededStates.
     let head = 0; // index cursor — Array.shift() is O(n) per pop, O(n²) overall
-    while (head < queue.length && parent.size < maxStates) {
-      const s = queue[head++];
-      const sKey = stable(s);
+    while (head < queue.length && parent.size - seededStates < maxStates) {
+      const [s, sKey] = queue[head++];
+      const sJson = JSON.stringify(s); // one stringify per state, one parse per step
       for (const { action, data } of steps) {
         let post;
-        try { post = mod.next(clone(s), action, data); }
+        try { post = mod.next(JSON.parse(sJson), action, data); }
         catch (e) {
           record(`next() threw on ${action}`, 'throw', [...pathTo(sKey), { action, data, state: `THREW: ${e && e.message}` }], String(e && e.message || e));
           continue;
@@ -212,14 +230,14 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
             if (!ok) record(inv.name, 'state', [...pathTo(sKey), { action, data, state: post }], `reachable state violates the rule`);
           }
           parent.set(pKey, { prev: sKey, action, data, state: post });
-          queue.push(post);
+          queue.push([post, pKey]);
         }
       }
     }
     // CAP HIT means the exploration was truncated: states remained unexpanded.
     // Completing with parent.size exactly AT the cap is a full exploration.
     if (head < queue.length) capHit = true;
-    return { parent, violations, capHit };
+    return { parent, violations, capHit, seededStates };
   };
 
   // ── Determinism double-pass ───────────────────────────────────────────────
@@ -238,8 +256,8 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   const pass2 = explore();
   const nondeterministic = digestOf(pass1) !== digestOf(pass2);
 
-  const { parent, violations, capHit, error } = pass1;
-  if (error) return { ok: false, error, statesExplored: 0, capHit: false, violations: [], engine };
+  const { parent, violations, capHit, error, seededStates } = pass1;
+  if (error) return { ok: false, error, statesExplored: 0, capHit: false, violations: [], engine, seededStates: 0 };
   if (nondeterministic) {
     violations.push({
       invariant: 'deterministic-exploration',
@@ -248,13 +266,16 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
       detail: 'two identical explorations produced different state graphs or violations — the spec is nondeterministic (Math.random / Date.now / retained mutable state); its replay and exploration verdicts cannot be trusted',
     });
   }
-  return { ok: violations.length === 0, statesExplored: parent.size, capHit, violations, domainNotes: notes, engine, nondeterministic };
+  // statesExplored counts what exploration DISCOVERED (init + BFS finds);
+  // seeded roots are reported separately so a seeded run cannot overstate
+  // its coverage by counting states it was merely handed.
+  return { ok: violations.length === 0, statesExplored: parent.size - seededStates, seededStates, capHit, violations, domainNotes: notes, engine, nondeterministic };
 }
 
 // ── Readable render ─────────────────────────────────────────────────────────
 export function render(result) {
   const L = [];
-  L.push(`states explored: ${result.statesExplored}${result.capHit ? ' (CAP HIT — exploration bounded)' : ''}`);
+  L.push(`states explored: ${result.statesExplored}${result.seededStates ? ` (+ ${result.seededStates} seeded)` : ''}${result.capHit ? ' (CAP HIT — exploration bounded)' : ''}`);
   if (result.error) { L.push(`ERROR: ${result.error}`); return L.join('\n'); }
   // Silent alphabet pruning must be VISIBLE: an action skipped for lack of a
   // data domain means the clean verdict below only covers the explored subset.
@@ -298,11 +319,18 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const specModule = loadSpec(args.spec);
   // --initial-states: a .json array of state objects seeded into the BFS
   // alongside init() — the versioning check "can any of THESE states be
-  // driven to a violation under these rules".
+  // driven to a violation under these rules". Malformed input is a usage
+  // error (exit 2), never a stack trace and never 'machine bug' findings.
   let initialStates = [];
   if (args['initial-states']) {
-    initialStates = JSON.parse(readFileSync(args['initial-states'], 'utf-8'));
+    try {
+      initialStates = JSON.parse(readFileSync(args['initial-states'], 'utf-8'));
+    } catch (e) {
+      console.error(`--initial-states '${args['initial-states']}': ${e && e.message}`); process.exit(2);
+    }
     if (!Array.isArray(initialStates)) { console.error(`--initial-states '${args['initial-states']}' must be a JSON array of states`); process.exit(2); }
+    const bad = initialStates.findIndex((s) => !s || typeof s !== 'object' || Array.isArray(s));
+    if (bad >= 0) { console.error(`--initial-states '${args['initial-states']}': element ${bad} is not a state object — seeding non-states would report input garbage as machine findings`); process.exit(2); }
   }
   const result = check({ specModule, contract, invariants, windows, maxStates: Number(args['max-states'] || 100000), initialStates });
   console.log(render(result));

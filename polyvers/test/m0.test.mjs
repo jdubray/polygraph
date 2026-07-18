@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { loadArtifacts } from '../src/artifacts.mjs';
+import { loadArtifacts, invariantsOf } from '../src/artifacts.mjs';
 import { classify } from '../src/classify.mjs';
 import { loadCorpus, synthesizeCorpus } from '../src/corpus.mjs';
 import { loadGate, shapeRoundtripGate, vocabularyGate, invariantDiffGate, invariantsPointwiseGate, semanticModelCheckGate } from '../src/gates.mjs';
@@ -367,8 +367,7 @@ test('m1: THE LANDMINE — pointwise passes, from-init check passes, only the se
 
   // ...and the NEW machine is clean when explored from init() alone — SUBMIT
   // now floors totals at 1000, so no low-total state is init-reachable...
-  const invariants = { stateInvariants: newA.invariants, transitionInvariants: newA.transitionInvariants };
-  const fromInit = check({ specModule: newA.module, contract: newA.contract, invariants });
+  const fromInit = check({ specModule: newA.module, contract: newA.contract, invariants: invariantsOf(newA) });
   assert.equal(fromInit.ok, true);
 
   // ...but seeding the fleet states finds CHARGE_OK driving the old
@@ -383,12 +382,85 @@ test('m1: THE LANDMINE — pointwise passes, from-init check passes, only the se
 
 test('m1: BOUNDED exploration is a failure unless explicitly accepted', async () => {
   const [oldA, newA] = [await load('order-v1'), await load('order-v2-rules')];
-  const corpus = synthesizeCorpus(oldA.module).entries;
-  const bounded = semanticModelCheckGate(newA, corpus, { maxStates: 3 });
+  // One mid-flight snapshot as the whole corpus: the machine's remaining
+  // reachable space must be DISCOVERED, and a cap of 2 truncates that
+  // discovery (seeds themselves are cap-exempt).
+  const corpus = synthesizeCorpus(oldA.module).entries.slice(1, 2);
+  const bounded = semanticModelCheckGate(newA, corpus, { maxStates: 2 });
   assert.equal(bounded.ok, false);
   assert.ok(bounded.failures.some((f) => f.message.includes('BOUNDED')));
-  const accepted = semanticModelCheckGate(newA, corpus, { maxStates: 3, allowBounded: true });
+  const accepted = semanticModelCheckGate(newA, corpus, { maxStates: 2, allowBounded: true });
   assert.equal(accepted.ok, true); // no violations in the truncated space, and the operator accepted the bound
+});
+
+test('m1: seeds do not consume the exploration cap — a fleet at the cap still explores', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-rules')];
+  const corpus = synthesizeCorpus(oldA.module).entries; // 6 snapshots
+  // A cap far below the fleet size: before the fix this was a guaranteed
+  // BOUNDED failure with ZERO transitions tried; now the cap bounds only
+  // what the BFS discovers beyond the seeds.
+  const g = semanticModelCheckGate(newA, corpus, { maxStates: 2 });
+  assert.equal(g.ok, true);
+  assert.ok(!g.failures.some((f) => f.message.includes('BOUNDED')));
+});
+
+test('m1: counterexamples carry the data payloads', async () => {
+  const newA = await load('order-v2-landmine');
+  const corpus = loadCorpus(fix('landmine-fleet.json'));
+  const g = semanticModelCheckGate(newA, corpus);
+  const f = g.failures.find((x) => x.message.includes("'fulfilling-total-minimum'"));
+  assert.ok(f.message.includes('CHARGE_OK({'), 'steps render as action(data), not bare action names');
+});
+
+test('m1: a nondeterministic new machine fails with the real finding, not a fabricated counterexample', async () => {
+  const dir = scratchCopy('order-v2-rules');
+  try {
+    const src = readFileSync(join(dir, 'next.cjs'), 'utf-8');
+    writeFileSync(join(dir, 'next.cjs'), src.replace(
+      "model.txId = String(p.txId || '');",
+      'model.txId = String(Math.random());'));
+    const oldA = await load('order-v1');
+    const newA = await loadArtifacts(dir);
+    const corpus = synthesizeCorpus(oldA.module).entries;
+    const g = semanticModelCheckGate(newA, corpus);
+    assert.equal(g.ok, false);
+    const f = g.failures.find((x) => x.message.includes('deterministic-exploration'));
+    assert.ok(f, 'the nondeterminism finding is reported');
+    assert.ok(!f.message.includes('counterexample'), 'no fabricated root-state counterexample');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m1: a version with no invariants at all is refused by the intent gates, never vacuous', async () => {
+  const dir = scratchCopy('order-v2-rules');
+  try {
+    rmSync(join(dir, 'invariants.mjs'));
+    const oldA = await load('order-v1');
+    const newA = await loadArtifacts(dir);
+    const corpus = synthesizeCorpus(oldA.module).entries;
+    const sem = semanticModelCheckGate(newA, corpus);
+    assert.equal(sem.ok, false);
+    assert.ok(sem.failures[0].message.includes('no invariants'));
+    const pw = invariantsPointwiseGate(newA, corpus);
+    assert.equal(pw.ok, false);
+    assert.ok(pw.failures[0].message.includes('no invariants'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('m1: check.mjs --initial-states rejects malformed input as a usage error, not machine findings', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'polyvers-seeds-'));
+  try {
+    writeFileSync(join(dir, 'bad.json'), '["charging", 42]'); // state NAMES, not state objects
+    const checkCli = join(here, '..', '..', 'scripts', 'check.mjs');
+    const v1 = fix('order-v1');
+    let code = 0, stderr = '';
+    try {
+      execFileSync(process.execPath, [checkCli,
+        '--spec', join(v1, 'next.cjs'), '--contract', join(v1, 'contract.json'),
+        '--initial-states', join(dir, 'bad.json')], { encoding: 'utf-8' });
+    } catch (err) { code = err.status; stderr = String(err.stderr ?? ''); }
+    assert.equal(code, 2);
+    assert.ok(stderr.includes('not a state object'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('m1: cli end-to-end — the landmine pair fails check with the semantic gate', () => {

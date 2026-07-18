@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// polyvers CLI (M0): classify a machine change and run the gates its lanes
-// require.
+// polyvers CLI (M0+M1): classify a machine change and run the gates its
+// lanes require.
 //
 //   polyvers classify --old <dir> --new <dir> [--json]
 //   polyvers check    --old <dir> --new <dir> [--snapshots <path> | --synthesize]
@@ -100,9 +100,12 @@ try {
       // ── gates: iterate the classification's demands over the registry —
       // a wanted gate with no runner is a failing result, never a silent
       // omission the verdict overlooks. ──
+      // maxStates: undefined lets each consumer apply its own default
+      // (synthesis 20000, checker 100000) — seeds no longer consume the
+      // checker's budget, so one knob for both bounds is safe.
       const ctx = {
         oldA, newA, corpus, diffs: classification.diffs,
-        opts: { ...(maxStates !== undefined ? { maxStates } : {}), allowBounded: has('allow-bounded') },
+        opts: { maxStates, allowBounded: has('allow-bounded') },
       };
       const gateResults = wanted.map((name) => {
         const run = GATE_RUNNERS[name];

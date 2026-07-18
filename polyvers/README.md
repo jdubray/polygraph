@@ -13,9 +13,13 @@ on. Plan: [`docs/polyvers-plan.md`](../docs/polyvers-plan.md).
 The M1 gate is the headline: `scripts/check.mjs` gained an `initialStates`
 option (CLI: `--initial-states <states.json>`), so the exhaustive BFS runs
 with every fleet snapshot seeded alongside `init()` — the essay's precise
-compatibility definition, executable: *v(n+1) is compatible with the fleet
-iff no live v(n) state can be driven to an invariant violation under
-v(n+1)'s rules.* The landmine fixture (`test/fixtures/order-v2-landmine/`)
+compatibility definition, executable **for changes that touch the module or
+the invariants** (the semantic and intent lanes): *v(n+1) is compatible with
+the fleet iff no live v(n) state can be driven to an invariant violation
+under v(n+1)'s rules.* Seeds are exempt from the exploration cap (the cap
+bounds what the BFS discovers, not how many snapshots the fleet holds), and
+a FAIL names one witness per violated rule — a compatibility verdict, not
+the affected-instance list. The landmine fixture (`test/fixtures/order-v2-landmine/`)
 proves the point: its violation passes the pointwise gate AND the from-init
 model check, and only the seeded check finds it. A BOUNDED exploration is a
 failing gate unless accepted explicitly with `--allow-bounded`

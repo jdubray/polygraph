@@ -27,7 +27,7 @@
 import { stable } from '../../scripts/load-spec.mjs';
 import samAdapter from '../../scripts/sam-adapter.cjs';
 import { check } from '../../scripts/check.mjs';
-import { observableKeys } from './artifacts.mjs';
+import { observableKeys, invariantsOf } from './artifacts.mjs';
 
 const { isSamV2Module } = samAdapter;
 
@@ -119,7 +119,9 @@ export function shapeRoundtripGate(newA, corpus) {
         // key, which would fail a snapshot the module reproduced exactly.
         if (raw[k] !== undefined) projected[k] = raw[k];
       }
-      if (stable(projected) !== (key ?? stable(state))) {
+      // Corpus entries always carry their stable() key (the corpus contract;
+      // both producers set it) — no silent recompute fallback.
+      if (stable(projected) !== key) {
         failures.push({ id, message: 'the new module does not reproduce this snapshot (its projection differs — a shape change without a migration)' });
       }
     } catch (err) {
@@ -190,6 +192,12 @@ export function invariantDiffGate(diffs) {
 export function invariantsPointwiseGate(newA, corpus) {
   const failures = [];
   const preds = newA.invariants ?? [];
+  // Same vacuity doctrine as the semantic gate: a version with no stated
+  // intent at all cannot pass an intent gate on zero checks.
+  if (preds.length === 0 && (newA.transitionInvariants ?? []).length === 0) {
+    failures.push({ message: 'the new version declares no invariants (no invariants.mjs) — 0 checks over the fleet certifies nothing; state the intent before gating on it' });
+    return done('invariants-pointwise', failures, 'refused: no invariants to check');
+  }
   let checks = 0;
   for (const inv of preds) {
     for (const { id, state } of corpus) {
@@ -214,11 +222,19 @@ export function invariantsPointwiseGate(newA, corpus) {
 // landmine is exactly what the seeds find and the from-init check cannot.
 export function semanticModelCheckGate(newA, corpus, { maxStates = 100000, allowBounded = false } = {}) {
   const failures = [];
-  const idByKey = new Map(corpus.map((e) => [e.key ?? stable(e.state), e.id]));
+  const invariants = invariantsOf(newA);
+  // A version with no invariants at all must not receive a green "exhaustive
+  // check" — the doctrine is uniform: empty corpus refused, present-but-empty
+  // invariants.mjs refused at load, and a MISSING invariants file refused
+  // here. There is nothing to certify without stated intent.
+  if (invariants.stateInvariants.length === 0 && invariants.transitionInvariants.length === 0) {
+    failures.push({ message: 'the new version declares no invariants (no invariants.mjs) — an exhaustive check over zero rules certifies vacuous truth; state the intent before gating on it' });
+    return done('semantic-model-check', failures, 'refused: no invariants to check');
+  }
   const result = check({
     specModule: newA.module,
     contract: newA.contract,
-    invariants: { stateInvariants: newA.invariants ?? [], transitionInvariants: newA.transitionInvariants ?? [] },
+    invariants,
     maxStates,
     initialStates: corpus.map((e) => e.state),
   });
@@ -226,21 +242,39 @@ export function semanticModelCheckGate(newA, corpus, { maxStates = 100000, allow
     failures.push({ message: `model check could not run: ${result.error}` });
     return done('semantic-model-check', failures, 'exhaustive check from fleet snapshots as initial states');
   }
+  // Corpus entries always carry their stable() key (the corpus contract) —
+  // built lazily: violations are few and a clean run needs no map at all.
+  const idByKey = result.violations.length ? new Map(corpus.map((e) => [e.key, e.id])) : null;
   for (const v of result.violations) {
+    if (v.path.length === 0) {
+      // A finding with no counterexample path (e.g. the nondeterminism
+      // verdict) must not be dressed up as a root-state violation.
+      failures.push({ message: `'${v.invariant}' [${v.kind}] — ${v.detail}` });
+      continue;
+    }
     const root = v.path[0];
-    const seedId = root && root.origin === 'seed' ? (idByKey.get(stable(root.state)) ?? 'seeded state') : null;
-    const steps = v.path.filter((s) => s.action !== null).map((s) => s.action);
+    // Attribute by corpus membership, not just origin: a fleet snapshot that
+    // happens to equal init() dedupes to origin 'init' in the checker, but
+    // the operator still deserves the snapshot id.
+    const snapshotId = idByKey.get(stable(root.state));
+    const from = snapshotId ? `snapshot ${snapshotId}` : 'init';
+    // action(data) per step, matching check.mjs render(): the data is
+    // load-bearing — the same action with different data can be the only
+    // trigger, and a data-less repro reads as a flake.
+    const steps = v.path.filter((s) => s.action !== null).map((s) => `${s.action}(${JSON.stringify(s.data ?? {})})`);
     failures.push({
-      id: seedId ?? 'init',
-      message: `'${v.invariant}' [${v.kind}] — ${v.detail}; shortest counterexample from ${seedId ? `snapshot ${seedId}` : 'init'}: ${steps.length ? steps.join(' → ') : '(violated at the root state)'}`,
+      id: snapshotId ?? 'init',
+      message: `'${v.invariant}' [${v.kind}] — ${v.detail}; shortest counterexample from ${from}: ${steps.length ? steps.join(' → ') : '(violated at the root state)'}`,
     });
   }
   // BOUNDED is not a pass (check-effects doctrine): "0 violations over almost
   // nothing" must not gate a deploy unless the operator explicitly accepts it.
   if (result.capHit && !allowBounded) {
-    failures.push({ message: `exploration BOUNDED at ${result.statesExplored} states — a clean result over a truncated space is not a pass; raise --max-states or accept explicitly with --allow-bounded` });
+    failures.push({ message: `exploration BOUNDED at ${result.statesExplored} discovered states — a clean result over a truncated space is not a pass; raise --max-states or accept explicitly with --allow-bounded` });
   }
-  const summary = `exhaustive check from ${corpus.length} fleet snapshot(s) + init, ${result.statesExplored} state(s) explored${result.capHit ? ' (BOUNDED)' : ''}`;
+  // One witness per invariant (the checker dedupes by rule): a FAIL is a
+  // compatibility verdict, not the affected-instance list.
+  const summary = `exhaustive check from ${corpus.length} fleet snapshot(s) + init, ${result.statesExplored} state(s) discovered${result.capHit ? ' (BOUNDED)' : ''}; one witness per violated rule — not an affected-instance list`;
   return done('semantic-model-check', failures, summary);
 }
 
