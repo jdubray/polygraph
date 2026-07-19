@@ -202,6 +202,16 @@ be reportable under §2. The run did produce one result that stands independent
 of provenance — a suppression bug in `polyvers check` that hid the study's most
 valuable finding — since that is a fact about the tool, not about the fleet.
 | **FS-M4** | Tier 3 version-pair replay with upstream ground truth | every TP linked to an upstream artifact |
+
+FS-M4 targets **Medusa, 2–3 version pairs**. §6 leaves one thing open that a
+reviewer would attack: ground truth is external, but the *translation* of
+Medusa's lifecycle into a SAM module is not, and whoever writes it controls
+which findings are expressible. [`tier3-protocol.md`](tier3-protocol.md)
+pre-registers the discipline that closes it — the version-N translation is
+authored and frozen **before** the N+1 diff is read — and adds the MISS bucket
+(split in-projection vs out-of-projection) that §6's four buckets cannot
+express. Recall is the number reviewers check first, so misses are hunted as
+deliberately as hits.
 | **FS-M5** | Paper §"A worked example" rewritten around the numbers | reviewer ask answered |
 
 Each milestone gets the repo's standard adversarial review before the next
