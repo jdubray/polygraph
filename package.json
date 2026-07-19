@@ -40,7 +40,8 @@
     "eval:mechanism": "node eval/mechanism-eval.mjs",
     "eval:check": "node eval/check-eval.mjs",
     "eval:ab": "node eval/skill-ab.mjs",
-    "eval:ab-v2": "node eval/ab-v2.mjs"
+    "eval:ab-v2": "node eval/ab-v2.mjs",
+    "study:tier1": "node eval/fleet-study/tier1/run.mjs"
   },
   "bin": {
     "polygraph": "scripts/verify.mjs",

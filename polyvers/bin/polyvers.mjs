@@ -167,13 +167,35 @@ try {
     }
   } else { // check
     const { oldA, newA, classification } = await loadPair();
+    // The two no-gate paths still honour --json: a machine consumer asking
+    // for JSON must never be handed prose (found by the fleet-study Tier 1
+    // harness, which could not score these cases at all). `gated: false`
+    // marks the distinction the prose makes — nothing RAN, so this is not
+    // the same object as a PASS over a full gate table.
+    const noGateReport = (reason) => ({
+      tool: 'polyvers',
+      changeId: classification.changeId,
+      oldVersion: classification.oldVersion,
+      newVersion: classification.newVersion,
+      identical: classification.identical,
+      lanes: classification.lanes,
+      corpus: { source: 'not required — no gate ran', count: 0 },
+      gates: [],
+      gated: false,
+      reason,
+      verdict: 'PASS',
+    });
     if (classification.identical) {
-      console.log('polyvers check: identical artifacts — nothing to gate');
+      const reason = 'identical artifacts — nothing to gate';
+      if (has('json')) console.log(JSON.stringify(noGateReport(reason), null, 2));
+      else console.log(`polyvers check: ${reason}`);
     } else if (classification.lanes.length === 0) {
       // Not identical, but no lane fired: a cosmetic artifact edit
       // (reformat, description text). Say so explicitly — never render a
       // PASS verdict over an empty gate table.
-      console.log('polyvers check: no lane fired — the artifacts differ, but only in ways no compatibility lane classifies (cosmetic edit); zero gates apply');
+      const reason = 'no lane fired — the artifacts differ, but only in ways no compatibility lane classifies (cosmetic edit); zero gates apply';
+      if (has('json')) console.log(JSON.stringify(noGateReport(reason), null, 2));
+      else console.log(`polyvers check: ${reason}`);
     } else {
       const wanted = classification.gates;
       const maxStates = numFlag('max-states');
