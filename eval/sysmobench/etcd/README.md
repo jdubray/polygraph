@@ -346,6 +346,53 @@ exhaustiveness requires a finite *reachable state space*, which is a stronger
 condition than finite action domains and one a contract does not currently have
 to declare.
 
+### The explorer caught none of them — even seeded from the real fleet
+
+The explorer was given every advantage: not BFS from `init`, but the paper's own
+fleet-seeding, started from **48 distinct observable states harvested from the
+captured corpus** (`corpus/seeds.json`, terms 1–2, all three roles).
+
+```
+spec       clean (BOUNDED)      <- the reference
+spec-1     clean (BOUNDED)
+spec-2     clean (BOUNDED)
+spec-3     clean (BOUNDED)
+spec-4     clean (BOUNDED)
+spec-5     clean (BOUNDED)
+```
+
+**0 of 5.** Four of these specifications demonstrably disagree with real etcd —
+replay proves it, window by window — and not one of those disagreements violates
+`OneLeaderPerTerm`, `CommitWithinLog`, or `ValidVote`. The three expert
+invariants are simply silent about log matching, which is where every divergence
+lives.
+
+That is an invariant-adequacy result, and it is exactly what the compat-report's
+`invariant adequacy: NOT MEASURED` line exists to warn about: a clean explorer
+verdict against a weak invariant set is worth very little, and here it is worth
+nothing at all.
+
+### The two phases are complementary, and neither dominates
+
+Putting both experiments together gives a cleaner claim than either alone:
+
+| | replay (phase 3) | explorer + invariants (phase 2/4) |
+|---|---|---|
+| 8 injected defects in the reference | **2/8** | **1/8** definitive, 6/8 inconclusive |
+| 5 one-shot generated specs | **4/5** | **0/5** |
+
+Replay missed the heartbeat clamp — a correct system never drives that branch —
+and the explorer caught it. The explorer missed every generated specification's
+log-matching divergence — the invariants say nothing about it — and replay
+caught four of five.
+
+So neither phase subsumes the other, and the honest statement is stronger than
+"conformance is the phase that discriminates": **conformance and exploration
+fail in different directions, and a specification graded by either alone gets a
+clean bill it has not earned.** Conformance cannot see defensive code the system
+never exercises. Exploration cannot see anything the stated invariants do not
+mention.
+
 ### What these numbers are not
 
 Five generations, one task, one model family, one-shot. That is a signature, not
