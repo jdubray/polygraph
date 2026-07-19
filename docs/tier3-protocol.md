@@ -94,6 +94,31 @@ If `polyvers` passes these pairs against a tight version-N model, the result is
 stronger for the tightness, not weaker. Any looseness in a translation is a
 defect to be reported, not a convenience.
 
+## 2b. AMENDMENT (Pair A run phase) — type prose is part of the contract
+
+Pair A's first run reported four retyped state keys. Two were noise the author
+created: the `type` descriptions of `authorized` and `refunded` had been
+reworded without any change of meaning, and `polyvers` diffs the whole type
+string. A documentation edit manufactured a shape diff and a spurious migration
+demand.
+
+**Rule for every remaining pair.** A `stateKeys[].type` string is part of the
+contract's identity, not a comment. Where the meaning of a key is unchanged
+between versions, its `type` string must be **byte-identical**. Role and
+behaviour commentary belongs in `next.cjs` and `VALIDATION.md`, which are not
+diffed.
+
+This cuts both ways and the discipline has to be stated in full: a key whose
+*meaning* genuinely changed must have its string updated even when its domain
+did not, and the resulting flag is a true positive about a real semantic change
+— reported by the shape lane rather than the semantic lane, which is a taxonomy
+imprecision rather than a false alarm. Pair A's `captured` is exactly that case.
+
+Self-inflicted false positives are **reported, not quietly corrected**. A study
+that only records the tool's mistakes is not measuring honestly, and the
+distinction between "the tool cried wolf" and "the operator moved the goalposts"
+is one a reviewer cannot check unless it is written down.
+
 ## 3. Scoring, beyond §6's rule
 
 §6's four buckets stand (TP / TI / FP by maintainer artifact). Tier 3 adds:
