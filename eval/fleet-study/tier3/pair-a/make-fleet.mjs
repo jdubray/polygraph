@@ -58,8 +58,14 @@ while (queue.length) {
   }
 }
 
-const entries = [...seen.values()].map((state, i) => ({ id: `medusa-v2.4.0#${i}`, state }));
-const byStatus = entries.reduce((a, e) => ({ ...a, [e.state.status]: (a[e.state.status] ?? 0) + 1 }), {});
+// A FLAT array of state objects — the corpus format `polyvers check
+// --snapshots` expects; it assigns its own `fleet.json#N` ids. An earlier
+// version of this generator wrapped each state as `{ id, state }`, which
+// migrate() then received verbatim and every snapshot failed with "key
+// 'status' set to undefined". A wrapper the consumer does not expect is not a
+// richer corpus, it is a broken one.
+const entries = [...seen.values()];
+const byStatus = entries.reduce((a, s) => ({ ...a, [s.status]: (a[s.status] ?? 0) + 1 }), {});
 
 mkdirSync(join(here, 'out'), { recursive: true });
 writeFileSync(join(here, 'out', 'fleet.json'), JSON.stringify(entries, null, 2) + '\n');
@@ -76,6 +82,6 @@ console.log(`fleet: ${entries.length} distinct states`);
 console.log('by status:', Object.entries(byStatus).map(([k, v]) => `${k}=${v}`).join(' '));
 // The state Pair A hinges on: fully captured, yet still `authorized`, because
 // at v2.4.0 capture does not move the status.
-const fullyCaptured = entries.filter((e) => e.state.captured === 'full');
+const fullyCaptured = entries.map((s, i) => ({ i, s })).filter(({ s }) => s.captured === 'full');
 console.log(`\nfully-captured states (${fullyCaptured.length}) and the status v2.4.0 leaves them in:`);
-for (const e of fullyCaptured) console.log(`  ${e.id}  status=${e.state.status}  authorized=${e.state.authorized}`);
+for (const { i, s } of fullyCaptured) console.log(`  fleet.json#${i}  status=${s.status}  authorized=${s.authorized}`);

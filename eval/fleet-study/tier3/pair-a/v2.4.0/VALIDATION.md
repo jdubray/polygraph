@@ -83,9 +83,55 @@ correcting it.
 The three rejections above are preconditions on the **`Payment` / `PaymentSession`
 entities**, not on `PaymentCollection.status`. v2.4.0 guards those siblings
 (`capturePayment_` throws when `payment.canceled_at` is set, short-circuits when
-`captured_at` is set) and guards the collection's own status **nowhere**. The
-contract's `specialRules` say so per rule; `transitionInvariants` is empty for
-the same reason.
+`captured_at` is set).
+
+### CORRECTION (post-freeze, Pair A run phase)
+
+This section originally claimed v2.4.0 guards the collection's own status
+**"nowhere"**. **That claim was false**, and it is corrected here rather than
+edited away, per tier3-protocol §2.
+
+`packages/core/core-flows/src/order/workflows/mark-payment-collection-as-paid.ts`
+contains exactly one such guard:
+
+```ts
+export const throwUnlessPaymentCollectionNotPaid = createStep(
+  "validate-existing-payment-collection",
+  ({ paymentCollection }) => {
+    if (paymentCollection.status !== "not_paid") {
+      throw new MedusaError(MedusaError.Types.NOT_ALLOWED,
+        `Can only mark 'not_paid' payment collection as paid`)
+    }
+  }
+)
+```
+
+It guards **entry to the `markPaymentCollectionAsPaid` workflow**, not the
+derivation. It was missed when this translation was authored, and was surfaced
+while extracting v2.5.0.
+
+**It is byte-identical at v2.4.0 and v2.5.0** (fetched pinned at both tags), so
+it is *not* a change under study in Pair A.
+
+**The model does not include a `MARK_AS_PAID` action, and that omission stands.**
+Justification, so it is a declared scope limit rather than an oversight left in
+place:
+
+- The workflow is a **composite** of steps the model already has — create a
+  session, authorize it, capture the full amount — i.e. `ADD_SESSION` →
+  `AUTHORIZE_SESSION(full)` → `CAPTURE_PAYMENT(full)`. It reaches no state the
+  model cannot already reach.
+- Its guard *restricts* when that sequence may run. Omitting the guard leaves
+  the model a **superset** of reachable states, the same conservative direction
+  already declared in §6.
+- Because it is identical in both versions, the omission is **symmetric** and
+  cannot bias the version-N → version-N+1 comparison, which is what Pair A
+  measures.
+
+The narrower true statement, which is what §4's sixth row and the empty
+`transitionInvariants` actually rest on: **the status derivation path — the one
+that runs on every authorize, capture, and refund — reads the current status
+nowhere, in either version.** That is unaffected by this correction.
 
 ## 6. Known over-approximation
 
