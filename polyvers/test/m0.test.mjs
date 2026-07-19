@@ -496,6 +496,40 @@ test('m2: a valid migration validates and yields the migrated corpus', async () 
   assert.equal(shapeRoundtripGate(newA, corpus).ok, false);
 });
 
+// The migrate gate has two failure kinds and they must NOT share a fate.
+// Until 2026-07 both returned migratedCorpus:null, so a migration that was
+// pure, accepted and projection-equal — but whose output violated a new rule —
+// suppressed every downstream corpus gate and told the operator the corpus was
+// "unmigrated old-shape" when it was neither. That is the archetypal fleet
+// case (a narrowed domain the live fleet already violates), and it is exactly
+// when the pointwise population and the reachability answer are most needed.
+test('m2: a well-formed migration whose OUTPUT violates a rule still yields the migrated corpus', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-shape-migrated')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  const unhappy = { ...newA, invariants: [{ name: 'never-holds', pred: () => false }] };
+  const g = migrateGate(unhappy, corpus);
+  assert.equal(g.ok, false, 'the violated rule must still fail the gate');
+  assert.ok(g.failures.every((f) => f.message.includes('never-holds')));
+  // ...but the corpus is complete and usable, so downstream gates can run.
+  assert.ok(g.migratedCorpus, 'an invariant failure must not withhold the corpus');
+  assert.equal(g.migratedCorpus.length, corpus.length);
+  assert.ok(g.summary.includes('the migration is not the defect'));
+});
+
+test('m2: a STRUCTURAL migration failure withholds the corpus', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v2-shape-migrated')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  const broken = { ...newA, migrate: () => { throw new Error('boom'); } };
+  const g = migrateGate(broken, corpus);
+  assert.equal(g.ok, false);
+  assert.equal(g.migratedCorpus, null, 'a throwing migration leaves the corpus unmigrated');
+  assert.ok(g.summary.includes('FAILED STRUCTURALLY'));
+  // Nondeterminism is structural too — the fleet would migrate irreproducibly.
+  let n = 0;
+  const flaky = { ...newA, migrate: (s) => ({ ...s, trackingId: String(n++) }) };
+  assert.equal(migrateGate(flaky, corpus).migratedCorpus, null);
+});
+
 test('m2: cli end-to-end — shape change + migration passes the full pipeline over migrated states', () => {
   const r = runCli(['check', '--old', fix('order-v1'), '--new', fix('order-v2-shape-migrated'), '--synthesize']);
   assert.equal(r.code, 0);

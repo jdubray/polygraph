@@ -115,6 +115,12 @@ rather than as zero coverage.
 
 FS-M2 delivers the machine, the mapping layer, the capture harness, and a
 validated offline corpus. **The live run has not been performed** — it needs
-a Stripe test-mode key, which the author supplies. FS-M3 (three version
-changes, adjudicated into TP/TI/FP with cost columns) requires a `--live`
-corpus and is not started.
+a Stripe test-mode key, which the author supplies.
+
+FS-M3 is built: three version changes (`machines/subscription-v2-*`), their
+migrations, and a runner producing the cost table and a blind adjudication
+worksheet — see [`eval/fleet-study/tier2/`](../../eval/fleet-study/tier2/).
+It runs end-to-end against the offline corpus and reports the headline result
+(`v2-dunning` is clean from `init` and fails against the fleet), but the
+TP/FP/TI adjudication waits on a `--live` corpus, since judgments over a
+circular corpus are not reportable.

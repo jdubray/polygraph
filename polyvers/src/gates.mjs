@@ -300,6 +300,25 @@ export function migrateGate(newA, corpus) {
   const migrated = [];
   const seen = new Set(); // many-to-one migrations collapse — the corpus contract (one entry per distinct state, FIRST id wins) must survive the swap
   const contractKeys = observableKeys(newA.contract);
+  // Two failure kinds live in this gate and they have DIFFERENT consequences
+  // for the corpus:
+  //
+  //   STRUCTURAL — migrate threw, was nondeterministic, or produced a state
+  //     the module does not reproduce. The snapshot never reaches `migrated`,
+  //     so the corpus is incomplete and nothing downstream may consume it.
+  //
+  //   INVARIANT — migrate ran cleanly, purely, and round-trips, but the state
+  //     it produced violates a rule. The corpus is COMPLETE AND WELL-FORMED;
+  //     only the verdict is bad.
+  //
+  // Conflating them (as this gate did until 2026-07) suppressed every
+  // downstream corpus gate whenever a migration was correct-but-unhappy, and
+  // told the operator the corpus was "unmigrated old-shape" when it was
+  // neither. That is the archetypal fleet case — a narrowed domain whose
+  // migration is right and whose fleet still violates the new rule — and it
+  // is exactly when the operator most needs the pointwise gate's affected
+  // population and the model check's reachability answer.
+  let structuralFailure = false;
   for (const { id, state } of corpus) {
     try {
       const frozen = JSON.stringify(state); // one stringify, two fresh parses
@@ -310,6 +329,7 @@ export function migrateGate(newA, corpus) {
       const nextKey = stable(next);
       if (nextKey !== stable(again)) {
         failures.push({ id, message: 'migrate() is nondeterministic — two applications of the same snapshot differ (clock/random dependence); a migration must be pure' });
+        structuralFailure = true;
         continue;
       }
       // The NEW module must accept the migrated snapshot and reproduce it
@@ -322,6 +342,7 @@ export function migrateGate(newA, corpus) {
       const projected = projectState(newA.module, contractKeys);
       if (stable(projected) !== nextKey) {
         failures.push({ id, message: 'migrated state is not the module projection (stray or dropped keys)' });
+        structuralFailure = true;
         continue;
       }
       // New state invariants hold on the migrated state (pointwise here; the
@@ -348,17 +369,23 @@ export function migrateGate(newA, corpus) {
       }
     } catch (err) {
       failures.push({ id, message: `migrate() threw: ${err && err.message}` });
+      structuralFailure = true;
     }
   }
   const okAll = failures.length === 0;
-  // Provenance-scoped: this validates against THIS corpus tier — polyrun
-  // migrate's dry run over live snapshots remains the apply-time gate.
+  const summary = okAll
+    ? `migrate.cjs validated over ${corpus.length} snapshot(s) (pure, accepted, projection-equal, state+transition invariants hold) — against this corpus tier; polyrun migrate's live dry run remains the apply-time gate`
+    : structuralFailure
+      ? `migrate.cjs FAILED STRUCTURALLY over ${corpus.length} snapshot(s) — it threw, was nondeterministic, or produced states the module does not reproduce; the corpus cannot be migrated and downstream corpus gates are refused`
+      : `migrate.cjs is well-formed over all ${corpus.length} snapshot(s) (pure, accepted, projection-equal) but the states it produces VIOLATE the new version's rules — the migration is not the defect; downstream gates run over the migrated corpus to size the affected population`;
   return {
-    ...done('migrate', failures, `migrate.cjs validated over ${corpus.length} snapshot(s) (pure, accepted, projection-equal, state+transition invariants hold) — against this corpus tier; polyrun migrate's live dry run remains the apply-time gate`),
-    // Only a fully-validated migration may redefine what downstream gates
-    // see — a partial swap would gate the deploy on a corpus mixing old and
-    // new shapes.
-    migratedCorpus: okAll ? migrated : null,
+    ...done('migrate', failures, summary),
+    // A STRUCTURALLY sound migration may redefine what downstream gates see
+    // even when its output violates a rule: those gates then measure the real
+    // post-migration fleet, which is the answer the operator needs. Only a
+    // structural failure withholds the corpus — a partial swap would gate the
+    // deploy on a corpus mixing old and new shapes.
+    migratedCorpus: structuralFailure ? null : migrated,
   };
 }
 

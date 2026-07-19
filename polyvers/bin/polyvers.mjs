@@ -252,22 +252,31 @@ try {
           gateResults.push({ gate: name, ok: false, summary: 'required by the classified lanes but NOT IMPLEMENTED in this build', failures: [{ message: `no runner registered for gate '${name}' — the verdict below cannot be trusted until it runs` }] });
           continue;
         }
-        // When the migration failed, the corpus is still in the OLD shape —
-        // running the remaining corpus gates over it would bury the real
-        // cause under per-snapshot noise (a strict module rejecting
+        // When the migration failed STRUCTURALLY, the corpus is still in the
+        // OLD shape — running the remaining corpus gates over it would bury
+        // the real cause under per-snapshot noise (a strict module rejecting
         // old-shape states). Refuse them explicitly instead.
+        //
+        // A migration that is well-formed but produces rule-violating states
+        // does NOT land here: it yields a real migrated corpus, so the gates
+        // below run and size the affected population. See migrateGate.
         if (migrateFailed && NEEDS_CORPUS.has(name)) {
-          gateResults.push({ gate: name, ok: false, summary: 'refused: the corpus could not be migrated (migrate gate failed)', failures: [{ message: 'not run — fix the migration first; results over an unmigrated old-shape corpus would misdiagnose the failure' }] });
+          // `skipped` marks this as CONTROL FLOW rather than a claim about
+          // the fleet: it says only that an upstream gate stopped the
+          // pipeline. Consumers that tally findings must not count it.
+          gateResults.push({ gate: name, ok: false, skipped: true, summary: 'refused: the corpus could not be migrated (migrate gate failed structurally)', failures: [{ message: 'not run — fix the migration first; results over an unmigrated old-shape corpus would misdiagnose the failure' }] });
           continue;
         }
         const result = run(ctx);
         gateResults.push(result);
         if (name === 'migrate') {
           if (result.migratedCorpus) {
-            // A fully-validated migration redefines the fleet: every later
+            // A structurally sound migration redefines the fleet: every later
             // corpus gate (round-trip, stimuli, pointwise, seeded model
             // check) runs over the states production will hold AFTER the
-            // migration applies.
+            // migration applies — including when the migrate gate itself is
+            // red on invariants, which is precisely when that population
+            // needs measuring.
             ctx.corpus = result.migratedCorpus;
             corpusInfo = { ...corpusInfo, migrated: true, migratedCount: result.migratedCorpus.length };
           } else {

@@ -1,0 +1,108 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "subState",
+      "type": "enum: 'incomplete' | 'trialing' | 'active' | 'pastDue' | 'unpaid' | 'canceled' | 'incompleteExpired'"
+    },
+    {
+      "name": "dunningAttempts",
+      "type": "integer 0..3 — retries burned against the current unpaid invoice"
+    },
+    {
+      "name": "hasPaymentMethod",
+      "type": "boolean — a chargeable payment method is on file"
+    },
+    {
+      "name": "cents",
+      "type": "integer >= 0 — the recurring amount last settled or agreed"
+    }
+  ],
+  "initState": {
+    "subState": "incomplete",
+    "dunningAttempts": 0,
+    "hasPaymentMethod": false,
+    "cents": 0
+  },
+  "actions": {
+    "START_TRIAL": {
+      "dataFields": {
+        "cents": "integer"
+      }
+    },
+    "PAYMENT_SUCCEEDED": {
+      "dataFields": {
+        "cents": "integer"
+      }
+    },
+    "PAYMENT_FAILED": {
+      "dataFields": {}
+    },
+    "TRIAL_ENDED": {
+      "dataFields": {}
+    },
+    "ATTACH_PAYMENT_METHOD": {
+      "dataFields": {}
+    },
+    "CANCEL": {
+      "dataFields": {}
+    },
+    "INCOMPLETE_EXPIRED": {
+      "dataFields": {}
+    },
+    "REFUND_ISSUED": {
+      "dataFields": {}
+    }
+  },
+  "dataDomain": {
+    "START_TRIAL": {
+      "cents": [
+        1500
+      ]
+    },
+    "PAYMENT_SUCCEEDED": {
+      "cents": [
+        1500
+      ]
+    }
+  },
+  "terminalKey": "subState",
+  "terminalStates": [
+    "canceled",
+    "incompleteExpired"
+  ],
+  "specialRules": [
+    {
+      "name": "not-collectable",
+      "note": "Billing stimuli against a terminal subscription are observable rejections — Stripe keeps delivering webhooks for records that have already ended.",
+      "whenState": "subState in ('canceled','incompleteExpired')",
+      "whenAction": "PAYMENT_SUCCEEDED|PAYMENT_FAILED"
+    },
+    {
+      "name": "first-invoice-still-open",
+      "note": "A failure on the FIRST invoice does not enter dunning; the subscription stays incomplete until it settles or expires.",
+      "whenState": "subState = 'incomplete'",
+      "whenAction": "PAYMENT_FAILED"
+    },
+    {
+      "name": "already-unpaid",
+      "note": "The dunning budget is already exhausted; further failures change nothing observable.",
+      "whenState": "subState = 'unpaid'",
+      "whenAction": "PAYMENT_FAILED"
+    },
+    {
+      "name": "already-terminal",
+      "note": "Cancelling an ended subscription is a no-op, not an error.",
+      "whenState": "subState in ('canceled','incompleteExpired')",
+      "whenAction": "CANCEL"
+    },
+    {
+      "name": "nothing-to-refund",
+      "note": "REFUND_ISSUED outside a collectable state is an observable rejection.",
+      "whenState": "subState in ('incomplete','trialing','canceled','incompleteExpired')",
+      "whenAction": "REFUND_ISSUED"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op, never a throw. Webhooks are redelivered at least once, so every stale or duplicate delivery must be a named rejection.",
+  "projectionBound": "These four keys are the ENTIRE observable state. Proration, tax, invoice line items, payment-method fingerprints, coupons/discounts, currency, customer metadata and schedule/phase data are OUTSIDE the projection: not checked by any gate, not migrated, not audited. Every guarantee made about this machine is relative to this list."
+}

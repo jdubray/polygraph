@@ -1,0 +1,237 @@
+{
+  "corpus": "C:\\Users\\jjdub\\code\\polygraph\\examples\\fleet-study-stripe\\out",
+  "manifest": {
+    "tool": "fleet-study capture",
+    "mode": "offline",
+    "provenance": "simulated (offline: the machine generated this corpus — NOT admissible as Tier 2 evidence)",
+    "admissibleAsTier2": false,
+    "seed": 7,
+    "requestedFleet": 400,
+    "distinctStates": 11,
+    "subscriptions": 400,
+    "windows": 1357,
+    "synthesisedWindows": 0,
+    "stripeApiVersion": null,
+    "projectionBound": "four keys: subState, dunningAttempts, hasPaymentMethod, cents. Proration, tax, invoice lines, payment-method details, coupons, currency and schedule data are outside every guarantee made from this corpus."
+  },
+  "admissible": false,
+  "seed": 11,
+  "changes": [
+    {
+      "id": "v2-addition",
+      "change": "pure addition: a REFUND_ISSUED action; nothing removed, no existing transition or invariant altered",
+      "expect": "PASS",
+      "why": "adding vocabulary cannot strand a live state: no fleet record carries the new action, and every existing transition is untouched",
+      "lanes": [
+        "vocabulary",
+        "semantic"
+      ],
+      "gatesDemanded": [
+        "load",
+        "vocabulary",
+        "stimuli",
+        "shape-roundtrip",
+        "invariants-pointwise",
+        "semantic-model-check"
+      ],
+      "migrationRequired": false,
+      "migrationAuthored": false,
+      "verdict": "PASS",
+      "predictionHeld": true,
+      "pre": {
+        "verdict": "PASS",
+        "failedGates": [],
+        "findingCount": 0,
+        "skippedGates": [],
+        "corpusStates": 11,
+        "adequacy": {
+          "measured": false
+        },
+        "exitCode": 0
+      },
+      "post": null,
+      "corpusStates": 11,
+      "corpusSource": "archive (fleet.json)",
+      "msClassify": 2705,
+      "msCheck": 2198
+    },
+    {
+      "id": "v2-dunning",
+      "change": "rules + intent: the retry budget drops from 3 to 2, and the invariants tighten with it",
+      "expect": "FAIL",
+      "why": "the fleet already holds records mid-dunning, and no migration can make them legal without making a billing decision — so the failure should SURVIVE a correct migration. This is the archetypal fleet event and the one the study exists to exhibit",
+      "lanes": [
+        "shape",
+        "migration",
+        "intent",
+        "semantic"
+      ],
+      "gatesDemanded": [
+        "load",
+        "migrate",
+        "shape-roundtrip",
+        "invariant-diff",
+        "invariants-pointwise",
+        "semantic-model-check"
+      ],
+      "migrationRequired": true,
+      "migrationAuthored": true,
+      "verdict": "FAIL",
+      "predictionHeld": true,
+      "pre": {
+        "verdict": "FAIL",
+        "failedGates": [
+          "migrate",
+          "shape-roundtrip",
+          "invariants-pointwise",
+          "semantic-model-check"
+        ],
+        "findingCount": 1,
+        "skippedGates": [
+          "shape-roundtrip",
+          "invariants-pointwise",
+          "semantic-model-check"
+        ],
+        "corpusStates": 11,
+        "adequacy": {
+          "measured": false
+        },
+        "exitCode": 1
+      },
+      "post": {
+        "verdict": "FAIL",
+        "failedGates": [
+          "migrate",
+          "invariants-pointwise",
+          "semantic-model-check"
+        ],
+        "findingCount": 4,
+        "skippedGates": [],
+        "corpusStates": 11,
+        "adequacy": {
+          "measured": false
+        },
+        "exitCode": 1
+      },
+      "corpusStates": 11,
+      "corpusSource": "archive (fleet.json)",
+      "msClassify": 2067,
+      "msCheck": 5532
+    },
+    {
+      "id": "v2-shape",
+      "change": "shape: `cents` splits into `amountCents` + `currency`",
+      "expect": "PASS",
+      "why": "the old shape cannot round-trip unmigrated, but the rename is faithful and total — so a correct migration should CLEAR it. A shape change that stayed red after a correct migration would mean the gate was measuring something other than shape",
+      "lanes": [
+        "shape",
+        "migration",
+        "intent",
+        "semantic"
+      ],
+      "gatesDemanded": [
+        "load",
+        "migrate",
+        "shape-roundtrip",
+        "invariant-diff",
+        "invariants-pointwise",
+        "semantic-model-check"
+      ],
+      "migrationRequired": true,
+      "migrationAuthored": true,
+      "verdict": "PASS",
+      "predictionHeld": true,
+      "pre": {
+        "verdict": "FAIL",
+        "failedGates": [
+          "migrate",
+          "shape-roundtrip",
+          "invariants-pointwise",
+          "semantic-model-check"
+        ],
+        "findingCount": 1,
+        "skippedGates": [
+          "shape-roundtrip",
+          "invariants-pointwise",
+          "semantic-model-check"
+        ],
+        "corpusStates": 11,
+        "adequacy": {
+          "measured": false
+        },
+        "exitCode": 1
+      },
+      "post": {
+        "verdict": "PASS",
+        "failedGates": [],
+        "findingCount": 0,
+        "skippedGates": [],
+        "corpusStates": 11,
+        "adequacy": {
+          "measured": false
+        },
+        "exitCode": 0
+      },
+      "corpusStates": 11,
+      "corpusSource": "archive (fleet.json)",
+      "msClassify": 2317,
+      "msCheck": 5566
+    }
+  ],
+  "findings": [
+    {
+      "findingId": "v2-dunning::pre-migration::migrate::0",
+      "change": "v2-dunning",
+      "phase": "pre-migration",
+      "gate": "migrate",
+      "witness": null,
+      "message": "the shape changed but the new version has no migrate.cjs — a failing round-trip in this lane needs a verified migration; start with `polyvers migrate scaffold`",
+      "bucket": null
+    },
+    {
+      "findingId": "v2-dunning::post-migration::migrate::1",
+      "change": "v2-dunning",
+      "phase": "post-migration",
+      "gate": "migrate",
+      "witness": "fleet.json#10",
+      "message": "migrated state violates 'exhausted-dunning-is-unpaid'",
+      "bucket": null
+    },
+    {
+      "findingId": "v2-dunning::post-migration::invariants-pointwise::2",
+      "change": "v2-dunning",
+      "phase": "post-migration",
+      "gate": "invariants-pointwise",
+      "witness": "fleet.json#10",
+      "message": "violates 'exhausted-dunning-is-unpaid' — this state exists (or is reachable); decide what it means BEFORE the deploy",
+      "bucket": null
+    },
+    {
+      "findingId": "v2-dunning::post-migration::semantic-model-check::3",
+      "change": "v2-dunning",
+      "phase": "post-migration",
+      "gate": "semantic-model-check",
+      "witness": "fleet.json#10",
+      "message": "'exhausted-dunning-is-unpaid' [state] — violated in a seeded initial state; shortest counterexample from snapshot fleet.json#10: (violated at the root state)",
+      "bucket": null
+    },
+    {
+      "findingId": "v2-dunning::post-migration::semantic-model-check::4",
+      "change": "v2-dunning",
+      "phase": "post-migration",
+      "gate": "semantic-model-check",
+      "witness": "fleet.json#10",
+      "message": "'dunning-within-budget' [state] — reachable state violates the rule; shortest counterexample from snapshot fleet.json#10: PAYMENT_FAILED({})",
+      "bucket": null
+    },
+    {
+      "findingId": "v2-shape::pre-migration::migrate::5",
+      "change": "v2-shape",
+      "phase": "pre-migration",
+      "gate": "migrate",
+      "witness": null,
+      "message": "the shape changed but the new version has no migrate.cjs — a failing round-trip in this lane needs a verified migration; start with `polyvers migrate scaffold`",
+      "bucket": null
+    }
+  ]
+}

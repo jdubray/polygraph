@@ -193,6 +193,14 @@ issue for every TP.
 | **FS-M1** | Tier 1 generator, fixture matrix, recall table | recall reported per lane × corpus tier |
 | **FS-M2** | Capture harness + Stripe fleet generated and exported | corpus provenance documented; projection bound stated |
 | **FS-M3** | Tier 2 three version changes run and adjudicated | TP/TI/FP + full cost columns |
+
+FS-M3 is **built but not adjudicated**: `eval/fleet-study/tier2/` runs the three
+changes end-to-end with predicted verdicts, migrations, cost columns, and a
+blind worksheet. Adjudication is deliberately withheld until a `--live` corpus
+exists, because TP/FP rates computed over the circular offline corpus would not
+be reportable under §2. The run did produce one result that stands independent
+of provenance — a suppression bug in `polyvers check` that hid the study's most
+valuable finding — since that is a fact about the tool, not about the fleet.
 | **FS-M4** | Tier 3 version-pair replay with upstream ground truth | every TP linked to an upstream artifact |
 | **FS-M5** | Paper §"A worked example" rewritten around the numbers | reviewer ask answered |
 
