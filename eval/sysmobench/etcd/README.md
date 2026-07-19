@@ -154,9 +154,83 @@ console.log(by);
 "
 ```
 
+## Does the corpus discriminate? A mutation score
+
+`44/44` says nothing about whether this corpus could catch a spec that is
+**wrong**, and a corpus that passes everything is worth nothing. `mutate.mjs`
+injects eight defects a model plausibly writes and reports which are caught, by
+replay and by the explorer separately.
+
+```bash
+node mutate.mjs --max-states 4000
+```
+
+| mutant | replay (44 windows) | explorer + invariants |
+|---|---|---|
+| `heartbeat-no-clamp` | **NO** | **yes** |
+| `append-no-clamp` | **NO** | **yes** |
+| `vote-not-reset-on-new-term` | **NO** | **yes** |
+| `no-stale-vote-guard` | **NO** | **yes** |
+| `election-no-self-vote` | **yes** | **yes** |
+| `proposal-any-role` | **NO** | **yes** |
+| `append-no-step-down` | **NO** | **yes** |
+| `uptodate-off-by-one` | **yes** | **yes** |
+
+```
+replay alone:            2/8
+explorer + invariants:   8/8
+either phase:            8/8
+```
+
+### What this measures
+
+**Replay catches 2 of 8.** Not because the corpus is small, but because a
+correct system never drives a defensive branch. The leader never advertises a
+commit beyond a follower's log, so the clamp never fires, so deleting it changes
+nothing observable. No stale-term vote request ever arrives, so the guard that
+rejects one is unreachable. No non-leader is ever handed a proposal. Every node
+receiving an append is already a follower. Six of the eight defects live in code
+that a healthy execution never executes.
+
+**The first row is the project's own worked example**, and replay misses it.
+Prior work found that under the plain contract a model dropped exactly this
+clamp in four of five generations, reasoning in its own comment that a correct
+leader never advertises past a follower's log. That reasoning is true of the
+closed protocol — which is precisely why a trace of the closed protocol cannot
+refute it.
+
+**The explorer catches all eight**, because it delivers every payload in the
+declared domain in every reachable state, including payloads a correct etcd
+would never send, and checks the expert invariants over what results.
+
+So the two phases are complementary rather than redundant, and this quantifies
+the split. Trace conformance measures **fidelity** — does the spec describe
+*this* system on the paths the system actually takes. Exploration over declared
+domains measures **robustness** — does the spec hold up against inputs the
+system never sends but an adversary, a bug, or a future version might. Neither
+subsumes the other, and a spec graded on conformance alone would have earned a
+clean bill while missing six of eight real defects.
+
+### Bounded results are not passes
+
+The explorer runs under a state cap: this spec's declared domains are large
+enough that 20,000 states takes a minute and still hits it. So the harness
+distinguishes *caught* (definitive — a real counterexample exists) from
+*clean but BOUNDED* (inconclusive), and reports the latter as an open case
+rather than as a defect the explorer cannot find. In this run every missed
+mutant was definitively caught, so there are no open cases — but the
+distinction is enforced in the code, because a clean result over a truncated
+space is not a pass.
+
 ## Next
 
-The corpus now exists, so the experiment this enables is the one worth running:
-generate specs for this task and replay them against these same windows. That is
-a measurement of generated-spec fidelity with a reference baseline of 44/44 —
-which is what the published 0-of-20 figure is actually about.
+The corpus and the discrimination baseline both exist now, so the experiment
+they enable is worth running: **generate** specs for this task and score them
+against both phases. That needs an `ANTHROPIC_API_KEY`, which this environment
+does not have.
+
+It should not be run by an agent that has already read the reference spec, the
+contract, the invariants and the trace data, as this one has — any spec written
+from here is contaminated past the point of meaning anything. The generator has
+to be a fresh context with only the task's source file, exactly as SysMoBench
+does it.
