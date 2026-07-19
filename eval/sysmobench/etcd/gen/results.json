@@ -1,0 +1,82 @@
+{
+  "corpusWindows": 44,
+  "maxStates": 4000,
+  "rows": [
+    {
+      "id": "reference",
+      "loads": true,
+      "pass": 44,
+      "total": 44,
+      "classes": {},
+      "explore": {
+        "verdict": "bounded",
+        "detail": ""
+      }
+    },
+    {
+      "id": "spec-1",
+      "loads": true,
+      "pass": 44,
+      "total": 44,
+      "classes": {},
+      "explore": {
+        "verdict": "bounded",
+        "detail": ""
+      }
+    },
+    {
+      "id": "spec-2",
+      "loads": true,
+      "pass": 40,
+      "total": 44,
+      "classes": {
+        "mutated": 2,
+        "rejected": 2
+      },
+      "explore": {
+        "verdict": "bounded",
+        "detail": ""
+      }
+    },
+    {
+      "id": "spec-3",
+      "loads": true,
+      "pass": 40,
+      "total": 44,
+      "classes": {
+        "mutated": 2,
+        "rejected": 2
+      },
+      "explore": {
+        "verdict": "bounded",
+        "detail": ""
+      }
+    },
+    {
+      "id": "spec-4",
+      "loads": true,
+      "pass": 42,
+      "total": 44,
+      "classes": {
+        "rejected": 2
+      },
+      "explore": {
+        "verdict": "bounded",
+        "detail": ""
+      }
+    },
+    {
+      "id": "spec-5",
+      "loads": true,
+      "pass": 42,
+      "total": 44,
+      "classes": {
+        "mutated": 2
+      },
+      "explore": {
+        "verdict": "bounded",
+        "detail": ""
+      }
+    }
+  ]
+}

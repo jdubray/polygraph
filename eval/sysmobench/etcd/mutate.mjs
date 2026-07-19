@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadWindows, replaySpecResults } from '../../../scripts/replay.mjs';
+import { classifyCheck } from './check-verdict.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -130,12 +131,9 @@ function modelCheckCatches(specPath) {
         '--max-states', String(MAX_STATES)],
       { encoding: 'utf-8', maxBuffer: 32 * 1024 * 1024 });
   } catch (err) {
-    // Nonzero exit is how check.mjs reports a reachable violation.
     out = String(err.stdout ?? '') + String(err.stderr ?? '');
-    if (!/violat/i.test(out)) return 'error';
   }
-  if (/violat/i.test(out)) return 'caught';
-  return /CAP HIT/i.test(out) ? 'bounded' : 'clean';
+  return classifyCheck(out);
 }
 
 const dir = mkdtempSync(join(tmpdir(), 'etcd-mutants-'));
@@ -164,7 +162,7 @@ try {
 } finally { rmSync(dir, { recursive: true, force: true }); }
 
 const replayMark = (v) => (v === true ? '**yes**' : v === false ? '**NO**' : 'load error');
-const mcMark = { caught: '**yes**', bounded: 'inconclusive (BOUNDED)', clean: '**NO**', error: 'error' };
+const mcMark = { violated: '**yes**', bounded: 'inconclusive (BOUNDED)', clean: '**NO**', error: 'error' };
 console.log(`\n| mutant | replay (${windows.length} windows) | windows failing | explorer + invariants (≤${MAX_STATES} states) |`);
 console.log(`|---|---|---|---|`);
 for (const r of rows) {
@@ -174,8 +172,8 @@ for (const r of rows) {
 
 const applied = rows.filter((r) => r.applied);
 const byReplay = applied.filter((r) => r.caught === true || r.caught === 'load-error');
-const byMC = applied.filter((r) => r.mc === 'caught');
-const byEither = applied.filter((r) => r.caught === true || r.caught === 'load-error' || r.mc === 'caught');
+const byMC = applied.filter((r) => r.mc === 'violated');
+const byEither = applied.filter((r) => r.caught === true || r.caught === 'load-error' || r.mc === 'violated');
 const missedByReplay = applied.filter((r) => r.caught === false);
 const openCases = applied.filter((r) => r.caught === false && r.mc !== 'caught');
 
@@ -186,7 +184,7 @@ console.log(`either phase:            ${byEither.length}/${applied.length}`);
 if (missedByReplay.length) {
   console.log('\nMissed by REPLAY — a correct system never drives these branches:');
   for (const r of missedByReplay) {
-    const rescue = r.mc === 'caught' ? '   -> caught by the explorer' : r.mc === 'bounded' ? '   -> explorer INCONCLUSIVE at this bound' : '';
+    const rescue = r.mc === 'violated' ? '   -> caught by the explorer' : r.mc === 'bounded' ? '   -> explorer INCONCLUSIVE at this bound' : '';
     console.log(`  ${r.id}${rescue}\n      ${r.why}`);
   }
 }

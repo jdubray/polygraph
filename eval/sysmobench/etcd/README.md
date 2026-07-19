@@ -165,22 +165,54 @@ replay and by the explorer separately.
 node mutate.mjs --max-states 4000
 ```
 
-| mutant | replay (44 windows) | explorer + invariants |
+| mutant | replay (44 windows) | explorer + invariants (≤4000 states) |
 |---|---|---|
 | `heartbeat-no-clamp` | **NO** | **yes** |
-| `append-no-clamp` | **NO** | **yes** |
-| `vote-not-reset-on-new-term` | **NO** | **yes** |
-| `no-stale-vote-guard` | **NO** | **yes** |
-| `election-no-self-vote` | **yes** | **yes** |
-| `proposal-any-role` | **NO** | **yes** |
-| `append-no-step-down` | **NO** | **yes** |
-| `uptodate-off-by-one` | **yes** | **yes** |
+| `append-no-clamp` | **NO** | inconclusive (BOUNDED) |
+| `vote-not-reset-on-new-term` | **NO** | inconclusive (BOUNDED) |
+| `no-stale-vote-guard` | **NO** | inconclusive (BOUNDED) |
+| `election-no-self-vote` | **yes** | inconclusive (BOUNDED) |
+| `proposal-any-role` | **NO** | inconclusive (BOUNDED) |
+| `append-no-step-down` | **NO** | inconclusive (BOUNDED) |
+| `uptodate-off-by-one` | **yes** | inconclusive (BOUNDED) |
 
 ```
 replay alone:            2/8
-explorer + invariants:   8/8
-either phase:            8/8
+explorer + invariants:   1/8 caught, 6/8 inconclusive at this bound
+either phase:            3/8
 ```
+
+The explorer definitively catches the clamp — with exactly the counterexample
+the prior work describes:
+
+```
+✗ CommitWithinLog [state] — reachable state violates the rule
+  HandleHeartbeat({"node":"1","from":"2","term":1,"commit":1})  ->  commit:1, log:0
+```
+
+Everything else hits the 4,000-state cap without finding a violation, which is
+**inconclusive, not clean**. This machine's declared domains are large enough
+that 20,000 states takes a minute and still caps, so resolving the remaining six
+needs a bigger exploration budget than a quick run affords. What the table
+establishes is a lower bound on each phase, not a ceiling.
+
+> ## ⚠ CORRECTION — the first published mutation numbers were wrong
+>
+> An earlier commit reported "replay catches 2/8, **the explorer catches 8/8**".
+> The explorer figure was an artifact of a broken detector: both harnesses
+> tested `/violat/i` against `check.mjs`'s output, and the CLEAN message is
+>
+> ```
+> no invariant violations reachable ✓
+> ```
+>
+> which contains the substring "violations". Every run therefore classified as
+> "violated" and the explorer scored a perfect 8/8 by matching a negative
+> sentence. **The control row is what exposed it** — the reference specification
+> was scored on identical terms, and when it too came back "violated" against an
+> invariant it demonstrably does not violate, the measurement was obviously
+> broken rather than interesting. Fixed in `check-verdict.mjs`, which matches the
+> clean marker first and self-tests on four cases. Corrected numbers below.
 
 ### What this measures
 
@@ -222,15 +254,67 @@ mutant was definitively caught, so there are no open cases — but the
 distinction is enforced in the code, because a clean result over a truncated
 space is not a pass.
 
-## Next
+## The generation experiment
 
-The corpus and the discrimination baseline both exist now, so the experiment
-they enable is worth running: **generate** specs for this task and score them
-against both phases. That needs an `ANTHROPIC_API_KEY`, which this environment
-does not have.
+Five specifications were generated and scored: `score-generated.mjs`.
 
-It should not be run by an agent that has already read the reference spec, the
-contract, the invariants and the trace data, as this one has — any spec written
-from here is contaminated past the point of meaning anything. The generator has
-to be a fresh context with only the task's source file, exactly as SysMoBench
-does it.
+**Protocol.** Each was written by a model in a **fresh context** given exactly
+one input — `gen/prompt.txt`, containing the contract and etcd's own `raft.go`
+(98 KB, built by this repo's `scripts/build_prompt.mjs`). Each was explicitly
+forbidden to read the reference specification, the invariant file, or any
+captured trace, and forbidden to run any checker against its own output. That
+makes this **one-shot** generation, the regime the prior 0-of-20 figure
+describes. The prompt was audited for leakage before use; the only flagged term,
+`isUpToDate`, is etcd's own identifier at `raft.go:1214`.
+
+| spec | loads | phase 3 conformance | diverging windows |
+|---|---|---|---|
+| reference | yes | **44/44** | — |
+| `spec-1` | yes | **44/44** | — |
+| `spec-2` | yes | 40/44 | `HandleVoteRequest` ×2 (mutated), `HandleAppendEntries` ×2 (rejected) |
+| `spec-3` | yes | 40/44 | `HandleVoteRequest` ×2 (mutated), `HandleAppendEntries` ×2 (rejected) |
+| `spec-4` | yes | 42/44 | `HandleAppendEntries` ×2 (rejected) |
+| `spec-5` | yes | 42/44 | `HandleVoteRequest` ×2 (mutated) |
+
+```
+load at all:             5/5
+conform on all windows:  1/5
+```
+
+### The divergences have one cause, and it is not carelessness
+
+All four failing specs break on the same two transitions, and both failures
+trace to the **observable projection**, not to sloppy modeling.
+
+Real etcd, at `W4`: a follower at `term 2, log 3` receives an append carrying
+`logTerm 1, index 3`, accepts it, and its log becomes 4. Every failing spec
+rejects that append as a log mismatch. The reason is visible in all five
+generation summaries, which independently describe the same workaround: the
+projection carries the log as a **count**, with no per-entry terms, so each spec
+approximates the last entry's term as the node's *current* term. That gives 2
+where the message says 1, so log matching fails and the append is refused.
+
+`HandleVoteRequest` fails the same way — the `isUpToDate` comparison needs the
+last entry's term, which the projection does not carry.
+
+**The reference specification passes because it models less.** Its vote handler
+is `const isUpToDate = p.index >= up.log;` and its append handler is
+`if (p.index <= up.log)`. Neither consults `logTerm` at all. It sidesteps the
+gap by declining to model Raft's log-matching property, and is rewarded with
+44/44.
+
+So conformance here rewarded the spec that attempted least. The generated specs
+reached for a property the projection cannot express, and were penalised for it.
+That is the projection ceiling of the paper's Section on observable state,
+appearing in the **authoring** direction rather than the checking one, and it
+complicates the premise that conformance against reality is the phase that
+separates good specifications from plausible ones: on this task it also
+separates modest ones from ambitious ones, in favour of the modest.
+
+### What these numbers are not
+
+Five generations, one task, one model family, one-shot. That is a signature, not
+an effect size. And the explorer column was uninformative at the bound used —
+even the reference specification came back BOUNDED — so the second phase does
+not yet discriminate between these specs at all, and the honest summary is a
+conformance result with the robustness question still open.

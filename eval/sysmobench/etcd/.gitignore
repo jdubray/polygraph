@@ -1,3 +1,5 @@
 # Regenerated deterministically by harness/ + map-traces.mjs; see README.
 traces/
 corpus/
+# 98KB build artifact: regenerate with scripts/build_prompt.mjs (see README)
+gen/prompt.txt

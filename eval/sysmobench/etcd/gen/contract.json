@@ -1,0 +1,159 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    "nodes"
+  ],
+  "initState": {
+    "nodes": {
+      "1": {
+        "role": "follower",
+        "term": 0,
+        "vote": "0",
+        "commit": 0,
+        "log": 0
+      },
+      "2": {
+        "role": "follower",
+        "term": 0,
+        "vote": "0",
+        "commit": 0,
+        "log": 0
+      },
+      "3": {
+        "role": "follower",
+        "term": 0,
+        "vote": "0",
+        "commit": 0,
+        "log": 0
+      }
+    }
+  },
+  "actions": {
+    "ElectionTimeout": {
+      "dataFields": {
+        "node": "string node id"
+      }
+    },
+    "HandleVoteRequest": {
+      "dataFields": {
+        "node": "string",
+        "from": "string",
+        "term": "number",
+        "logTerm": "number",
+        "index": "number"
+      }
+    },
+    "ClientProposal": {
+      "dataFields": {
+        "node": "string node id"
+      }
+    },
+    "HandleAppendEntries": {
+      "dataFields": {
+        "node": "string",
+        "from": "string",
+        "term": "number",
+        "logTerm": "number",
+        "index": "number",
+        "entries": "number",
+        "commit": "number"
+      }
+    },
+    "HandleHeartbeat": {
+      "dataFields": {
+        "node": "string",
+        "from": "string",
+        "term": "number",
+        "commit": "number"
+      }
+    }
+  },
+  "invariants": "invariants.mjs",
+  "dataDomain": {
+    "ElectionTimeout": {
+      "node": [
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    "ClientProposal": {
+      "node": [
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    "HandleVoteRequest": {
+      "node": [
+        "1",
+        "2",
+        "3"
+      ],
+      "from": [
+        "2",
+        "3",
+        "1"
+      ],
+      "term": [
+        1,
+        2
+      ],
+      "logTerm": [
+        0,
+        1
+      ],
+      "index": [
+        0,
+        1
+      ]
+    },
+    "HandleAppendEntries": {
+      "node": [
+        "1",
+        "2",
+        "3"
+      ],
+      "from": [
+        "2",
+        "3",
+        "1"
+      ],
+      "term": [
+        1
+      ],
+      "logTerm": [
+        0
+      ],
+      "index": [
+        0,
+        1
+      ],
+      "entries": [
+        1
+      ],
+      "commit": [
+        0,
+        1
+      ]
+    },
+    "HandleHeartbeat": {
+      "node": [
+        "1",
+        "2",
+        "3"
+      ],
+      "from": [
+        "2",
+        "3",
+        "1"
+      ],
+      "term": [
+        1
+      ],
+      "commit": [
+        1
+      ]
+    }
+  }
+}
