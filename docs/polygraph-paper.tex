@@ -69,50 +69,49 @@ and \tool{polyvers}, a Compatibility Checker for Evolving State Machines}}
 \maketitle
 
 \begin{abstract}
-\noindent Coding agents can now write large amounts of stateful code, but the
-question that gates their use in serious systems is not whether they can write
-it, but whether we can trust what they wrote. This article describes
-\tool{polygraph}, a toolset of five engines, delivered as plugins to a coding
-agent, that answers the trust question by construction rather than by review.
-The design rests on a single division of labor: a human owns exactly two
-decisions, what the software may observe and what it must never do, and every
-other step, authoring, execution, verification, deployment, and evolution, is
-carried by an agent and checked by a deterministic gate. We first trace the
-genesis of the toolset from a sequence of controlled experiments on the
-SysMoBench benchmark, which established that the shape of the specification
-contract, not the host language, governs how faithfully a model captures a
-real system, and which produced a revised state-machine library, the SAM v2
-strict profile, that turns five documented failure classes into
-construction-time errors. We then describe the lifecycle and each engine in
-turn. The central contribution is \tool{polyvers}, an engine that checks
-whether a new version of a state machine is compatible with the instances of
-the old version still running in production. Its method, seeding an exhaustive
-bounded check with the states the live fleet actually holds, defines
-compatibility as a computable property over the deployed state rather than as
-a review judgment, and appears, on a survey of the literature, to be novel in
-its combination even though each ingredient has precedent. We are explicit
-about the status of this claim: the novelty is a literature claim, not an
-empirical one. The compatibility mechanism itself, however, is now evaluated. A
-pre-registered, three-tier fleet study seeds the check with fixture, generated,
-and archaeological corpora, and its central result is that corpus provenance is
-decisive: an archived corpus catches a landmine that a synthesized one cannot,
-so the same tool passes or fails the same change on nothing but where the states
-came from. The study is a controlled test of the mechanism and of that effect,
-not an estimate of a catch rate, and it reports its misses, its false alarms,
-and a null result as plainly as its findings, including one miss that lands
-exactly on the projection ceiling described below. We are also careful about the
-guarantee, because the toolset offers two different kinds that a single banner
-would blur. The SAM v2 strict profile makes five failure classes
-unrepresentable, which is a guarantee by construction. Everything
-\tool{polyvers} and \tool{polygraph} do is bounded checking against
-human-stated invariants, which is a weaker and differently-shaped guarantee.
-Both are bounded over declared finite domains, and, most importantly, every
-guarantee is relative to the observable-state projection a human chose: state
-outside that projection is not checked, not migrated, and not audited, by
-construction. We close with an argument for why a verification-gated lifecycle
-is a better way to generate and maintain stateful code with agents than review
-alone, an honest comparison with current durable-execution practice, and a
-first-class account of the limits. A glossary defines all technical terms.
+\noindent Coding agents now produce substantial quantities of stateful code:
+order flows, payment state machines, long-running workflows. Whether such code
+can be trusted is not settled by review. The defects that dominate this class
+arise from event orderings that no reviewer enumerates and no test suite
+constructs, and they manifest against instances already running in production,
+often long after the change that introduced them. This paper describes
+\tool{polygraph}, five engines delivered as plugins to a coding agent, in which
+trust is established by mechanical gates rather than by inspection. The division
+of responsibility is fixed and narrow: a human declares what the system observes
+and what it must never do, while authoring, execution, verification, deployment
+and evolution are performed by the agent and checked by deterministic tools that
+require no model at inference time. The design derives from controlled
+experiments on the SysMoBench benchmark, which established that the shape of the
+specification contract rather than the host language governs modeling fidelity,
+and which produced a state-machine library in which five recurring failure
+classes are inexpressible by construction.
+
+We report four findings. First, trace replay and invariant-guided exploration
+have disjoint blind spots, and neither subsumes the other: on the etcd Raft task,
+replay identified four of five divergent specifications while exploration
+identified none, and exploration identified a defect that replay cannot observe
+because a correct system never drives it. A specification graded by either phase
+alone is credited with more than has been established. Second, because state
+outlives code, the question that gates a deployment is not whether the new
+version is correct but whether it is safe for the instances the previous version
+left behind. \tool{polyvers} decides this by seeding an exhaustive bounded check
+with the observable states the deployed fleet holds, which renders compatibility
+a computable property of deployed state rather than a matter of judgment. Third,
+in a pre-registered fleet study, corpus provenance determines the verdict: the
+same tool, change and gates return a pass or a failure according to the origin of
+the state corpus alone, since a corpus synthesized from the prior model cannot
+contain the state that model deems unreachable, and that state is precisely the
+one the new rules violate. Fourth, the binding limitation is the declared
+observable projection rather than the checking procedure; state outside the
+projection is neither checked, migrated nor audited, by construction, and the
+study's most instructive result is a miss attributable to that boundary.
+
+We situate the approach against current durable-execution practice, in which
+worker versioning determines which code executes an instance but not whether
+that code preserves the invariants of the state it inherits. All results are
+bounded: checking is exhaustive only over declared finite domains, is relative to
+human-stated invariants, and is confined to the declared projection. These
+limitations are stated where they arise. A glossary defines all technical terms.
 \end{abstract}
 
 \tableofcontents
@@ -212,12 +211,20 @@ could be attributed to the contract shape alone.
 
 Three findings from that program of work are the premises of the toolset.
 
-\emph{Conformance against reality is the only phase that discriminates.} A
-specification that looks right, passes syntax, explores cleanly, and satisfies
-plausible invariants can still describe a system that does not exist. Only
-phase three, replay against traces captured from the running system, separated
-good specifications from plausible ones. This is the origin of the toolset's
-insistence that ground truth is executed code, never expectations.
+\emph{Conformance and exploration fail in different directions, and neither
+subsumes the other.} A specification that looks right, passes syntax, explores
+without finding a violation, and satisfies plausible invariants can still
+describe a system that does not exist, so replay against traces captured from
+the running system is indispensable: this is the origin of the toolset's
+insistence that ground truth is executed code, never expectations. The original
+studies recorded the stronger form of this observation, that conformance was the
+only phase that discriminated. A later replication on the same external benchmark
+corrected it, and the corrected claim is the one the toolset now rests on.
+Conformance cannot see defensive code that a correct system never drives;
+exploration cannot see anything the stated invariants omit. A specification
+graded by either phase alone receives a clean bill it has not earned.
+Section~\ref{sub:replication} reports the replication that forced this
+correction.
 
 \emph{The contract shape, not the language, governs fidelity.} JavaScript
 written in the shape of the TLA+ transition relation was as faithful as TLA+
@@ -265,6 +272,81 @@ then showed that the same sentence, added to the plain contract, recovered the
 behavior, which is how the study separated robustness (a property of the prompt)
 from verifiability (a property of the structure).
 \end{example}
+
+\subsection{The replication that corrected the first premise}\label{sub:replication}
+
+The first premise above was originally stated in its stronger form, that
+conformance is the phase that discriminates. A replication on the external
+benchmark's etcd Raft task, run after the toolset was built and reported in full
+with the artifacts~\cite{repo}, forced a correction, and because the corrected
+claim is load-bearing for the whole lifecycle we give the evidence here rather
+than in a footnote.
+
+The replication first established a calibrated baseline: a trace corpus was
+captured from a real three-node cluster, and the reference specification replayed
+forty-four of forty-four windows, which validates the harness, the mapper, and
+the replayer end to end. Two instruments were then run over the same corpus. Eight
+defects were injected into the reference specification, and five specifications
+were generated one-shot from the implementation source in fresh contexts, each
+forbidden to read the reference, the invariants, or any captured trace.
+Table~\ref{tab:phases} reports what each instrument caught.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}p{5.6cm}p{2.6cm}p{5.2cm}@{}}
+\toprule
+& \textbf{replay} & \textbf{explorer + invariants} \\
+\midrule
+8 defects injected into the reference & 2 of 8 & 1 of 8 definitive, 6 of 8 inconclusive \\[0.35em]
+5 one-shot generated specifications & 4 of 5 & 0 of 5 \\
+\bottomrule
+\end{tabular}
+\caption{Neither phase subsumes the other. Replay misses defensive code a correct
+system never drives; exploration misses anything the stated invariants omit.}
+\label{tab:phases}
+\end{table}
+
+The two misses have different causes, and both are informative. Replay missed the
+heartbeat clamp of the example above, because a correct cluster never drives that
+branch, and the explorer caught it. The explorer missed every generated
+specification's divergence, and it was given every advantage when it did so: it
+was seeded not from \code{init()} but with forty-eight distinct observable states
+harvested from the captured corpus, which is the fleet-seeding this paper argues
+for. Four of those five specifications demonstrably disagree with real etcd, window
+by window under replay, and not one of those disagreements violates any of the
+three expert invariants, because all three are silent about log matching, which is
+exactly where every divergence lives. This is an invariant-adequacy result, and it
+is precisely what the compatibility report's \emph{invariant adequacy: NOT
+MEASURED} line exists to warn about: a clean exploration verdict against an
+invariant set that omits the relevant property is worth very little, and here it
+is worth nothing.
+
+Three further observations belong with the numbers. The first is that the
+projection ceiling appears in the \emph{authoring} direction as well as the
+checking one. The declared projection carries the log as a count with no
+per-entry terms, so a specification cannot express Raft's log-matching rule at
+all; the generated specifications reached for it and were penalised, while the
+reference specification passes by declining to model it. On this task conformance
+rewarded the specification that attempted least, which complicates any reading of
+a conformance score as a pure fidelity measure. The second is that the explorer's
+verdicts here were bounded rather than clean, for the reason developed in the
+threats section: the reachable state space of this task is unbounded, so
+exploration terminates at the cap for every specification including the
+reference, and the only available verdicts are a definitive violation or an
+inconclusive bounded run. The zero of five is therefore not a case of the
+explorer wrongly certifying these specifications; it is the explorer never
+reaching a violation, which under this toolset's own doctrine is not a pass.
+The third is a correction we made to ourselves: an earlier run of this experiment
+reported that the explorer caught all eight injected defects, a figure produced
+by a scoring script whose pattern matched the word ``violations'' inside the
+string \emph{no invariant violations reachable}. The control row is what exposed
+it, which is the argument for controls stated in the small.
+
+The scope of the replication is narrow and we do not stretch it: five
+generations, one task, one model family, one-shot, which is a signature rather
+than an effect size, and an explorer column that did not discriminate among these
+specifications at all at the bound used.
 
 \subsection{The five failure classes and the SAM v2 strict profile}
 
@@ -387,8 +469,9 @@ what the machine must never do, because neither is derivable from the code; the
 first is a modeling choice and the second is intent.
 
 The toolset is built on that split. The two human-owned decisions become two
-short review gates, each measured in minutes. Everything between them becomes an
-agent action guarded by a deterministic check. The next section describes the
+bounded review gates, costing minutes on a routine change and hours on a machine
+whose intent is genuinely unsettled. Everything between them becomes an agent
+action guarded by a deterministic check. The next section describes the
 machinery that realizes this.
 
 \section{The toolset: an artifact family and five engines}
@@ -461,12 +544,16 @@ three human gates.
   \draw[flow] (\d) -- (\t);
 
 \draw[flow] (nvd.east) -- ++(0.9,0) |- (p2.east);
-\node[rotate=90, font=\scriptsize, text=cInk] at ($(p2.east)!0.5!(nvd.east)+(1.15,0)$) {invariants move first};
+\node[rotate=90, font=\scriptsize\bfseries, text=cVers!70!black, fill=white,
+      inner sep=1.5pt] at ($(p2.east)!0.5!(nvd.east)+(1.2,0)$) {invariants move first};
 \end{tikzpicture}
 \caption{The \tool{polygraph} lifecycle. Five entry doors on the left feed a
 spine of nine phases across the five engines; the three human gates (in red) are
-the only points where a person is required. Evolution loops back to authoring
-under the rule that invariants move first.}
+the only points where a person is required. The labelled arrow on the right is
+the evolution loop: after a version ships and \tool{polynv} re-checks the
+recorded rules, control returns to authoring (phase 2), and it returns there
+first, because a change of intent precedes the change of code. That ordering is
+the rule the label names.}
 \label{fig:sdlc}
 \end{figure}
 
@@ -484,7 +571,7 @@ means the code is wrong. It cross-checks the vocabulary of the contract against
 that of the code and synthesizes a replayed regression corpus. A run that did
 not converge says so; the report never presents partial verification as clean.
 
-\subsection{\tool{polynv}: eliciting the invariants}
+\subsection{\tool{polynv}: eliciting the invariants}\label{sub:polynv}
 
 The second human gate, confirming the invariants, was historically the hard
 one, because writing predicates from a blank page is a scarce skill. The fifth
@@ -583,7 +670,10 @@ before any generated specification is believed. And the replay finds
 unfaithfulness while the model check finds bugs: a faithful specification
 reproduces the code's own bugs, so replay alone cannot see them, and it is the
 exhaustive exploration against intent invariants that surfaces the reachable
-bad state with a shortest path to it as a ready reproduction. Here the third
+bad state with a shortest path to it as a ready reproduction. The dependency runs
+both ways, which is why the audit runs both: exploration surfaces only what the
+invariants name, so a divergence no stated rule mentions is invisible to it and
+visible to replay, as Section~\ref{sub:replication} measures. Here the third
 human gate falls: a person triages the findings, because a finding is a lead to
 investigate, not a verdict to accept, and a finding against a reference or
 third-party system may be an intent observation rather than a defect.
@@ -597,7 +687,8 @@ contract. Gate two confirms the invariants, the intent. Gate three triages the
 findings. What an agent must never do alone, and what teams should encode as a
 norm, is approve a contract, approve an invariant, disposition an elicitation
 question, dismiss a finding, or weaken a rule to make a check pass. Those
-refusals are the whole of the human job. Measured in hours it is small.
+refusals are the whole of the human job. Measured against the labor the agent
+now absorbs it is a small share of the total.
 Measured in consequence it is decisive, because every guarantee the toolset
 offers is relative to those human decisions.
 
@@ -1189,8 +1280,11 @@ of reading both diffs distinguishes them. A team classifying either change from
 its release notes would have been wrong in both directions.
 
 \paragraph{What it costs.} Every run in the study is local, deterministic, and
-needs no API key; wall-clock times are seconds per change, and the per-run times
-are recorded with the artifacts rather than estimated here. The real cost is
+needs no API key. Machine cost is negligible at this scale: across the twelve
+gate runs the harness records, a single compatibility check takes a median of
+0.54 seconds and at most 0.67 seconds, and the entire first tier, including
+corpus construction, completes in about nine seconds. This matters only because
+a gate slow enough to be bypassed is a gate that will be bypassed. The real cost is
 human and it falls in one place, which is where we think it belongs: writing the
 migration. Both migrations in the second tier were scaffolded by the tool and
 both needed a hand edit, for opposite reasons that are worth reporting together.
@@ -1452,17 +1546,22 @@ that ran out of budget, an empty invariant set, a corpus with no windows, a thin
 invariant set with a low mutation grade. The failure mode of verification
 tooling is not a wrong answer but a reassuring one, a green result for a run that
 checked almost nothing, and the entire toolset is built so that reassurance must
-be earned. That this danger is real and not hypothetical has recent empirical
-support: TLA-Prover reports that model-generated specifications routinely pass
-the TLC model checker while being mutation-insensitive, that is, vacuous, and
-that untuned generation produces such specifications at a measurable
-rate~\cite{tlaprover}. A green model check is therefore not, on its own, evidence
-of anything, which is precisely why every gate here discloses the strength of
-what it checked rather than only whether it passed.
+be earned. The danger is measured, not hypothetical: model-generated
+specifications pass a model checker while being vacuous at a reported
+rate~\cite{tlaprover}, and our own replication found the complementary failure,
+an exploration that reaches no violation because the invariants omit the property
+at issue (Sections~\ref{sub:replication} and~\ref{sub:polynv}). A green model
+check is therefore not, on its own, evidence of anything, which is why every gate
+here discloses the strength of what it checked rather than only whether it
+passed.
 
 Fifth, it puts human effort where it is decisive and removes it from where it is
 not. The agent drafts, writes, tests, triages, and repairs. The human decides
-what the software is and what it must never do, and both decisions take minutes.
+what the software is and what it must never do. Neither decision is
+instantaneous, and on a machine whose intent is contested the second can take
+hours or a working session with polynv; the claim is not that the human effort is
+trivial but that it is bounded, front-loaded, and spent on the two questions no
+tool can answer, instead of being spread over every line the agent produced.
 The result is that a team maintains stateful code by maintaining its intent, and
 the code is regenerated or repaired to match, rather than by reviewing every
 line an agent produced.
@@ -1487,8 +1586,10 @@ not merely expensive there, it is unreachable, and the only verdicts available
 are a definitive violation or an inconclusive bounded run. Exhaustiveness
 therefore requires a finite \emph{reachable state space}, which is strictly
 stronger than finite action domains and is a condition a contract is not
-currently required to declare. Machines with an accumulating unbounded field --
-a counter, a sequence number, a term -- all have this property. Every compatibility guarantee is relative to the invariants a human
+currently required to declare. Any machine carrying an accumulating unbounded
+field, such as a counter, a sequence number, or a term, has this property, and
+the same replication (Section~\ref{sub:replication}) is where it surfaced.
+Every compatibility guarantee is relative to the invariants a human
 stated, so intent that the invariants do not mention is invisible to every gate,
 and the checker is safety-oriented, so a version that silently stops doing
 something a safety invariant never required will pass. The single most important

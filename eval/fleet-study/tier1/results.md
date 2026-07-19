@@ -15,25 +15,25 @@ not something to re-fit.
 
 | case | lane | kind | corpus | outcome | expected gate | gates that fired | corpus states | ms |
 |---|---|---|---|---|---|---|---|---|
-| semantic-landmine | semantic | positive | archive | **CAUGHT** | semantic-model-check | semantic-model-check | 3 | 1662 |
-| semantic-landmine | semantic | positive | synthesized | **MISSED** | semantic-model-check | — | 6 | 1786 |
-| shape-no-migration | shape | positive | archive | **CAUGHT** | shape-roundtrip | migrate, shape-roundtrip, invariants-pointwise, semantic-model-check | 3 | 1724 |
-| shape-no-migration | shape | positive | synthesized | **CAUGHT** | shape-roundtrip | migrate, shape-roundtrip, invariants-pointwise, semantic-model-check | 6 | 1810 |
-| vocabulary-renamed | vocabulary | positive | archive | **CAUGHT** | stimuli | vocabulary, stimuli | 3 | 1627 |
-| vocabulary-renamed | vocabulary | positive | synthesized | **CAUGHT** | stimuli | vocabulary, stimuli | 6 | 1664 |
-| intent-strengthened | intent | positive | archive | **CAUGHT** | invariants-pointwise | invariants-pointwise, semantic-model-check | 3 | 1691 |
-| intent-strengthened | intent | positive | synthesized | **CAUGHT** | invariants-pointwise | invariants-pointwise, semantic-model-check | 6 | 1774 |
-| rules-narrowed-cancel | semantic | negative | archive | **CLEAN** | — | — | 3 | 1677 |
-| rules-narrowed-cancel | semantic | negative | synthesized | **CLEAN** | — | — | 6 | 1713 |
-| identical-versions | (none) | negative | archive | **CLEAN** | — | — | 0 | 1733 |
-| identical-versions | (none) | negative | synthesized | **CLEAN** | — | — | 0 | 1621 |
+| semantic-landmine | semantic | positive | archive | **CAUGHT** | semantic-model-check | semantic-model-check | 3 | 586 |
+| semantic-landmine | semantic | positive | synthesized | **MISSED** | semantic-model-check | — | 6 | 519 |
+| shape-no-migration | shape | positive | archive | **CAUGHT** | shape-roundtrip | migrate, shape-roundtrip, invariants-pointwise, semantic-model-check | 3 | 520 |
+| shape-no-migration | shape | positive | synthesized | **CAUGHT** | shape-roundtrip | migrate, shape-roundtrip, invariants-pointwise, semantic-model-check | 6 | 512 |
+| vocabulary-renamed | vocabulary | positive | archive | **CAUGHT** | stimuli | vocabulary, stimuli | 3 | 568 |
+| vocabulary-renamed | vocabulary | positive | synthesized | **CAUGHT** | stimuli | vocabulary, stimuli | 6 | 563 |
+| intent-strengthened | intent | positive | archive | **CAUGHT** | invariants-pointwise | invariants-pointwise, semantic-model-check | 3 | 671 |
+| intent-strengthened | intent | positive | synthesized | **CAUGHT** | invariants-pointwise | invariants-pointwise, semantic-model-check | 6 | 476 |
+| rules-narrowed-cancel | semantic | negative | archive | **CLEAN** | — | — | 3 | 630 |
+| rules-narrowed-cancel | semantic | negative | synthesized | **CLEAN** | — | — | 6 | 415 |
+| identical-versions | (none) | negative | archive | **CLEAN** | — | — | 0 | 613 |
+| identical-versions | (none) | negative | synthesized | **CLEAN** | — | — | 0 | 414 |
 
 ## Composition (matrix vs product)
 
 | case | kind | matrix | product | held? | ms (matrix / product) |
 |---|---|---|---|---|---|
-| composition-narrowed-cancel-window | positive | PASS | FAIL | yes | 1679 / 1694 |
-| composition-same-versions | negative | PASS | PASS | yes | 1768 / 1661 |
+| composition-narrowed-cancel-window | positive | PASS | FAIL | yes | 779 / 652 |
+| composition-same-versions | negative | PASS | PASS | yes | 635 / 580 |
 
 Pre-registered per-tier predictions held: 2, broken: 0.
 

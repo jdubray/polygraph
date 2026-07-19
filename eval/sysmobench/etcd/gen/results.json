@@ -1,6 +1,6 @@
 {
   "corpusWindows": 44,
-  "maxStates": 4000,
+  "maxStates": 60000,
   "rows": [
     {
       "id": "reference",

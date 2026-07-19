@@ -28,3 +28,8 @@ docs/draft-*.md
 eval/machines/*/traces/
 eval/machines/*/.ab-specs/
 eval/results/
+
+# LaTeX build artifacts (docs/polygraph-paper.tex)
+*.aux
+*.out
+*.toc
