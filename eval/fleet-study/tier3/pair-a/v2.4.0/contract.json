@@ -1,0 +1,45 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "status", "type": "enum: 'not_paid' | 'awaiting' | 'authorized' | 'partially_authorized' | 'canceled' — the exact five members declared at v2.4.0 in packages/core/types/src/payment/common.ts" },
+    { "name": "hasSessions", "type": "boolean — ABSTRACTION of payment_sessions.length; the derivation only tests === 0" },
+    { "name": "authorized", "type": "enum: 'none' | 'partial' | 'full' — ABSTRACTION of authorizedAmount; the derivation only tests > 0 and >= amount" },
+    { "name": "captured", "type": "enum: 'none' | 'partial' | 'full' — ABSTRACTION of captured_amount; read by NO status decision at v2.4.0" },
+    { "name": "refunded", "type": "enum: 'none' | 'partial' | 'full' — ABSTRACTION of refunded_amount; read by NO status decision at v2.4.0" }
+  ],
+  "initState": { "status": "not_paid", "hasSessions": false, "authorized": "none", "captured": "none", "refunded": "none" },
+  "actions": {
+    "ADD_SESSION": { "dataFields": {} },
+    "AUTHORIZE_SESSION": { "dataFields": { "level": "string" } },
+    "CAPTURE_PAYMENT": { "dataFields": { "level": "string" } },
+    "REFUND_PAYMENT": { "dataFields": { "level": "string" } },
+    "CANCEL_ORDER": { "dataFields": {} }
+  },
+  "dataDomain": {
+    "AUTHORIZE_SESSION": { "level": ["partial", "full"] },
+    "CAPTURE_PAYMENT": { "level": ["partial", "full"] },
+    "REFUND_PAYMENT": { "level": ["partial", "full"] }
+  },
+  "terminalKey": "status",
+  "terminalStates": [],
+  "specialRules": [
+    { "name": "no-session-to-authorize", "note": "authorizePaymentSession operates on a session id; with no session there is nothing to authorize. The precondition is on the SESSION entity, not on PaymentCollection.status.", "whenState": "status = 'not_paid'", "whenAction": "AUTHORIZE_SESSION" },
+    { "name": "nothing-authorized-to-capture", "note": "capturePayment operates on a Payment created from an authorized session. capturePayment_ throws when payment.canceled_at is set. Again a sibling-entity guard, not a collection-status guard.", "whenState": "status in ('not_paid','awaiting')", "whenAction": "CAPTURE_PAYMENT" },
+    { "name": "nothing-captured-to-refund", "note": "refundPayment requires a capture to refund against.", "whenState": "status in ('not_paid','awaiting')", "whenAction": "REFUND_PAYMENT" }
+  ],
+  "noOpRule": "An action that does not apply is reject(reason) — an observable no-op, never a throw. NOTE that at v2.4.0 CANCEL_ORDER has NO rejection path: cancelOrderWorkflow stamps every linked collection unconditionally, and cancelling twice is refused by nothing in the payment module.",
+  "abstractionBound": "Money is abstracted to none/partial/full and session count to a boolean. Medusa uses BigNumber amounts and an unbounded session list; the status derivation distinguishes only `authorizedAmount > 0` and `authorizedAmount >= amount`, and only `sessions.length === 0`, so these abstractions are lossless FOR THE STATUS LOGIC and lossy for everything else. They are what makes exploration finite.",
+  "projectionBound": "These five keys are the ENTIRE observable state. Provider ids, payment-session data blobs, currency, refund reasons, individual capture/refund records, `completed_at`, metadata, and the whole Order and Cart that own the collection are OUTSIDE the projection: not checked, not migrated, not audited. Every guarantee made here is relative to this list.",
+  "upstream": {
+    "repo": "medusajs/medusa",
+    "tag": "v2.4.0",
+    "commit": "956a50e934fb0db6f55d5b9fa459a43abcee358b",
+    "sources": [
+      "packages/core/types/src/payment/common.ts",
+      "packages/modules/payment/src/models/payment-collection.ts",
+      "packages/modules/payment/src/services/payment-module.ts",
+      "packages/core/core-flows/src/order/workflows/cancel-order.ts",
+      "packages/core/core-flows/src/payment-collection/steps/update-payment-collection.ts"
+    ]
+  }
+}
