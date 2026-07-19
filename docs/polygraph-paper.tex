@@ -91,10 +91,16 @@ bounded check with the states the live fleet actually holds, defines
 compatibility as a computable property over the deployed state rather than as
 a review judgment, and appears, on a survey of the literature, to be novel in
 its combination even though each ingredient has precedent. We are explicit
-about the status of this claim: it is a literature claim, not an empirical one.
-This paper is a design paper. Its mechanism is validated on a committed worked
-example rather than on a production fleet, and a real-fleet case study,
-underway separately, is the primary future work. We are also careful about the
+about the status of this claim: the novelty is a literature claim, not an
+empirical one. The compatibility mechanism itself, however, is now evaluated. A
+pre-registered, three-tier fleet study seeds the check with fixture, generated,
+and archaeological corpora, and its central result is that corpus provenance is
+decisive: an archived corpus catches a landmine that a synthesized one cannot,
+so the same tool passes or fails the same change on nothing but where the states
+came from. The study is a controlled test of the mechanism and of that effect,
+not an estimate of a catch rate, and it reports its misses, its false alarms,
+and a null result as plainly as its findings, including one miss that lands
+exactly on the projection ceiling described below. We are also careful about the
 guarantee, because the toolset offers two different kinds that a single banner
 would blur. The SAM v2 strict profile makes five failure classes
 unrepresentable, which is a guarantee by construction. Everything
@@ -1091,13 +1097,25 @@ An earlier version of this paper listed a real-fleet case study as future work.
 It has since been carried out, pre-registered, in three tiers of increasing
 independence: a fixture matrix that varies corpus provenance while holding the
 change fixed; a subscription-billing fleet modeled on a public payments API; and
-an archaeology tier that replays released version pairs of an open-source
-commerce backend and scores against the maintainers' own record. The
-pre-registration, the taxonomy, and the null results are committed alongside the
-artifacts, and the discipline that matters most is stated here because every
-number below depends on it: in the archaeology tier the model of the old version
-is authored and committed \emph{before} the new version's diff is read, so a
-finding cannot be an artifact of having known the answer.
+an archaeology tier that replays released version pairs of Medusa, an
+open-source commerce backend, and scores against the maintainers' own record.
+The pre-registration, the case taxonomy, the null results, and the run harness
+are committed in the repository under \code{eval/fleet-study/}~\cite{repo}. Two
+methodological points govern how the numbers below should be read. First, the
+study is a controlled test of the mechanism and of the effect of corpus
+provenance; it is not an estimate of a true-positive rate, and the harness
+deliberately refuses to compute rate statistics over corpora the models under
+study generated. The reader should therefore weigh the results as existence and
+controlled-contrast findings, not as performance metrics. Second, the discipline
+that every number depends on is a freeze: in the archaeology tier the model of
+the old version is authored and committed \emph{before} the new version's diff is
+read, so a finding cannot be an artifact of having known the answer. The freeze
+commits are cited with the results (for the two Medusa pairs, the old-version
+translations were frozen at \code{0f34c26} and \code{a305507} respectively,
+before the corresponding v2.5.0 and v2.17.2 sources were read). The projects and
+version pairs were selected independently of the analysis, on the availability of
+released pairs and commit history rather than on any expected outcome; the
+modeling, not the target selection, is what the freeze protects.
 
 \paragraph{Provenance is the whole difference.} The first tier runs four
 incompatible changes and two compatible ones against corpora that differ only in
@@ -1119,7 +1137,10 @@ The second tier builds a subscription-billing machine after a public payments
 API and ages a fleet of four hundred subscriptions, cutting each trajectory at a
 seeded point so that records are caught mid-flight rather than settled; that one
 change took the corpus from three distinct states to eleven and was forced by
-looking at the first capture rather than by theory. Three version changes are
+looking at the first capture rather than by theory. The collapse of four hundred
+instances to eleven distinct states is the tractability point of
+Section~\ref{sub:seeded} observed in the field: what the check seeds from is the
+number of distinct canonical snapshots, not the raw fleet size. Three version changes are
 then run against it. The interesting one narrows a dunning retry budget from
 three to two and tightens the invariants with it. Checked from \code{init()} the
 new version explores nineteen states and reports no reachable violation: it is
@@ -1145,12 +1166,22 @@ would fix them runs only on operations a settled collection never receives
 again. In the second pair the module service is untouched by the change commit
 entirely, the new member is one more value providers may report into paths that
 already wrote provider values verbatim, and no fleet state is affected. We
-classify the first as true-but-intended rather than a true positive: the
-maintainers shipped a migration, but it is a constraint widening that addresses
-nothing the finding is about, and the pull request that introduced the change
-names this inconsistency class in its own description as work still to do.
-Reserving the stronger label would have meant stretching a pre-registered rule to
-flatter the result.
+classify the first as true-but-intended rather than a true positive, and the
+criterion deserves to be stated precisely, because ``intended'' could mean two
+things and only one of them holds here. It does not mean the change was safe: the
+migration the maintainers shipped is a constraint widening that addresses nothing
+the finding is about, and six fleet states are stranded permanently regardless of
+anyone's intent. It means only that the maintainers were \emph{aware}, since the
+pull request that introduced the change names this inconsistency class in its own
+description as work still to do. Our pre-registered rule reserves ``true
+positive'' for a finding that names a data migration the maintainers had to ship
+and did not, and awareness disqualifies it under that rule, so we apply the weaker
+label rather than stretch a pre-registered rule to flatter the result. We note,
+however, that under a criterion keyed to safety rather than to awareness this
+would be a true positive that the shipped migration failed to resolve, and a
+reader who prefers that criterion should read it as one. The finding itself, six
+permanently stranded states that the shipped migration does not reach, is not in
+dispute either way.
 
 The matrix is the finding here, more than either pair is. Two changes whose
 human-legible summaries are interchangeable behave oppositely, and nothing short
@@ -1158,7 +1189,8 @@ of reading both diffs distinguishes them. A team classifying either change from
 its release notes would have been wrong in both directions.
 
 \paragraph{What it costs.} Every run in the study is local, deterministic, and
-needs no API key; wall-clock times are seconds per change. The real cost is
+needs no API key; wall-clock times are seconds per change, and the per-run times
+are recorded with the artifacts rather than estimated here. The real cost is
 human and it falls in one place, which is where we think it belongs: writing the
 migration. Both migrations in the second tier were scaffolded by the tool and
 both needed a hand edit, for opposite reasons that are worth reporting together.
@@ -1268,8 +1300,9 @@ states for the specific purpose of version compatibility, so the combination
 claim survives contact with both; naming them is meant to pre-empt the obvious
 question rather than to hide behind it. The framing is therefore novel while
 every ingredient has precedent, which is the honest and, we think, still valuable
-claim, and it is a literature claim awaiting the empirical one that the planned
-fleet study will supply.
+claim. It is a literature claim about novelty; the separate empirical claim, that
+the mechanism fires and that corpus provenance determines the verdict, is
+supplied by the fleet study of Section~\ref{sub:fleetstudy}.
 
 \section{Event-sourced replay and the gated snapshot approach}
 
@@ -1443,7 +1476,19 @@ observations but not effect-size estimates. The word ``exhaustive'' throughout
 means exhaustive over the declared finite domains of the SAM v2 strict profile,
 not over arbitrary state machines; the gap between a declared domain and the
 values production actually carries is unmeasured human judgment, and the reports
-say so. Every compatibility guarantee is relative to the invariants a human
+say so. That phrasing needs one correction, which a replication on an external
+benchmark task forced. \emph{Finite action domains do not imply a finite state
+space.} On the etcd Raft task the declared domains are finite and small, and the
+reachable space is nonetheless unbounded, because an election timeout increments
+a term that no contract field bounds: the state accumulates across steps rather
+than being drawn from a domain. Exploration on such a machine terminates at the
+cap for every specification at every budget, so a clean exhaustive verdict is
+not merely expensive there, it is unreachable, and the only verdicts available
+are a definitive violation or an inconclusive bounded run. Exhaustiveness
+therefore requires a finite \emph{reachable state space}, which is strictly
+stronger than finite action domains and is a condition a contract is not
+currently required to declare. Machines with an accumulating unbounded field --
+a counter, a sequence number, a term -- all have this property. Every compatibility guarantee is relative to the invariants a human
 stated, so intent that the invariants do not mention is invisible to every gate,
 and the checker is safety-oriented, so a version that silently stops doing
 something a safety invariant never required will pass. The single most important
@@ -1513,7 +1558,13 @@ lever and produced the strict profile that makes the obligations checkable.
 \tool{polyvers} is the part we believe is genuinely new: it defines
 compatibility as a computable property over the states the fleet actually
 holds, and mechanizes the landmine hunt that every long-running workflow system
-faces and few name. Versioning stateful code stops being a permanent discipline
+faces and few name. The fleet study turns that claim from an argument into a
+controlled result: the same tool passes or fails the same change on nothing but
+corpus provenance, an archived corpus catching a landmine a synthesized one
+cannot, and the one finding the study missed lands exactly on the projection
+ceiling, a declared money abstraction that collapses at zero, which is the honest
+limit made measurable rather than conceded in the abstract. Versioning stateful
+code stops being a permanent discipline
 practiced on every change and becomes a set of gates a change either passes or
 fails, with the standing and openly stated caveat that the gates are exactly as
 good as the invariants a human bothered to state.
@@ -1624,6 +1675,10 @@ Specifications: Separating Robustness from Verifiability.} Manuscript, 2026.
 \bibitem{samv2} J.-J.\ Dubray. \emph{sam-pattern v2 strict profile} (package
 \texttt{@cognitive-fab/sam-pattern}, v2.0.0-alpha.1).
 \url{https://github.com/jdubray/sam-lib/tree/v2}, 2026.
+
+\bibitem{repo} J.-J.\ Dubray. \emph{Polygraph toolset and fleet-study artifacts}
+(pre-registration, taxonomy, run harness, and freeze commits under
+\texttt{eval/fleet-study/}). \url{https://github.com/jdubray/polygraph}, 2026.
 
 \bibitem{sysmobench} Specula. \emph{SysMoBench: Benchmarking AI on Formally
 Modeling Complex Real-World Systems.} \url{https://sysmobench.com}, 2026.
