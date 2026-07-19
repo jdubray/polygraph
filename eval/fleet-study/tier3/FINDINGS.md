@@ -1,5 +1,25 @@
 # Tier 3 · Medusa — candidate selection, and what the record actually contains
 
+> ## ⚠ CORRECTION — this document's central prediction was WRONG
+>
+> Written before either pair ran. It concluded that both usable pairs were pure
+> widenings, and therefore that **"this tier CANNOT measure recall"** and that
+> **"no TP and no MISS is possible here."**
+>
+> Both halves are false. **Pair A was not a widening** — `v2.5.0` changed the
+> status *derivation*, stranding 6 of 32 fleet states — and the study did find a
+> real miss (zero-amount collections, out-of-projection). See
+> [`README.md`](README.md) for the corrected result.
+>
+> The text below is left exactly as committed, per tier3-protocol §2's amendment
+> rule. A failed pre-run prediction is a result, not an embarrassment to tidy
+> away: it is precisely the mistake a practitioner makes when classifying a
+> release from its notes, made here by the person who then had to check.
+>
+> What survives verified and unchanged: Medusa's `OrderStatus` and
+> `FulfillmentStatus` never changed across the v1 line or across v2.0.0 → HEAD,
+> and no released pair narrows a state domain.
+
 FS-M4, selection phase. Per [`tier3-protocol.md`](../../../docs/tier3-protocol.md)
 §4, candidate pairs are chosen on the **maintainer record alone**, before any
 pair is run, and a negative Tier 3 is published either way. This file is that

@@ -203,6 +203,17 @@ of provenance — a suppression bug in `polyvers check` that hid the study's mos
 valuable finding — since that is a fact about the tool, not about the fleet.
 | **FS-M4** | Tier 3 version-pair replay with upstream ground truth | every TP linked to an upstream artifact |
 
+**FS-M4 is complete.** Two Medusa pairs run under the freeze protocol; results
+in [`eval/fleet-study/tier3/`](../eval/fleet-study/tier3/). The headline is the
+matrix rather than any single finding: two near-identical selection notes ("the
+enum gains a member") that behaved oppositely once the source was read — Pair A
+changed a derivation and stranded 6 of 32 states, Pair B changed nothing but a
+domain and stranded none. Buckets: 1 TI (maintainer-corroborated), 1 TN, 0 TP,
+and 1 out-of-projection MISS where the declared money abstraction collapses at
+`amount === 0` and hid a live behavioural change. The selection phase's own
+prediction — that neither pair could produce a finding — was wrong, and is left
+standing with a correction notice.
+
 FS-M4 targets **Medusa, 2–3 version pairs**. §6 leaves one thing open that a
 reviewer would attack: ground truth is external, but the *translation* of
 Medusa's lifecycle into a SAM module is not, and whoever writes it controls
