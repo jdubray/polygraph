@@ -16,117 +16,151 @@
   body { margin: 0; }
 </style>
 </helmet>
-<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 32px 40px 28px; width: 1040px; margin: 0 auto;">
 
   <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2px;">
     <div>
       <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">SDLC · fig 5</div>
-      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">The flow — audit, author, clear for the fleet, run, repeat</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">The flow — five doors, one spine, three human gates</div>
     </div>
-    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a09a8c; padding-bottom: 4px;">hover a stage ↗</div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a09a8c; padding-bottom: 4px;">hover a door ↗</div>
   </div>
-  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #55595f; margin-bottom: 10px;">Each stage hands the next a concrete artifact, and production hands the whole thing back — the journal is the next audit's evidence, the fleet is the next version's test bed. Enter wherever you already are.</div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 14.5px; color: #55595f; margin-bottom: 12px;">Enter wherever you already are; from there the path is the same. Everything mechanical is an arrow — the three red gates are the only places a human must decide.</div>
 
-  <div style="position: relative; width: 960px; height: 340px; margin: 0 auto;">
-    <svg viewBox="0 0 960 340" width="960" height="340" style="position: absolute; inset: 0; overflow: visible;">
+  <div style="position: relative; width: 960px; height: 664px; margin: 0 auto;">
+    <svg viewBox="0 0 960 664" width="960" height="664" style="position: absolute; inset: 0; overflow: visible;">
       <defs>
-        <marker id="fw" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#8a8578"></path></marker>
-        <marker id="bk" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#bc6a1e"></path></marker>
-        <marker id="nv" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#a63d55"></path></marker>
+        <marker id="sp" markerWidth="8" markerHeight="8" refX="5.5" refY="2.8" orient="auto"><path d="M0,0 L6,2.8 L0,5.6 Z" fill="#8a8578"></path></marker>
+        <marker id="dr" markerWidth="8" markerHeight="8" refX="5.5" refY="2.8" orient="auto"><path d="M0,0 L6,2.8 L0,5.6 Z" fill="#71757c"></path></marker>
+        <marker id="fb" markerWidth="8" markerHeight="8" refX="5.5" refY="2.8" orient="auto"><path d="M0,0 L6,2.8 L0,5.6 Z" fill="#a63d55"></path></marker>
+        <marker id="fg" markerWidth="8" markerHeight="8" refX="5.5" refY="2.8" orient="auto"><path d="M0,0 L6,2.8 L0,5.6 Z" fill="#3f7a54"></path></marker>
       </defs>
 
-      <!-- feedback: production hands it all back (arcs over the top) -->
-      <path d="M 855,96 Q 480,4 108,96" fill="none" stroke="#bc6a1e" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#bk)" opacity="{{ opBack }}"></path>
-      <path d="M 858,96 Q 731,42 608,96" fill="none" stroke="#bc6a1e" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#bk)" opacity="{{ opBack }}"></path>
+      <!-- spine connectors -->
+      <sc-for list="{{ links }}" as="l" hint-placeholder-count="11">
+        <path d="{{ l.d }}" fill="none" stroke="#8a8578" stroke-width="1.6" marker-end="url(#sp)" opacity="{{ l.op }}"></path>
+      </sc-for>
 
-      <!-- forward handoffs -->
-      <path d="M 203,163 L 252,163" fill="none" stroke="#8a8578" stroke-width="2" marker-end="url(#fw)" opacity="{{ op12 }}"></path>
-      <path d="M 453,163 L 502,163" fill="none" stroke="#8a8578" stroke-width="2" marker-end="url(#fw)" opacity="{{ op23 }}"></path>
-      <path d="M 703,163 L 752,163" fill="none" stroke="#8a8578" stroke-width="2" marker-end="url(#fw)" opacity="{{ op34 }}"></path>
+      <!-- door connectors -->
+      <sc-for list="{{ doorLinks }}" as="l" hint-placeholder-count="5">
+        <path d="{{ l.d }}" fill="none" stroke="#71757c" stroke-width="1.6" marker-end="url(#dr)" opacity="{{ l.op }}"></path>
+      </sc-for>
 
-      <!-- the invariants rail: polynv feeds every stage -->
-      <path d="M 60,292 L 900,292" fill="none" stroke="#a63d55" stroke-width="1.5" opacity="0.45"></path>
-      <path d="M 108,292 L 108,236" fill="none" stroke="#a63d55" stroke-width="1.5" marker-end="url(#nv)" opacity="0.6"></path>
-      <path d="M 358,292 L 358,236" fill="none" stroke="#a63d55" stroke-width="1.5" marker-end="url(#nv)" opacity="0.6"></path>
-      <path d="M 608,292 L 608,236" fill="none" stroke="#a63d55" stroke-width="1.5" marker-end="url(#nv)" opacity="0.6"></path>
-      <path d="M 858,292 L 858,236" fill="none" stroke="#a63d55" stroke-width="1.5" marker-end="url(#nv)" opacity="0.6"></path>
+      <!-- feedback: step 9 → step 2, because invariants move first -->
+      <path d="M 746,608 C 908,572 908,168 748,124" fill="none" stroke="#a63d55" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#fb)" opacity="{{ opFb1 }}"></path>
+      <!-- feedback: step 8 gates step 6 -->
+      <path d="M 746,552 C 812,528 812,466 748,440" fill="none" stroke="#3f7a54" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#fg)" opacity="{{ opFb2 }}"></path>
     </svg>
 
-    <!-- feedback labels -->
-    <div style="position: absolute; left: 356px; top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #bc6a1e; opacity: {{ opBack }};">journal = trace corpus → re-audit for drift</div>
-    <div style="position: absolute; left: 646px; top: 44px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #bc6a1e; opacity: {{ opBack }};">fleet snapshots ↩</div>
+    <!-- feedback legend (kept off the arcs so nothing overlaps) -->
+    <div style="position: absolute; left: 752px; top: 632px; width: 200px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; line-height: 1.6; color: #6b6f76;">
+      <div style="opacity: {{ opFb1 }};"><span style="color: #a63d55;">╌╌▸</span> invariants move first — to step 2</div>
+      <div style="opacity: {{ opFb2 }};"><span style="color: #3f7a54;">╌╌▸</span> evolve gates the deploy — step 6</div>
+    </div>
 
-    <!-- handoff labels -->
-    <div style="position: absolute; left: 150px; top: 240px; width: 156px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.35; color: #6b6f76; opacity: {{ op12 }};">a contract + invariants<br>you can trust</div>
-    <div style="position: absolute; left: 400px; top: 240px; width: 156px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.35; color: #6b6f76; opacity: {{ op23 }};">the new version,<br>model-checked</div>
-    <div style="position: absolute; left: 650px; top: 240px; width: 156px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.35; color: #6b6f76; opacity: {{ op34 }};">a version cleared<br>for the fleet</div>
-
-    <!-- stages -->
-    <sc-for list="{{ stages }}" as="s" hint-placeholder-count="4">
-      <div onMouseEnter="{{ s.on }}" onMouseLeave="{{ clear }}" style="position: absolute; left: {{ s.x }}px; top: 96px; width: 190px; height: 140px; background: #fffdf8; border: 1px solid #e4dfcf; border-top: 3px solid {{ s.color }}; border-radius: 12px; padding: 11px 13px; cursor: default; box-shadow: {{ s.ring }}; opacity: {{ s.op }}; transition: box-shadow .16s, opacity .16s;">
-        <div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: {{ s.color }};">{{ s.kicker }}</div>
-        <div style="font-size: 17px; font-weight: 600; margin: 2px 0 4px;">{{ s.name }}</div>
-        <div style="font-family: 'Newsreader', serif; font-size: 13px; line-height: 1.3; color: #4b4f55;">{{ s.what }}</div>
-        <div style="position: absolute; left: 13px; bottom: 10px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: {{ s.color }}; border: 1px solid {{ s.color }}; border-radius: 5px; padding: 2px 6px; opacity: 0.85;">▼ {{ s.enter }}</div>
+    <!-- the spine -->
+    <sc-for list="{{ spine }}" as="s" hint-placeholder-count="12">
+      <div onMouseEnter="{{ s.on }}" onMouseLeave="{{ clear }}" style="position: absolute; left: 330px; top: {{ s.y }}px; width: 412px; height: {{ s.h }}px; background: {{ s.bg }}; border: 1px solid {{ s.border }}; border-left: 3px solid {{ s.color }}; border-radius: 9px; padding: {{ s.pad }}; cursor: default; opacity: {{ s.op }}; transition: opacity .16s;">
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: {{ s.color }};">{{ s.n }}</span>
+          <span style="font-size: 13.5px; font-weight: 600; color: {{ s.fg }};">{{ s.title }}</span>
+        </div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: {{ s.subColor }}; margin-top: 2px;">{{ s.sub }}</div>
       </div>
     </sc-for>
 
-    <!-- polynv rail label -->
-    <div style="position: absolute; left: 60px; top: 300px; width: 840px; display: flex; align-items: baseline; gap: 9px;">
-      <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #a63d55;">polynv · elicit</span>
-      <span style="font-family: 'Newsreader', serif; font-style: italic; font-size: 13.5px; color: #55595f;">supplies <span style="font-family:'JetBrains Mono',monospace; font-style: normal; font-size: 11px;">invariants.mjs</span> — every gate above is exactly as good as it, and you can enter here from anywhere.</span>
-    </div>
+    <!-- the doors -->
+    <sc-for list="{{ doors }}" as="d" hint-placeholder-count="5">
+      <div onMouseEnter="{{ d.on }}" onMouseLeave="{{ clear }}" style="position: absolute; left: 14px; top: {{ d.y }}px; width: 248px; background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid {{ d.color }}; border-radius: 20px; padding: 9px 14px; cursor: default; box-shadow: {{ d.ring }}; opacity: {{ d.op }}; transition: box-shadow .16s, opacity .16s;">
+        <div style="font-family: 'Newsreader', serif; font-size: 13.5px; line-height: 1.25; color: #1b1d1f;">{{ d.q }}</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: {{ d.color }}; margin-top: 2px;">{{ d.engine }}</div>
+      </div>
+    </sc-for>
   </div>
 
-  <div style="margin-top: 6px; border: 1px solid #e4dfcf; border-left: 3px solid {{ detailColor }}; background: #fbf9f2; border-radius: 10px; padding: 13px 17px; min-height: 80px; transition: border-color .16s;">
+  <div style="margin-top: 8px; border: 1px solid #e4dfcf; border-left: 3px solid {{ detailColor }}; background: #fbf9f2; border-radius: 10px; padding: 12px 17px; min-height: 74px; transition: border-color .16s;">
     <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: {{ detailColor }};">{{ detailKicker }}</div>
-    <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.4; color: #33373c; margin-top: 5px; max-width: 900px;">{{ detailBody }}</div>
-    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8a8578; margin-top: 7px;">{{ detailCmd }}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.4; color: #33373c; margin-top: 4px; max-width: 900px;">{{ detailBody }}</div>
   </div>
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 560}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 830}}">
 class Component extends DCLogic {
   state = { active: null };
   set(a){ this.setState({ active: a }); }
   renderVals(){
     const A = this.state.active;
-    const stages = [
-      { id: 'audit', x: 13, color: '#2f6f8f', kicker: 'Polygraph · audit', name: 'Verify', enter: 'existing code',
-        what: 'What does this code actually do — not what the tests say?',
-        body: 'Scope a contract over the code you already have, capture real traces from it executing, prove the harness with controls, then generate N independent specs, replay every window, and model-check against intent. You come out the other side knowing what the code does — and holding a contract and an invariant set you have reason to trust, which is exactly the input the next stage needs.',
-        cmd: '/polygraph:polygraph  ·  /polygraph:verify   →   findings + shortest counterexamples' },
-      { id: 'author', x: 263, color: '#6a4b9c', kicker: 'polygen · author', name: 'Author v-next', enter: 'a new feature',
-        what: 'Write the next version so it is verified before it ships.',
-        body: 'Now that the intent is written down, changing the machine is no longer a leap: polygen drafts the contract, authors the SAM v2 module, proposes invariants, model-checks its own output and repairs the code (never the invariants), then synthesizes a replayed regression corpus. A non-converging run is reported NOT converged, never dressed up as clean.',
-        cmd: '/polygraph:polygen   →   contract.json · next.cjs · invariants.mjs · traces/' },
-      { id: 'compat', x: 513, color: '#3f7a54', kicker: 'polyvers · evolve', name: 'Clear it for the fleet', enter: 'a change to ship',
-        what: 'Is the new version safe for the state the old one left behind?',
-        body: 'The question the correctness check cannot answer: production holds states your new code can no longer construct. Classify what changed into lanes, then gate the change against live fleet snapshots — round-trip, cross-version stimuli, a scaffolded migration, and the seeded model check that asks whether anything the fleet currently holds can be driven into a violation under the new rules.',
-        cmd: '/polygraph:polyvers   →   compat-report · migrate.cjs · matrix + product' },
-      { id: 'run', x: 763, color: '#bc6a1e', kicker: 'polyrun · execute', name: 'Run it durably', enter: 'a verified machine',
-        what: 'Durable state, effects, timers, children — and it keeps checking.',
-        body: 'One ACID transaction per step, snapshot resumption instead of event replay, and observable rejection so duplicates and stale timers are journaled rather than undefined. Then it closes the loop: check-product and simulate before deploy, and in production the journal IS the trace corpus the next audit replays, while the fleet snapshots ARE the next version\'s compatibility test bed.',
-        cmd: 'polyrun deploy · check-product · simulate · audit   →   journal + fleet snapshots' },
+    const C = { gen: '#6a4b9c', nv: '#a63d55', run: '#bc6a1e', graph: '#2f6f8f', vers: '#3f7a54', gate: '#b23b2e' };
+    // the spine, in lifecycle order — execute BEFORE verify: you run it, and
+    // running it is what produces the traces the audit needs.
+    const spine = [
+      { n: '1', title: 'Specify — draft the contract', sub: 'polygen: one paragraph → contract.json', color: C.gen },
+      { n: '', title: 'Human gate — confirm the observable state', sub: '', color: C.gate, gate: true },
+      { n: '2', title: 'Author — the machine and its first rules', sub: 'polygen: write · model-check · self-repair (code, never invariants)', color: C.gen },
+      { n: '3', title: 'Elicit the rules you did not know you had', sub: 'polynv: harvest · pre-check · judge stories · mutation grade', color: C.nv },
+      { n: '', title: 'Human gate — confirm the invariants', sub: '', color: C.gate, gate: true },
+      { n: '4', title: 'Execute — run it durably', sub: 'polyrun: one ACID step · check-effects + check-product gates', color: C.run },
+      { n: '5', title: 'Verify against reality', sub: 'Polygraph: controls → N specs → replay → model check', color: C.graph },
+      { n: '', title: 'Human gate — triage the findings', sub: '', color: C.gate, gate: true },
+      { n: '6', title: 'Deploy — the mechanical gate', sub: 'polyrun deploy: round-trip over live snapshots (+ migrate)', color: C.run },
+      { n: '7', title: 'Operate — watch for drift', sub: 'polyrun audit: the journal replayed against the model', color: C.run },
+      { n: '8', title: 'Evolve — is this change safe for the fleet?', sub: 'polyvers: classify · fleet gates · seeded model check', color: C.vers },
+      { n: '9', title: 'Re-check that the rules still hold', sub: 'polynv drift: every recorded answer, re-asked of the new machine', color: C.nv },
     ];
-    const dim = id => (!A || A === id) ? '1' : '0.3';
-    const edge = (...ids) => (!A || ids.some(i => A === i)) ? '1' : '0.18';
-    const d = stages.find(s => s.id === A);
+    const doors = [
+      { id: 'gen',   target: 0,  color: C.gen,   engine: 'polygen · author',    q: '“A new feature with state.”',
+        body: 'The greenfield path, and the only one that starts at step 1: you have intent but no machine yet. polygen drafts the contract from a paragraph, and you meet the first human gate immediately — the contract is the design spec every later check is built against.' },
+      { id: 'nv',    target: 3,  color: C.nv,    engine: 'polynv · elicit',      q: '“I don’t know what my rules are yet.”',
+        body: 'The door most teams actually need and rarely name. You may have a machine already; what you lack is the invariants every gate downstream is measured against. polynv harvests candidates, pre-checks each against the reachable graph, and puts it to you as a story to judge — then grades the set so you can tell strong rules from merely present ones.' },
+      { id: 'run',   target: 5,  color: C.run,   engine: 'polyrun · execute',    q: '“A verified machine that needs to run durably.”',
+        body: 'You already have the machine and the rules; what you need is durable state, reliable effects, and timers — without the replay-determinism debt. Note where this sits: running it is what produces the journal, and the journal is what the next step audits against. Execution comes BEFORE verification against reality, not after.' },
+      { id: 'graph', target: 6,  color: C.graph, engine: 'Polygraph · audit',    q: '“Existing, legacy, or foreign code.”',
+        body: 'The brownfield path: the code exists, may be in another language, and nobody can say exactly what it does. Scope a contract over it, capture real traces from it executing, prove the harness with controls, then generate specs, replay, and model-check. You leave with findings and — just as valuable — a contract and invariants you have reason to trust.' },
+      { id: 'vers',  target: 10, color: C.vers,  engine: 'polyvers · evolve',    q: '“Shipping a change to a live machine.”',
+        body: 'The compatibility path rather than the correctness path. Production holds states your new code can no longer construct, so the question is not “is this version right?” but “is it safe for the fleet the last version left behind?” — classify the change, gate it against live snapshots, scaffold the migration, and run the seeded model check.' },
+    ];
+    // geometry
+    const H = 44, GH = 34, GAP = 12;
+    let y = 0; const ys = [];
+    spine.forEach(s => { ys.push(y); y += (s.gate ? GH : H) + GAP; });
+    const midOf = i => ys[i] + (spine[i].gate ? GH : H) / 2;
+
+    const d = doors.find(x => x.id === A);
+    const lit = i => !d || i >= d.target;           // the path from your door onward
+    const links = [];
+    for (let i = 0; i < spine.length - 1; i++) {
+      const y1 = ys[i] + (spine[i].gate ? GH : H), y2 = ys[i + 1];
+      links.push({ d: `M 536,${y1} L 536,${y2 - 2}`, op: (!d || (i >= d.target)) ? '1' : '0.15' });
+    }
+    const doorLinks = doors.map(x => ({
+      d: `M 264,${x.y0 = ys[x.target] + (spine[x.target].gate ? GH : H) / 2} L 326,${midOf(x.target)}`,
+      op: (!d || d.id === x.id) ? '1' : '0.12',
+    }));
     return {
-      stages: stages.map(s => ({
-        x: s.x, color: s.color, kicker: s.kicker, name: s.name, what: s.what, enter: s.enter,
-        on: () => this.set(s.id),
-        ring: A === s.id ? `0 0 0 2px ${s.color}` : '0 1px 0 #e9e4d5',
-        op: dim(s.id),
+      spine: spine.map((s, i) => ({
+        y: ys[i], h: s.gate ? GH : H, n: s.n, title: s.title, sub: s.sub, color: s.color,
+        pad: s.gate ? '7px 13px' : '8px 13px',
+        bg: s.gate ? '#fdf1ef' : '#fffdf8',
+        border: s.gate ? '#eccfca' : '#e4dfcf',
+        fg: lit(i) ? '#1b1d1f' : '#9b968a',
+        subColor: lit(i) ? '#6b6f76' : '#b8b3a6',
+        op: lit(i) ? '1' : '0.34',
+        on: () => this.set(null),
       })),
+      doors: doors.map(x => ({
+        y: midOf(x.target) - 21, q: x.q, engine: x.engine, color: x.color,
+        on: () => this.set(x.id),
+        ring: A === x.id ? `0 0 0 2px ${x.color}` : '0 1px 0 #e9e4d5',
+        op: (!A || A === x.id) ? '1' : '0.38',
+      })),
+      links, doorLinks,
       clear: () => this.set(null),
-      op12: edge('audit', 'author'), op23: edge('author', 'compat'), op34: edge('compat', 'run'),
-      opBack: edge('run', 'audit', 'compat'),
+      opFb1: (!d || d.id === 'nv' || d.id === 'vers') ? '1' : '0.2',
+      opFb2: (!d || d.id === 'vers') ? '1' : '0.2',
       detailColor: d ? d.color : '#b23b2e',
-      detailKicker: d ? `${d.kicker} — ${d.name}` : 'The loop, not the line',
-      detailBody: d ? d.body : 'Read left to right the first time and it is a pipeline: audit what exists, author the next version against what you learned, clear it against the fleet, run it. Read the dashed arcs and it stops being a line — production feeds the audit its evidence and the compatibility gate its test bed, so the second lap starts with more than the first did. Enter at whichever stage matches what you are holding; the artifacts are the same either way.',
-      detailCmd: d ? d.cmd : 'the whole loop is no-API-key except authoring and spec generation',
+      detailKicker: d ? d.engine : 'five doors · one spine · three gates',
+      detailBody: d ? d.body : 'Hover a door to see what you are holding when you walk through it, and watch the spine below it light up — that is your path. Two edges close the loop: after evolving a version you re-ask every recorded intent answer of the new machine (polynv drift), and if the rules moved, invariants move FIRST — back to step 2, before the machine changes. Everything on the spine is mechanical except the three red gates.',
     };
   }
 }
