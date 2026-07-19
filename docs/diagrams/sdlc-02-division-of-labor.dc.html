@@ -51,7 +51,7 @@
         <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #f0ede3; background: #2b2e31; border: 1px solid #45322f; border-radius: 7px; padding: 7px 12px;">{{ f.t }}</span>
       </sc-for>
     </div>
-    <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: #b9b4a6; margin-top: 13px;">Those four are the human\'s whole job in this lifecycle — small in hours, decisive in outcome.</div>
+    <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: #b9b4a6; margin-top: 13px;">Those five are the human's whole job in this lifecycle — small in hours, decisive in outcome.</div>
   </div>
 
 </div>
@@ -63,13 +63,13 @@ class Component extends DCLogic {
     const h = this.state.hover;
     const cols = [
       { name: 'Human', color: '#1b1d1f', tag: 'judgment — the one thing no tool derives',
-        items: ['Confirm the contract scopes the right state', 'Confirm the invariants say what you mean', 'Judge findings', 'Approve deploys'] },
+        items: ['Confirm the contract scopes the right state', 'Confirm the invariants say what you mean', 'Disposition every elicitation question (polynv never answers its own)', 'Judge findings', 'Approve deploys'] },
       { name: 'Agent', color: '#6a4b9c', tag: 'Claude Code + this plugin — the mechanical work',
-        items: ['Draft contracts, author machines', 'Build test doubles, capture traces', 'Run pipelines, triage', 'Propose repairs'] },
+        items: ['Draft contracts, author machines', 'Build test doubles, capture traces', 'Harvest + pre-check invariant candidates, grade the set', 'Run pipelines, triage', 'Propose repairs'] },
       { name: 'CI', color: '#3f7a54', tag: 'the mechanical, no-API-key backstop',
         items: ['Run the no-API-key gates on every change', 'Block on exit codes'] },
     ];
-    const forbidden = ['approve contracts', 'approve invariants', 'dismiss code-findings', 'weaken a rule to pass a check'].map(t => ({ t }));
+    const forbidden = ['approve contracts', 'approve invariants', 'disposition elicitation questions', 'dismiss code-findings', 'weaken a rule to pass a check'].map(t => ({ t }));
     return {
       cols: cols.map((c, i) => ({
         ...c, items: c.items.map(t => ({ t })),

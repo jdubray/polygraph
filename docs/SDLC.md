@@ -1,10 +1,16 @@
-# An SDLC for verified stateful code — integrating Polygraph, polygen, and polyrun into agentic workflows
+# An SDLC for verified stateful code — integrating the five engines into agentic workflows
 
 This document is the team-facing companion to `docs/ARCHITECTURE.md`. It
 describes a development lifecycle in which **agents do the mechanical work**
 (authoring, instrumentation, exploration, triage) and **humans own exactly
 two things**: the contract (what is observable) and the invariants (what
 must never happen). Everything between those two is machine-checked.
+
+Those two human-owned things are the ceiling on everything else, so one
+engine exists for each: polygen drafts the contract for you to review, and
+polynv elicits the invariants — harvesting candidates, pre-checking them,
+and putting each to you as a concrete story to judge. Neither decides;
+both make the judgment cheap to exercise.
 
 The division of labor, stated once and used everywhere:
 
@@ -284,3 +290,5 @@ decisive in outcome.
 | poisoned instance | "cannot happen" happened | fix module/mapper → deploy gate → resolve instance |
 | audit drift | production ≠ verified model | incident: find the hot patch / manual edit / harness bug |
 | DLQ growth | provider trouble beyond retry budget | the machine already chose its `onExhausted` semantics; retry via `dlq retry` after the outage |
+| `polynv drift` moved verdicts | a recorded intent answer is no longer true of the machine | re-interview the moved records (`drift --reopen`); a confirmed-now-violated rule is a finding, not a stale answer |
+| low adequacy grade / many survivors | the rules are thin — a clean run proves less than it looks | work the ranked survivor questions; a survivor is a machine you broke on purpose that no rule noticed |

@@ -60,6 +60,8 @@ class Component extends DCLogic {
       { signal: 'poisoned instance', sev: X, meaning: '"cannot happen" happened', move: 'Fix the module / mapper → deploy gate → resolve the instance deliberately.' },
       { signal: 'audit drift', sev: X, meaning: 'production \≠ verified model', move: 'Incident: find the hot patch, the manual DB edit, or the harness bug.' },
       { signal: 'DLQ growth', sev: P, meaning: 'provider trouble beyond the retry budget', move: 'The machine already chose its onExhausted semantics; retry via dlq retry after the outage.' },
+      { signal: 'polynv drift moved verdicts', sev: P, meaning: 'a recorded intent answer is no longer true of the machine', move: 'Re-interview the moved records (drift --reopen); a confirmed-now-violated rule is a finding, not a stale answer.' },
+      { signal: 'low adequacy grade / survivors', sev: I, meaning: 'the rules are thin — a clean run proves less than it looks', move: 'Work the ranked survivor questions; a survivor is a machine you broke on purpose that no rule noticed.' },
     ];
     return { rows: rows.map((r, i) => ({
       ...r,
