@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2px;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #a63d55;">Architecture · fig 7 · Engine 5 elicit</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">polynv — how strong is the invariant set you ended up with?</div>
+    </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a09a8c; padding-bottom: 4px;">hover a stage ↗</div>
+  </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #a63d55; margin-bottom: 20px;">An invariant file that passes every gate might still be nearly empty. Mutation testing is the measure — and finite declared domains make its hardest subproblem mechanical.</div>
+
+  <div style="display: flex; align-items: stretch; gap: 0;">
+    <sc-for list="{{ stages }}" as="s" hint-placeholder-count="5">
+      <div style="display: flex; align-items: center; flex: 1;">
+        <div onMouseEnter="{{ s.on }}" style="flex: 1; background: #fffdf8; border: 1px solid #e4dfcf; border-radius: 12px; padding: 14px 15px; min-height: 132px; box-shadow: {{ s.ring }}; opacity: {{ s.op }}; transition: box-shadow .18s, opacity .18s; cursor: default;">
+          <div style="width: 22px; height: 22px; border-radius: 50%; background: {{ s.dot }}; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;">{{ s.n }}</div>
+          <div style="font-size: 14.5px; font-weight: 600; margin: 9px 0 5px; line-height: 1.2;">{{ s.title }}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.45; color: #6b6f76;">{{ s.sub }}</div>
+        </div>
+        <div style="width: 22px; text-align: center; color: #b9b3a4; font-size: 15px; flex: none; opacity: {{ s.arrow }};">›</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display: flex; gap: 14px; margin-top: 16px; align-items: stretch;">
+    <div style="flex: 1; background: #f7edf0; border: 1px solid #e6ccd4; border-radius: 12px; padding: 16px 20px; min-height: 96px;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #a63d55;">Step {{ stepNo }} / 5 · {{ capTitle }}</div>
+      <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #2b3033; margin-top: 6px;">{{ caption }}</div>
+    </div>
+    <div style="width: 292px; flex: none; background: #1b1d1f; color: #f6f4ee; border-radius: 12px; padding: 15px 18px;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #a7a294;">calibration · OMS order machine</div>
+      <div style="font-size: 30px; font-weight: 600; margin: 6px 0 2px; letter-spacing: -0.01em;">101<span style="color:#9a9488; font-size: 20px;"> / 113</span></div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #b9b4a6; line-height: 1.5;">distinct mutants killed by the<br>hand-written invariant set</div>
+      <div style="border-top: 1px solid #34383b; margin: 10px 0 8px;"></div>
+      <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 12.5px; color: #cfc9ba; line-height: 1.35;">All 12 survivors are behavior-<em>removing</em> mutants — the stated blind spot of any safety-invariant set.</div>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 14px; margin-top: 16px;">
+    <button onClick="{{ prev }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #fffdf8; border: 1px solid #cdc7b8; color: #33373c; border-radius: 8px; padding: 8px 16px; cursor: pointer;">‹ Prev</button>
+    <button onClick="{{ next }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #a63d55; border: 1px solid #a63d55; color: #fff; border-radius: 8px; padding: 8px 16px; cursor: pointer;">Next ›</button>
+    <div style="display: flex; gap: 7px; margin-left: 6px;">
+      <sc-for list="{{ dots }}" as="d" hint-placeholder-count="5">
+        <span onClick="{{ d.go }}" style="width: 9px; height: 9px; border-radius: 50%; background: {{ d.fill }}; cursor: pointer;"></span>
+      </sc-for>
+    </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #a09a8c; margin-left: auto;">no API key · deterministic · the denominator is distinct mutants only</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 520}}">
+class Component extends DCLogic {
+  state = { step: 0 };
+  go(i){ this.setState({ step: i }); }
+  renderVals(){
+    const step = this.state.step, N = 5;
+    const stages = [
+      { title: 'Mutate', sub: 'guard-negation drop · transition retarget · acceptor widening · field freeze' },
+      { title: 'Discard equivalents', sub: 'BFS graph comparison — same behavior, different source' },
+      { title: 'Kill or survive', sub: 'run the invariant set against every DISTINCT mutant' },
+      { title: 'Survivors → questions', sub: 'ranked: a candidate that closes a survivor comes first' },
+      { title: 'Trust tier', sub: 'the score travels into polyvers’ compat-report' },
+    ];
+    const captions = [
+      { t: 'Mutate', c: 'Four operator families break the machine in ways a real defect would: drop a guard so a rejected action is suddenly accepted, retarget a transition to the wrong state, widen an acceptor so it applies where it should not, and freeze a field so an update silently does nothing. Each mutant is a machine that IS broken — the question is whether your rules notice.' },
+      { t: 'Discard equivalents', c: 'Mutation testing’s classic problem is the equivalent mutant: a source change that produces identical behavior, which nothing can kill and which quietly deflates every score. Deciding equivalence is undecidable in general — but not here. Finite declared domains mean both machines can be fully explored and their reachable graphs compared, so equivalent mutants are discarded mechanically. The finite-domain restriction the whole toolset accepts pays itself back precisely here: the denominator is behaviorally distinct mutants only.' },
+      { t: 'Kill or survive', c: 'Every distinct mutant is model-checked against the confirmed invariant set. A mutant is KILLED when some rule catches the broken behavior — that is the invariant earning its place. A SURVIVOR is a machine you broke on purpose that your rules said nothing about: a hole in intent, expressed as a concrete machine you can read.' },
+      { t: 'Survivors → questions', c: 'Survivors are not just a score, they are the next interview. Open candidates are profiled against them, and the ones that would close a surviving mutant rank first — so the question queue is ordered by how much intent each answer would actually add, rather than by harvest order. Profile-duplicates of already-confirmed rules are deprioritized.' },
+      { t: 'Trust tier', c: 'The grade is disclosed, not just computed: polyvers’ compat-report carries it as an invariant-adequacy trust tier — measured, STALE (the invariants drifted from the graded oracle), UNREADABLE, or NOT MEASURED. A versioning verdict therefore states how much intent it was checked against. And the blind spot is stated rather than smoothed over: behavior-REMOVING mutants largely evade safety invariants, because "nothing bad happens" is trivially satisfied by a machine that does nothing.' },
+    ];
+    return {
+      stages: stages.map((s, i) => ({
+        n: i + 1, title: s.title, sub: s.sub,
+        on: () => this.go(i),
+        dot: i <= step ? '#a63d55' : '#c3bdae',
+        ring: i === step ? '0 0 0 2px #a63d55, 0 6px 16px rgba(166,61,85,0.18)' : '0 1px 0 #e9e4d5',
+        op: i <= step ? '1' : '0.5',
+        arrow: i < N - 1 ? (i < step ? '1' : '0.35') : '0',
+      })),
+      dots: Array.from({ length: N }, (_, i) => ({ go: () => this.go(i), fill: i === step ? '#a63d55' : '#cdc7b8' })),
+      stepNo: step + 1, capTitle: captions[step].t, caption: captions[step].c,
+      prev: () => this.setState(s => ({ step: Math.max(0, s.step - 1) })),
+      next: () => this.setState(s => ({ step: Math.min(N - 1, s.step + 1) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

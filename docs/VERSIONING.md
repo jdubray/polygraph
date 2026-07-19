@@ -292,19 +292,23 @@ every ingredient has precedent; the sources below are the entry points.
 > Bad? Semantic Versioning and Impact of Breaking Changes in Maven
 > Central* · *Microservice API Evolution in Practice*.
 
-## The one-paragraph version
+## Conclusion
 
 State-machine versioning is hard because state outlives code, "version"
 means four different things, and the industrial default (replay
 determinism) taxes every future change while verifying nothing about
-safety. This toolset's answer: make the state shape a sealed declaration
-so shape compatibility is a mechanical round-trip over the live fleet;
-make semantics checkable so "can the new rules hurt old state" is a model
-check from live snapshots rather than a review vibe; make in-flight
-stimuli safe by the same verified rejection that makes redelivery safe;
-make vocabulary drift a load-time error; make migration a pure, gated,
-fenced, journaled artifact; and version the *audit* along with the code so
-history stays checkable across the boundary. Versioning stops being a
-permanent discipline practiced on every change and becomes a set of gates
-you pass — with the honest caveat that the gates are exactly as good as
-the invariants you bothered to state.
+safety. This toolset's answer: 
+- make the state shape a sealed declaration so shape compatibility is a 
+mechanical round-trip over the live fleet;
+- make semantics checkable so "can the new rules hurt old state" is a 
+model check from live snapshots rather than a review vibe; 
+- make in-flight stimuli safe by the same verified rejection that makes 
+redelivery safe;
+- make vocabulary drift a load-time error; 
+make migration a pure, gated, fenced, journaled artifact;  
+- version the *audit* along with the code so history stays checkable 
+across the boundary. 
+
+Versioning stops being a permanent discipline practiced on every change 
+and becomes a set of gates you pass — with the honest caveat that the 
+gates are exactly as good as the invariants you bothered to state.

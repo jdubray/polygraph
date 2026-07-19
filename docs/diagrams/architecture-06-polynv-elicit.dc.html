@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2px;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #a63d55;">Architecture · fig 6 · Engine 5 elicit</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">polynv — eliciting the rules every gate checks against</div>
+    </div>
+  </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #a63d55; margin-bottom: 20px;">Writing predicates from a blank page is a scarce skill. Judging a concrete story about your own machine is a common one.</div>
+
+  <div style="display: flex; align-items: stretch; gap: 0;">
+    <sc-for list="{{ stages }}" as="s" hint-placeholder-count="5">
+      <div style="display: flex; align-items: center; flex: 1;">
+        <div onMouseEnter="{{ s.on }}" style="flex: 1; background: #fffdf8; border: 1px solid #e4dfcf; border-radius: 12px; padding: 14px 15px; min-height: 128px; box-shadow: {{ s.ring }}; opacity: {{ s.op }}; transition: box-shadow .18s, opacity .18s; cursor: default;">
+          <div style="width: 22px; height: 22px; border-radius: 50%; background: {{ s.dot }}; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;">{{ s.n }}</div>
+          <div style="font-size: 14.5px; font-weight: 600; margin: 9px 0 5px; line-height: 1.2;">{{ s.title }}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.45; color: #6b6f76;">{{ s.sub }}</div>
+        </div>
+        <div style="width: 22px; text-align: center; color: #b9b3a4; font-size: 15px; flex: none; opacity: {{ s.arrow }};">›</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top: 18px; background: #f7edf0; border: 1px solid #e6ccd4; border-radius: 12px; padding: 16px 20px; min-height: 92px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #a63d55;">Step {{ stepNo }} / 5 · {{ capTitle }}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; line-height: 1.45; color: #2b3033; margin-top: 6px; max-width: 900px;">{{ caption }}</div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 14px; margin-top: 16px;">
+    <button onClick="{{ prev }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #fffdf8; border: 1px solid #cdc7b8; color: #33373c; border-radius: 8px; padding: 8px 16px; cursor: pointer;">‹ Prev</button>
+    <button onClick="{{ next }}" style="font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 500; background: #a63d55; border: 1px solid #a63d55; color: #fff; border-radius: 8px; padding: 8px 16px; cursor: pointer;">Next ›</button>
+    <div style="display: flex; gap: 7px; margin-left: 6px;">
+      <sc-for list="{{ dots }}" as="d" hint-placeholder-count="5">
+        <span onClick="{{ d.go }}" style="width: 9px; height: 9px; border-radius: 50%; background: {{ d.fill }}; cursor: pointer;"></span>
+      </sc-for>
+    </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #a09a8c; margin-left: auto;">the plugin proposes · only the designer confirms</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 500}}">
+class Component extends DCLogic {
+  state = { step: 0 };
+  go(i){ this.setState({ step: i }); }
+  renderVals(){
+    const step = this.state.step, N = 5;
+    const stages = [
+      { title: 'Harvest', sub: 'contract templates · state-property + precedence mining · domain priors · LLM code-reading' },
+      { title: 'Pre-check', sub: 'run every candidate over the reachable graph BEFORE asking' },
+      { title: 'Two shapes', sub: 'HOLDS → rule or coincidence?   ·   FAILS → shortest counterexample' },
+      { title: 'Disposition', sub: 'confirm · reject · modify · defer · abandon — attributed, append-only' },
+      { title: 'invariants.mjs', sub: 'generated with provenance; the ledger travels to polyvers' },
+    ];
+    const captions = [
+      { t: 'Harvest', c: 'Candidates come from four sources, none of them a blank page: templates over the contract vocabulary (the one source that can propose a rule the code already violates), state-property mining over fleet snapshots and trace states, precedence mining over ordered event streams (traces and the polyrun journal — never snapshots, which carry no order), frontier-model domain priors that ask payments or auth lore about THIS machine, and optional LLM code-reading. Mining runs against a fixed SAM-tuned grammar with statistical confidence thresholds; a below-threshold observation becomes a note, never a question.' },
+      { t: 'Pre-check', c: 'This is the move that makes the whole thing work. Every candidate is evaluated over the machine’s reachable state graph before a human ever sees it, so no question arrives as an abstract "should this be true?" — the tool already knows whether it IS true, and asks the useful half instead. Candidates that are vacuous, pruned by a stronger sibling, or duplicates of a confirmed rule never reach the interview at all.' },
+      { t: 'Two shapes', c: 'A pre-checked candidate arrives as exactly one of two questions. HOLDS: "this is true everywhere I looked — is it a rule, or a coincidence of the current implementation?" FAILS: "the machine can do THIS today" — with the shortest action path that does it — "is that acceptable?" The second shape is the valuable one: rejecting the story confirms an invariant with its repro already attached, and accepting it documents a deliberate behavior nobody had written down.' },
+      { t: 'Disposition', c: 'The designer answers; the tool records. Confirm, reject, modify (the edited predicate is re-checked and consequence-diffed — what does the change newly forbid, what does it newly allow), defer to a named person, or abandon. Every event is attributed and append-only in intent-ledger.json, including the rejected and abandoned ones, so a re-harvest never re-proposes a question already settled. Elicitation is ongoing and multi-person by design: park a question for whoever actually knows the answer.' },
+      { t: 'invariants.mjs', c: 'Confirmed rules generate invariants.mjs with per-rule provenance, and a hand-written file is never overwritten without --force. The ledger then travels: polyvers’ compat-report reads it for the intent-lane provenance (was this rule elicited and confirmed, or does it have no record?) and for the adequacy trust tier — so a versioning verdict discloses how much intent it was actually checked against.' },
+    ];
+    return {
+      stages: stages.map((s, i) => ({
+        n: i + 1, title: s.title, sub: s.sub,
+        on: () => this.go(i),
+        dot: i <= step ? '#a63d55' : '#c3bdae',
+        ring: i === step ? '0 0 0 2px #a63d55, 0 6px 16px rgba(166,61,85,0.18)' : '0 1px 0 #e9e4d5',
+        op: i <= step ? '1' : '0.5',
+        arrow: i < N - 1 ? (i < step ? '1' : '0.35') : '0',
+      })),
+      dots: Array.from({ length: N }, (_, i) => ({ go: () => this.go(i), fill: i === step ? '#a63d55' : '#cdc7b8' })),
+      stepNo: step + 1, capTitle: captions[step].t, caption: captions[step].c,
+      prev: () => this.setState(s => ({ step: Math.max(0, s.step - 1) })),
+      next: () => this.setState(s => ({ step: Math.min(N - 1, s.step + 1) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

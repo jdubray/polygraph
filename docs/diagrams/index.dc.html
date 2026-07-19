@@ -59,12 +59,14 @@ class Component extends DCLogic {
       n: 'fig ' + (i + 1), title: it[0], desc: it[1], file: it[2], href: it[2],
     })) });
     return { sections: [
-      S('ARCHITECTURE.md', '#1b1d1f', 'four engines around one artifact family', [
-        ['Four engines, one artifact family', 'Author \→ two verification gates (correctness \· compatibility) \→ production, with execution feeding both gates back.', 'architecture-01-three-engines.dc.html'],
+      S('ARCHITECTURE.md', '#1b1d1f', 'five engines around one artifact family', [
+        ['Five engines, one artifact family', 'Author \→ two verification gates (correctness \· compatibility) \→ production, with execution feeding both gates back and polynv supplying the intent they measure against.', 'architecture-01-three-engines.dc.html'],
         ['The artifact family', 'The five artifacts, who produces each and who consumes it.', 'architecture-02-artifact-family.dc.html'],
         ['Polygraph \— audit', 'Controls, N-way specs, replay and model check against existing code.', 'architecture-03-polygraph-audit.dc.html'],
         ['polygen \— author', 'Intent \→ contract \→ module \→ the repair loop that never touches invariants.', 'architecture-04-polygen-author.dc.html'],
         ['polyvers \— evolve', 'Classify the change, gate it against fleet snapshots, migrate, and check the rollout matrix.', 'architecture-05-polyvers-evolve.dc.html'],
+        ['polynv \— elicit', 'Harvest, pre-check, and put each candidate rule to the designer as one of two answerable questions.', 'architecture-06-polynv-elicit.dc.html'],
+        ['polynv \— the adequacy grade', 'Mutate the machine, discard equivalents by graph comparison, and measure what the invariant set actually kills.', 'architecture-07-polynv-grade.dc.html'],
       ]),
       S('SDLC.md', '#6a4b9c', 'threading the engines into an agentic lifecycle', [
         ['A lifecycle for verified code', 'Phases 0\–7 with the three human gates surfaced.', 'sdlc-01-lifecycle.dc.html'],

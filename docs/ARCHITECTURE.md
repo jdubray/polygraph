@@ -28,7 +28,7 @@ the fleet snapshots are the versioning gate's initial states.
 > data is not measured by any gate.
 
 [![Five engines, one artifact family](diagrams/thumbs/architecture-01-three-engines.png)](diagrams/architecture-01-three-engines.dc.html)
-*Interactive diagram — [Five engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine; the rendered diagram predates polynv — a refresh is a recorded follow-up)*
+*Interactive diagram — [Five engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine)*
 
 ## The artifact family
 
@@ -256,6 +256,9 @@ milestones: `docs/polyvers-plan.md`; worked example:
 
 ## Engine 5 — polynv (elicit)
 
+[![polynv — eliciting the rules every gate checks against](diagrams/thumbs/architecture-06-polynv-elicit.png)](diagrams/architecture-06-polynv-elicit.dc.html)
+*Interactive diagram — [polynv — eliciting the rules every gate checks against](diagrams/architecture-06-polynv-elicit.dc.html)*
+
 The engine that attacks the ceiling the trust-boundaries table below names:
 every gate is exactly as good as `invariants.mjs`, and invariant-writing is
 a scarce skill. polynv converts it into a common one — judging concrete
@@ -283,6 +286,9 @@ anchoring: `docs/polynv-plan.md`; worked example + calibration:
   the confirmed set by kill ratio; survivors become the next questions,
   and polyvers disclosures carry the score (or STALE once the invariants
   drift from the graded oracle).
+
+[![polynv — how strong is the invariant set you ended up with?](diagrams/thumbs/architecture-07-polynv-grade.png)](diagrams/architecture-07-polynv-grade.dc.html)
+*Interactive diagram — [polynv — the adequacy grade](diagrams/architecture-07-polynv-grade.dc.html)*
 
 ## Trust boundaries
 
