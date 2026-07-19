@@ -47,8 +47,18 @@ produces the traces an audit would have captured. What matters is naming
 which one you are in, because it decides which gate you are heading for —
 and every path converges on the same deploy gate and the same drift watch.
 
+The most common journey runs the whole loop: **audit what exists → author
+the next version → clear it for the fleet → run it durably → and production
+hands the evidence back** — the journal becomes the next audit's trace
+corpus, the fleet snapshots become the next version's test bed. Each stage
+hands the next a concrete artifact, and you can enter at whichever stage
+matches what you are holding.
+
+[![The flow — audit, author, clear for the fleet, run, repeat](diagrams/thumbs/sdlc-05-flow.png)](diagrams/sdlc-05-flow.dc.html)
+*Interactive diagram — [The flow](diagrams/sdlc-05-flow.dc.html) (hover a stage for what you run and what you get)*
+
 [![Which door are you entering?](diagrams/thumbs/sdlc-04-entry-points.png)](diagrams/sdlc-04-entry-points.dc.html)
-*Interactive diagram — [Which door are you entering?](diagrams/sdlc-04-entry-points.dc.html) (hover a door to light its path through the phases)*
+*Interactive diagram — [Which door are you entering?](diagrams/sdlc-04-entry-points.dc.html) (the same entry points against the phase spine — hover a door to light its path)*
 
 ## Phase 1 — Specify (human + agent, minutes)
 

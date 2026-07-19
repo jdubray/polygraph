@@ -1,0 +1,42 @@
+%%{init: {'theme':'base','themeVariables':{'lineColor':'#94a3b8','fontSize':'14px'}}}%%
+flowchart TD
+  classDef entry     fill:#f1f5f9,stroke:#64748b,color:#0f172a
+  classDef polygen   fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+  classDef polynv    fill:#fce7f3,stroke:#db2777,color:#831843
+  classDef polyrun   fill:#ffedd5,stroke:#ea580c,color:#7c2d12
+  classDef polygraph fill:#d1fae5,stroke:#059669,color:#064e3b
+  classDef polyvers  fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+  classDef gate      fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:2px
+
+  %% ---- Entry doors (Phase 0: pick your door) ----
+  E1(["New feature<br/>with state"]):::entry
+  E2(["Existing / legacy /<br/>foreign code"]):::entry
+  E3(["Ready to run<br/>durably"]):::entry
+  E4(["Shipping a change<br/>to a live machine"]):::entry
+  E5(["Don't know your<br/>rules yet"]):::entry
+
+  %% ---- Lifecycle spine ----
+  P1["1 · Specify — draft the contract<br/><i>polygen: paragraph → contract.json</i>"]:::polygen
+  G1{{"Human gate 1<br/>confirm the observable state"}}:::gate
+  P2["2 · Author — machine + first rules<br/><i>polygen: write, model-check, self-repair</i>"]:::polygen
+  NV["3 · Elicit the rules you didn't know<br/><i>polynv: harvest · judge stories · mutation grade</i>"]:::polynv
+  G2{{"Human gate 2<br/>confirm the invariants"}}:::gate
+  P3["4 · Execute — run durably<br/><i>polyrun + check-effects gate</i>"]:::polyrun
+  P4["5 · Verify against reality<br/><i>polygraph: controls → replay → check</i>"]:::polygraph
+  G3{{"Human gate 3<br/>triage the findings"}}:::gate
+  P5["6 · Deploy — mechanical gate<br/><i>polyrun: round-trip over live snapshots (+ migrate)</i>"]:::polyrun
+  P6["7 · Operate — watch for drift<br/><i>polyrun audit: journal vs model</i>"]:::polyrun
+  P7["8 · Evolve — is this change safe?<br/><i>polyvers: classify · fleet gates · seeded check</i>"]:::polyvers
+  NVD["9 · Re-check the rules still hold<br/><i>polynv drift</i>"]:::polynv
+
+  %% ---- Door wiring ----
+  E1 --> P1
+  E5 --> NV
+  E3 --> P3
+  E2 --> P4
+  E4 --> P7
+
+  %% ---- Spine wiring ----
+  P1 --> G1 --> P2 --> NV --> G2 --> P3 --> P4 --> G3 --> P5 --> P6 --> P7 --> NVD
+  NVD -->|"invariants move first"| P2
+  P7 -.->|"gate the deploy"| P5
