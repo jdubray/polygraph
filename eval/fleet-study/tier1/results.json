@@ -17,7 +17,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 3,
-      "ms": 1047
+      "ms": 1662
     },
     {
       "id": "semantic-landmine",
@@ -33,7 +33,7 @@
       "verdict": "PASS",
       "exitCode": 0,
       "corpus": 6,
-      "ms": 1045
+      "ms": 1786
     },
     {
       "id": "shape-no-migration",
@@ -54,7 +54,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 3,
-      "ms": 999
+      "ms": 1724
     },
     {
       "id": "shape-no-migration",
@@ -75,7 +75,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 6,
-      "ms": 973
+      "ms": 1810
     },
     {
       "id": "vocabulary-renamed",
@@ -94,7 +94,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 3,
-      "ms": 972
+      "ms": 1627
     },
     {
       "id": "vocabulary-renamed",
@@ -113,7 +113,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 6,
-      "ms": 999
+      "ms": 1664
     },
     {
       "id": "intent-strengthened",
@@ -132,7 +132,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 3,
-      "ms": 920
+      "ms": 1691
     },
     {
       "id": "intent-strengthened",
@@ -151,7 +151,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 6,
-      "ms": 933
+      "ms": 1774
     },
     {
       "id": "rules-narrowed-cancel",
@@ -167,7 +167,7 @@
       "verdict": "PASS",
       "exitCode": 0,
       "corpus": 3,
-      "ms": 988
+      "ms": 1677
     },
     {
       "id": "rules-narrowed-cancel",
@@ -183,7 +183,7 @@
       "verdict": "PASS",
       "exitCode": 0,
       "corpus": 6,
-      "ms": 968
+      "ms": 1713
     },
     {
       "id": "identical-versions",
@@ -199,7 +199,7 @@
       "verdict": "PASS",
       "exitCode": 0,
       "corpus": 0,
-      "ms": 1008
+      "ms": 1733
     },
     {
       "id": "identical-versions",
@@ -215,7 +215,7 @@
       "verdict": "PASS",
       "exitCode": 0,
       "corpus": 0,
-      "ms": 964
+      "ms": 1621
     }
   ],
   "composition": [
@@ -227,8 +227,8 @@
       "product": "FAIL",
       "matrixHeld": true,
       "productHeld": true,
-      "msMatrix": 942,
-      "msProduct": 945
+      "msMatrix": 1679,
+      "msProduct": 1694
     },
     {
       "id": "composition-same-versions",
@@ -238,8 +238,8 @@
       "product": "PASS",
       "matrixHeld": true,
       "productHeld": true,
-      "msMatrix": 967,
-      "msProduct": 971
+      "msMatrix": 1768,
+      "msProduct": 1661
     }
   ],
   "summary": {
@@ -251,7 +251,7 @@
       "recall": 1,
       "negatives": 2,
       "falseAlarms": 0,
-      "totalMs": 5934
+      "totalMs": 10114
     },
     "synthesized": {
       "positives": 4,
@@ -261,7 +261,7 @@
       "recall": 0.75,
       "negatives": 2,
       "falseAlarms": 0,
-      "totalMs": 5882
+      "totalMs": 10368
     },
     "predictionsHeld": 2,
     "predictionsBroken": 0,

@@ -298,6 +298,22 @@ a sealed observable state, observable rejection, named intents with finite
 declared domains, and a single synchronized step. The remainder of this article
 takes these properties as given and builds a development lifecycle on them.
 
+It is worth placing this stance against a parallel line of work, because the two
+are easy to confuse and are in fact complementary. A growing body of research
+improves the \emph{generator}: it fine-tunes or prompts a model to write formal
+specifications the checker will accept. TLA-Prover is a recent and clear example,
+training a model with the model checker as a reward signal so that a larger
+fraction of its TLA+ output parses, model-checks, and resists
+mutation~\cite{tlaprover}. That is a different lever from the one taken here. This
+toolset is generation-agnostic: it does not try to make the model write better
+formal artifacts, but instead constrains the artifact to a shape a deterministic
+tool can check and gates whatever the model produced. The two approaches meet at
+the same wall, which is that the residual difficulty is semantic rather than
+notational, a point both this line of work and the generator-improvement line
+report independently. A practical pipeline could use both, a better generator
+feeding a gate, and Section~5 returns to TLA-Prover for the specific mechanism,
+mutation-sensitivity, where the two lines have converged.
+
 \section{The problem, and what writing versioned stateful code takes}
 
 \subsection{Why state outlives code}
@@ -504,6 +520,21 @@ weak invariant set cannot masquerade as a strong one. This mutation-based
 assessment of oracle strength is itself an established technique~\cite{oracle,
 specfuzzer}; the contribution here is applying it to intent, and making it
 decidable via the finite domain.
+
+Independent and recent work corroborates both the need for this gate and the
+choice of mechanism. TLA-Prover, a system that fine-tunes a model to synthesize
+TLA+ specifications, grades each output into four tiers and makes the top tier,
+which it calls Diamond, a mutation-sensitivity check: the invariant is perturbed
+at the syntax level and the model checker must then find a
+counterexample~\cite{tlaprover}. Its stated purpose is exactly \tool{polynv}'s,
+to deny credit for trivial invariants such as a tautology that passes the checker
+while asserting nothing. Two independent groups converging on
+mutation-sensitivity as the defense against vacuous verification is stronger
+evidence for the principle than either could provide alone. The convergence also
+sharpens where the two differ: TLA-Prover mutates the invariant's abstract
+syntax, whereas \tool{polynv} mutates the machine and compares finite state
+graphs, which lets it discard behaviorally equivalent mutants that a purely
+syntactic mutation cannot recognize.
 
 Two design rules protect the gate. Harvested candidates are behavior, not
 intent: nothing enters \code{invariants.mjs} without an explicit, attributed
@@ -877,6 +908,18 @@ are exactly the kinds of coupling that a per-instance observable projection can
 omit. State outside the projection is not checked, not migrated, and not
 audited, by construction.
 
+This limitation is not hypothetical, and the fleet study of
+Section~\ref{sub:fleetstudy} priced it. Replaying a real released change, the
+engine missed a genuine behavioral difference affecting zero-amount records
+because the money abstraction the contract declared has three values and
+collapses when the total is zero. The state that mattered was not outside the
+projection by oversight; it was outside by a declared abstraction that had been
+committed before the analysis ran. The guarantee held exactly as advertised, over
+exactly the state the contract named, and a real defect lived in the gap. We
+consider this the most useful evidence in the study, because a ceiling that is
+only ever conceded in the abstract is not a ceiling a reader can calibrate
+against.
+
 This reframes an item that an earlier version of this paper listed separately.
 The cross-machine joint-state gap of Section~\ref{sub:product} is not a distinct open problem;
 it is this same limitation showing its edge. A parent and a child are coupled
@@ -1038,15 +1081,149 @@ demonstrate the mechanism firing end to end and, just as importantly, the
 report's honesty machinery working: the corpus tier and the ungraded adequacy are
 disclosed as part of the verdict rather than hidden behind a green checkmark. The
 second is what they are not. This is a worked example on synthesized states, not
-a production fleet. It does not tell us how many distinct states a real fleet
-seeds, how the wall-clock time scales, how often a real change passes cleanly
-versus fails bounded, or how many landmines the gate catches that a team's
-existing process would have missed. Those are exactly the questions a
-practitioner will and should ask, and answering them requires a real-fleet case
-study, which is underway as a separate effort and is the primary future work of
-this line. We flag this rather than paper over it: the design and the mechanism
-are validated here; the operational value on real fleets is a claim we have not
-yet earned.
+a production fleet, and it cannot on its own say how many landmines the gate
+catches that a team's existing process would have missed. That question required
+a separate study, which we now report.
+
+\subsection{The fleet study}\label{sub:fleetstudy}
+
+An earlier version of this paper listed a real-fleet case study as future work.
+It has since been carried out, pre-registered, in three tiers of increasing
+independence: a fixture matrix that varies corpus provenance while holding the
+change fixed; a subscription-billing fleet modeled on a public payments API; and
+an archaeology tier that replays released version pairs of an open-source
+commerce backend and scores against the maintainers' own record. The
+pre-registration, the taxonomy, and the null results are committed alongside the
+artifacts, and the discipline that matters most is stated here because every
+number below depends on it: in the archaeology tier the model of the old version
+is authored and committed \emph{before} the new version's diff is read, so a
+finding cannot be an artifact of having known the answer.
+
+\paragraph{Provenance is the whole difference.} The first tier runs four
+incompatible changes and two compatible ones against corpora that differ only in
+where the states came from. On an archived corpus all four incompatible changes
+are caught. On a synthesized corpus, the BFS-reachable states of the old machine,
+only three of the four are caught. The one that escapes is the landmine: a state
+that the old version could reach, that production therefore holds, and that the
+new version's rules forbid. A synthesized corpus cannot contain it, because it
+contains only states the old \emph{model} says are reachable. The same tool, the
+same change, and the same gates report a pass or a failure depending on nothing
+but corpus provenance. Both compatible changes stay clean on both tiers, so the
+tier reports no false positives. The composition cases in the same tier separate
+the two levels of the cross-machine check: a narrowed cancellation window passes
+the pairwise version matrix and fails the joint product check, which is the
+concrete form of the gap Section~\ref{sub:product} declares open.
+
+\paragraph{A machine can be internally consistent and still unsafe to deploy.}
+The second tier builds a subscription-billing machine after a public payments
+API and ages a fleet of four hundred subscriptions, cutting each trajectory at a
+seeded point so that records are caught mid-flight rather than settled; that one
+change took the corpus from three distinct states to eleven and was forced by
+looking at the first capture rather than by theory. Three version changes are
+then run against it. The interesting one narrows a dunning retry budget from
+three to two and tightens the invariants with it. Checked from \code{init()} the
+new version explores nineteen states and reports no reachable violation: it is
+internally consistent, and every state it can reach from a fresh start obeys
+every rule it declares. Seeded from the fleet it fails, because the fleet holds a
+subscription sitting in \code{pastDue} at exactly the depth the narrowed budget
+makes terminal. A second finding follows from the first, and we report the
+dependency rather than counting them separately: from that same live state a
+single payment failure drives the machine past its own new budget, but
+remediating the first finding removes the seed and the second disappears with it.
+The population is one snapshot. We say so, because the class of defect and the
+size of the blast radius are different claims.
+
+\paragraph{Two real changes that looked identical and were not.} The third tier
+replays two released pairs of a commerce backend whose payment status machines
+changed in the window studied. Their one-line summaries are near-identical: in
+each, a status enumeration gains members. The outcomes are opposite. In the first
+pair the status derivation itself changed, so that a fully captured payment
+collection is \code{completed} where the old version left it \code{authorized};
+the shipped migration widens a database constraint and rewrites no row, and six
+of thirty-two fleet states are stranded permanently, since the recompute that
+would fix them runs only on operations a settled collection never receives
+again. In the second pair the module service is untouched by the change commit
+entirely, the new member is one more value providers may report into paths that
+already wrote provider values verbatim, and no fleet state is affected. We
+classify the first as true-but-intended rather than a true positive: the
+maintainers shipped a migration, but it is a constraint widening that addresses
+nothing the finding is about, and the pull request that introduced the change
+names this inconsistency class in its own description as work still to do.
+Reserving the stronger label would have meant stretching a pre-registered rule to
+flatter the result.
+
+The matrix is the finding here, more than either pair is. Two changes whose
+human-legible summaries are interchangeable behave oppositely, and nothing short
+of reading both diffs distinguishes them. A team classifying either change from
+its release notes would have been wrong in both directions.
+
+\paragraph{What it costs.} Every run in the study is local, deterministic, and
+needs no API key; wall-clock times are seconds per change. The real cost is
+human and it falls in one place, which is where we think it belongs: writing the
+migration. Both migrations in the second tier were scaffolded by the tool and
+both needed a hand edit, for opposite reasons that are worth reporting together.
+For a shape split the scaffold initialized a new key from the new contract's
+initial state, which, applied as generated, would have migrated every
+subscription in the fleet to a recurring amount of zero; the scaffold cannot
+distinguish a rename from a new field, and only a human reading both contracts
+can. For the narrowed budget the scaffold detected the domain narrowing and
+\emph{refused to guess}, leaving a hole that throws. That refusal is the correct
+behavior, because the question it declines to answer, what becomes of a record
+sitting at a depth the new budget makes illegal, has several defensible answers
+that are not equivalent, one of which silently hands an exhausted customer
+another retry. The tool's contribution is not the conversion. It is that the
+conversion became a reviewable artifact with a named hole instead of an implicit
+assumption inside a deployment.
+
+\paragraph{False positives, and one we caused ourselves.} Across both tiers the
+engine raised no false alarm on a change that was in fact compatible. It did
+raise one alarm we consider a taxonomy imprecision rather than a false one: a key
+whose value domain was unchanged but whose \emph{role} changed was reported by
+the shape lane rather than the semantic lane, and demanded a migration that no
+data migration can address. Separately, and more instructively, our first run of
+the archaeology tier reported four retyped keys of which two were noise we
+introduced: the engine diffs a state key's declared type as a whole string, and
+we had reworded two type descriptions without changing their meaning. That is an
+operator error, not a tool defect, and we report it because a study that records
+only the tool's mistakes is not measuring honestly, and because the distinction
+between a tool crying wolf and an operator moving the goalposts is one a reader
+cannot check unless it is written down.
+
+\paragraph{What the study did not catch, and why.} The most useful single number
+the study produced is a miss, and it falls squarely on the ceiling of
+Section~\ref{sub:projection}. The clause the first archaeology pair adds tests
+\emph{equality} between a captured amount and a total, so a zero-amount payment
+collection satisfies it with nothing captured and no payment sessions at all: a
+free order reads as unpaid under the old version and as completed under the new
+one. Zero-amount collections are ordinary in commerce, arising from a full
+discount or a gift card covering the total. The engine did not report this, and
+the reason is legible in the contract rather than in the engine: the money
+abstraction the model declares has three values, none, partial, and full, and it
+\emph{collapses} when the total is zero, so the case is not expressible. That
+abstraction bound was declared in the artifact before this analysis was done, not
+added afterward to excuse the miss. We class it as out-of-projection rather than
+as a limitation of the checking, and we regard it as the most valuable evidence
+in the study, because it is the projection ceiling costing something measurable
+on a real change instead of being conceded in the abstract.
+
+\paragraph{What we still have not earned.} Three limits bound every number above.
+The subscription fleet is generated rather than captured from a live account, and
+because the generating machine is the one under study, a corpus produced that way
+is circular as evidence about it; the harness therefore refuses to report
+true-positive and false-positive rates over it, and that adjudication waits on a
+live capture. The archaeology corpora are likewise derived from the frozen
+old-version models rather than from a running instance of the application, which
+is sound for the compatibility question actually asked, whether states the old
+version declares legal remain legal under the new one, but is not evidence about
+how faithfully the models track the application. And the archaeology tier
+produced no true positive in the strict sense of a finding that names a data
+migration the maintainers had to ship, because in the window we studied that
+project shipped no such change: across two major versions its order and
+fulfillment status machines never changed at all, and no released pair narrows a
+state domain. That last observation is itself worth recording, and worth not
+over-reading. It is evidence about what maintainers do, which is consistent with
+narrowing being known to be expensive and avoided, and it is not evidence that
+the problem is rare.
 
 \subsection{Where this sits in the literature}
 
@@ -1242,7 +1419,13 @@ that ran out of budget, an empty invariant set, a corpus with no windows, a thin
 invariant set with a low mutation grade. The failure mode of verification
 tooling is not a wrong answer but a reassuring one, a green result for a run that
 checked almost nothing, and the entire toolset is built so that reassurance must
-be earned.
+be earned. That this danger is real and not hypothetical has recent empirical
+support: TLA-Prover reports that model-generated specifications routinely pass
+the TLC model checker while being mutation-insensitive, that is, vacuous, and
+that untuned generation produces such specifications at a measurable
+rate~\cite{tlaprover}. A green model check is therefore not, on its own, evidence
+of anything, which is precisely why every gate here discloses the strength of
+what it checked rather than only whether it passed.
 
 Fifth, it puts human effort where it is decisive and removes it from where it is
 not. The agent drafts, writes, tests, triages, and repairs. The human decides
@@ -1283,13 +1466,33 @@ are deterministic, require no model at inference time, and seed from the small s
 of distinct observable states rather than from the raw fleet, which keeps them
 CI-fast for typical machines, with the honest caveat that a large declared domain
 can push a run toward the bounded verdict and longer times, which is exactly the
-completeness-threshold question Section~\ref{sub:seeded} names. Finally, the author is the
-author of the SAM pattern, so the revision study confirms enforcement on the
-exact failure classes it was designed against rather than demonstrating that the
-enforcement generalizes; an independent replication on a different task is the
-right next test, alongside the real-fleet study that is the primary empirical
-future work. None of these are reasons to distrust the construction, but all of
-them bound what it claims.
+completeness-threshold question Section~\ref{sub:seeded} names. The fleet study of Section~\ref{sub:fleetstudy} carries its own
+column, and it is the one a reader should weigh hardest, because it is the only
+place the paper reports operational numbers. Its corpora are generated by the
+models under study rather than captured from running systems. For the
+compatibility question actually asked, whether states the old version declares
+legal remain legal under the new one, a model-generated corpus is the right
+input and the study's over-approximating abstractions make it, if anything,
+harsher than a live fleet would be. But it is circular as evidence about the
+models themselves, which is why the harness refuses to compute true-positive and
+false-positive rates over the generated subscription corpus at all, and why that
+adjudication waits on a live capture rather than being estimated. In the
+archaeology tier the ground truth is external, drawn from the maintainers'
+migrations and their own account of the change, but the \emph{models} are ours:
+two hand translations of somebody else's code, and whoever writes such a
+translation controls which findings are expressible. The freeze protocol answers
+that as directly as we know how, by committing each old-version model before the
+new version's diff is read, so a finding cannot encode an answer already known;
+the freeze commits are cited with the results. It does not eliminate the
+concern. The tier covers two version pairs of one project in one subsystem, and
+it produced no true positive in the strict sense, because the project shipped no
+change in that window whose migration a finding could name. Finally, the author
+is the author of the SAM pattern, so the revision study confirms enforcement on
+the exact failure classes it was designed against rather than demonstrating that
+the enforcement generalizes; an independent replication on a different task
+remains the right next test, now alongside a live-fleet capture and a wider
+archaeology sample. None of these are reasons to distrust the construction, but
+all of them bound what it claims.
 
 \section{Conclusion}
 
@@ -1471,6 +1674,11 @@ Workflow and Step Checkpointing.} \url{https://www.dbos.dev}, 2025.
 \bibitem{directed} S.\ Edelkamp, S.\ Leue, and A.\ Lluch-Lafuente. \emph{Directed
 Explicit-State Model Checking in the Validation of Communication Protocols.}
 International Journal on Software Tools for Technology Transfer, 2004.
+
+\bibitem{tlaprover} E.\ Spencer, A.\ Bisharat, B.\ Ortiz, K.\ Bhadauria, T.\
+Wang, G.\ K.\ Thiruvathukal, K.\ L\"aufer, and M.\ Abuhamad. \emph{TLA-Prover:
+Verifiable TLA+ Specification Synthesis via Preference-Optimized Low-Rank
+Adaptation.} arXiv:2606.06133, 2026.
 
 \end{thebibliography}
 
