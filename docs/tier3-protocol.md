@@ -57,6 +57,43 @@ amendment of a frozen translation invalidates the pair, and a pair whose
 translation was amended after the diff was read is reported as such rather than
 dropped.
 
+## 2a. AMENDMENT (FS-M4 selection phase) — §2 and §4 conflicted
+
+§2 forbids reading the N+1 diff before translating version N. §4 requires
+selecting candidate pairs on the maintainer record — which member changed, and
+whether a migration shipped — *before* any pair is run. **Those cannot both be
+satisfied.** Selection is impossible without reading the very artifact §2
+withholds. The conflict is a defect in this document as first committed, and
+per §2's own amendment rule it is fixed by saying what was wrong rather than by
+quietly rewriting.
+
+**Resolution.** The freeze applies to the N+1 **source translation**, not to the
+maintainer record. Selection may read: which status member changed, whether a
+migration shipped, and what the maintainers said about it. Selection may **not**
+read version N+1's source in the detail needed to translate it. The version-N
+translation is then validated against version N's own behaviour (§2 step 2),
+which is an objective check that does not depend on what selection revealed.
+
+**Declared contamination.** Both surviving pairs were selected by reading their
+migrations, so the version-N translations are authored with knowledge that
+`failed`/`completed` (Pair A) and `pending_authorization` (Pair B) are coming.
+This is recorded rather than repaired, and the bias direction is stated so a
+reader can discount it correctly:
+
+For a **recall** study this contamination is dangerous — it invites planting the
+distinction the migration addresses, then "detecting" it. For a **precision**
+study, which is what FS-M4 became, the risk runs the other way. The way to
+manufacture a clean PASS is to model version N's status domain *loosely*, so
+that added members cannot conflict with anything. The countermeasure is
+therefore to model version N **as tightly as its source allows** — the exact
+declared members, no wildcards, invariants taken from version N's own service
+code. A tight domain is the setup most likely to produce a false positive when
+members are added, so tight modelling is the **adversarial** choice here.
+
+If `polyvers` passes these pairs against a tight version-N model, the result is
+stronger for the tightness, not weaker. Any looseness in a translation is a
+defect to be reported, not a convenience.
+
 ## 3. Scoring, beyond §6's rule
 
 §6's four buckets stand (TP / TI / FP by maintainer artifact). Tier 3 adds:
