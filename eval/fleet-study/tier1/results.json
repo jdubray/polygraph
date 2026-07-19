@@ -17,7 +17,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 3,
-      "ms": 959
+      "ms": 1047
     },
     {
       "id": "semantic-landmine",
@@ -33,7 +33,7 @@
       "verdict": "PASS",
       "exitCode": 0,
       "corpus": 6,
-      "ms": 971
+      "ms": 1045
     },
     {
       "id": "shape-no-migration",
@@ -54,7 +54,7 @@
       "verdict": "FAIL",
       "exitCode": 1,
       "corpus": 3,
-      "ms": 926
+      "ms": 999
     },
     {
       "id": "shape-no-migration",
@@ -74,118 +74,118 @@
       "predictionHeld": null,
       "verdict": "FAIL",
       "exitCode": 1,
+      "corpus": 6,
+      "ms": 973
+    },
+    {
+      "id": "vocabulary-renamed",
+      "lane": "vocabulary",
+      "positive": true,
+      "taxonomy": null,
+      "tier": "archive",
+      "outcome": "CAUGHT",
+      "expectedGate": "stimuli",
+      "failedGates": [
+        "vocabulary",
+        "stimuli"
+      ],
+      "predictedByTier": null,
+      "predictionHeld": null,
+      "verdict": "FAIL",
+      "exitCode": 1,
+      "corpus": 3,
+      "ms": 972
+    },
+    {
+      "id": "vocabulary-renamed",
+      "lane": "vocabulary",
+      "positive": true,
+      "taxonomy": null,
+      "tier": "synthesized",
+      "outcome": "CAUGHT",
+      "expectedGate": "stimuli",
+      "failedGates": [
+        "vocabulary",
+        "stimuli"
+      ],
+      "predictedByTier": null,
+      "predictionHeld": null,
+      "verdict": "FAIL",
+      "exitCode": 1,
+      "corpus": 6,
+      "ms": 999
+    },
+    {
+      "id": "intent-strengthened",
+      "lane": "intent",
+      "positive": true,
+      "taxonomy": "TI",
+      "tier": "archive",
+      "outcome": "CAUGHT",
+      "expectedGate": "invariants-pointwise",
+      "failedGates": [
+        "invariants-pointwise",
+        "semantic-model-check"
+      ],
+      "predictedByTier": null,
+      "predictionHeld": null,
+      "verdict": "FAIL",
+      "exitCode": 1,
+      "corpus": 3,
+      "ms": 920
+    },
+    {
+      "id": "intent-strengthened",
+      "lane": "intent",
+      "positive": true,
+      "taxonomy": "TI",
+      "tier": "synthesized",
+      "outcome": "CAUGHT",
+      "expectedGate": "invariants-pointwise",
+      "failedGates": [
+        "invariants-pointwise",
+        "semantic-model-check"
+      ],
+      "predictedByTier": null,
+      "predictionHeld": null,
+      "verdict": "FAIL",
+      "exitCode": 1,
+      "corpus": 6,
+      "ms": 933
+    },
+    {
+      "id": "rules-narrowed-cancel",
+      "lane": "semantic",
+      "positive": false,
+      "taxonomy": null,
+      "tier": "archive",
+      "outcome": "CLEAN",
+      "expectedGate": null,
+      "failedGates": [],
+      "predictedByTier": null,
+      "predictionHeld": null,
+      "verdict": "PASS",
+      "exitCode": 0,
+      "corpus": 3,
+      "ms": 988
+    },
+    {
+      "id": "rules-narrowed-cancel",
+      "lane": "semantic",
+      "positive": false,
+      "taxonomy": null,
+      "tier": "synthesized",
+      "outcome": "CLEAN",
+      "expectedGate": null,
+      "failedGates": [],
+      "predictedByTier": null,
+      "predictionHeld": null,
+      "verdict": "PASS",
+      "exitCode": 0,
       "corpus": 6,
       "ms": 968
     },
     {
-      "id": "vocabulary-renamed",
-      "lane": "vocabulary",
-      "positive": true,
-      "taxonomy": null,
-      "tier": "archive",
-      "outcome": "CAUGHT",
-      "expectedGate": "stimuli",
-      "failedGates": [
-        "vocabulary",
-        "stimuli"
-      ],
-      "predictedByTier": null,
-      "predictionHeld": null,
-      "verdict": "FAIL",
-      "exitCode": 1,
-      "corpus": 3,
-      "ms": 955
-    },
-    {
-      "id": "vocabulary-renamed",
-      "lane": "vocabulary",
-      "positive": true,
-      "taxonomy": null,
-      "tier": "synthesized",
-      "outcome": "CAUGHT",
-      "expectedGate": "stimuli",
-      "failedGates": [
-        "vocabulary",
-        "stimuli"
-      ],
-      "predictedByTier": null,
-      "predictionHeld": null,
-      "verdict": "FAIL",
-      "exitCode": 1,
-      "corpus": 6,
-      "ms": 939
-    },
-    {
-      "id": "intent-strengthened",
-      "lane": "intent",
-      "positive": true,
-      "taxonomy": "TI",
-      "tier": "archive",
-      "outcome": "CAUGHT",
-      "expectedGate": "invariants-pointwise",
-      "failedGates": [
-        "invariants-pointwise",
-        "semantic-model-check"
-      ],
-      "predictedByTier": null,
-      "predictionHeld": null,
-      "verdict": "FAIL",
-      "exitCode": 1,
-      "corpus": 3,
-      "ms": 1001
-    },
-    {
-      "id": "intent-strengthened",
-      "lane": "intent",
-      "positive": true,
-      "taxonomy": "TI",
-      "tier": "synthesized",
-      "outcome": "CAUGHT",
-      "expectedGate": "invariants-pointwise",
-      "failedGates": [
-        "invariants-pointwise",
-        "semantic-model-check"
-      ],
-      "predictedByTier": null,
-      "predictionHeld": null,
-      "verdict": "FAIL",
-      "exitCode": 1,
-      "corpus": 6,
-      "ms": 1048
-    },
-    {
-      "id": "rules-narrowed-cancel",
-      "lane": "semantic",
-      "positive": false,
-      "taxonomy": null,
-      "tier": "archive",
-      "outcome": "CLEAN",
-      "expectedGate": null,
-      "failedGates": [],
-      "predictedByTier": null,
-      "predictionHeld": null,
-      "verdict": "PASS",
-      "exitCode": 0,
-      "corpus": 3,
-      "ms": 949
-    },
-    {
-      "id": "rules-narrowed-cancel",
-      "lane": "semantic",
-      "positive": false,
-      "taxonomy": null,
-      "tier": "synthesized",
-      "outcome": "CLEAN",
-      "expectedGate": null,
-      "failedGates": [],
-      "predictedByTier": null,
-      "predictionHeld": null,
-      "verdict": "PASS",
-      "exitCode": 0,
-      "corpus": 6,
-      "ms": 945
-    },
-    {
       "id": "identical-versions",
       "lane": "(none)",
       "positive": false,
@@ -199,7 +199,7 @@
       "verdict": "PASS",
       "exitCode": 0,
       "corpus": 0,
-      "ms": 990
+      "ms": 1008
     },
     {
       "id": "identical-versions",
@@ -215,7 +215,7 @@
       "verdict": "PASS",
       "exitCode": 0,
       "corpus": 0,
-      "ms": 977
+      "ms": 964
     }
   ],
   "composition": [
@@ -227,8 +227,8 @@
       "product": "FAIL",
       "matrixHeld": true,
       "productHeld": true,
-      "msMatrix": 927,
-      "msProduct": 971
+      "msMatrix": 942,
+      "msProduct": 945
     },
     {
       "id": "composition-same-versions",
@@ -238,8 +238,8 @@
       "product": "PASS",
       "matrixHeld": true,
       "productHeld": true,
-      "msMatrix": 970,
-      "msProduct": 1049
+      "msMatrix": 967,
+      "msProduct": 971
     }
   ],
   "summary": {
@@ -251,7 +251,7 @@
       "recall": 1,
       "negatives": 2,
       "falseAlarms": 0,
-      "totalMs": 5780
+      "totalMs": 5934
     },
     "synthesized": {
       "positives": 4,
@@ -261,7 +261,7 @@
       "recall": 0.75,
       "negatives": 2,
       "falseAlarms": 0,
-      "totalMs": 5848
+      "totalMs": 5882
     },
     "predictionsHeld": 2,
     "predictionsBroken": 0,

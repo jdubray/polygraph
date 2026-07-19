@@ -21,12 +21,53 @@ function stateField(contract) {
   return typeof k === 'string' ? k : k.name;
 }
 
+/**
+ * specialRules declare `whenState`/`whenAction` as the SHORT EXPRESSIONS the
+ * contract convention uses — `orderState == 'charging'`, `shipState !=
+ * 'preparing'`, `subState in ('canceled','unpaid')`, `A | B | C` — not as bare
+ * literals. Comparing them to a state value with `===` (as this tally did
+ * until 2026-07) can never match, so every polygen-shaped contract reported
+ * 0 windows for every rule and warned about it forever. Found while capturing
+ * the fleet-study corpus: the repo's OWN demo corpus, which contains traces
+ * named `cancel_blocked_while_charging_*`, scored 0 for that rule.
+ *
+ * These matchers parse the three structured forms and report anything else as
+ * unparseable rather than silently counting it as a miss.
+ */
+function matchState(expr, preState) {
+  if (!expr) return true;
+  const e = expr.trim();
+  const lits = (s) => [...s.matchAll(/'([^']*)'/g)].map((m) => m[1]);
+  // Two conventions ship in this repo, and both are legitimate:
+  //   bare literal — "LOCKED"                     (the turnstile examples)
+  //   expression   — "orderState == 'charging'"   (polygen-authored contracts)
+  // Anything else is prose ("any non-awaiting state") and is unmeasurable.
+  if (!/[=!]|\bin\s*\(/.test(e)) return /\s/.test(e) ? null : e === preState;
+  const inMatch = /\bin\s*\(([^)]*)\)/.exec(e);
+  if (inMatch) {
+    const set = lits(inMatch[1]);
+    return /!\s*in|\bnot\s+in/.test(e) ? !set.includes(preState) : set.includes(preState);
+  }
+  if (/!==?/.test(e)) return !lits(e).includes(preState);
+  if (/==?/.test(e)) return lits(e).includes(preState);
+  return null;
+}
+
+function matchAction(expr, action) {
+  if (!expr) return true;
+  return expr.split('|').map((s) => s.trim()).filter(Boolean).includes(action);
+}
+
 export function validateCorpus(contract, tracePath) {
   const sf = stateField(contract);
   const terminals = new Set(contract.terminalStates || []);
   const declaredActions = new Set(Object.keys(contract.actions || {}));
-  const ruleWindows = {}; // ruleName -> count, via specialRules[].matches (optional)
+  const ruleWindows = {}; // ruleName -> count of windows matching its declared (state, action)
   for (const r of contract.specialRules || []) ruleWindows[r.name] = 0;
+  // Rules whose whenState is prose rather than an expression: counted as
+  // UNMEASURABLE rather than as zero, so a documentation choice never reads
+  // as missing coverage.
+  const unparseableRules = new Set();
 
   const problems = [];
   const coverage = {}; // `${pre}|${action}` -> count
@@ -88,9 +129,9 @@ export function validateCorpus(contract, tracePath) {
       // special-rule tally (a rule "matches" a window if its declared pre-state
       // and action are present; declared as { name, note, whenState?, whenAction? })
       for (const r of contract.specialRules || []) {
-        const stateOk = !r.whenState || r.whenState === pre;
-        const actionOk = !r.whenAction || r.whenAction === w.action;
-        if (stateOk && actionOk) ruleWindows[r.name]++;
+        const stateOk = matchState(r.whenState, pre);
+        if (stateOk === null) { unparseableRules.add(r.name); continue; }
+        if (stateOk && matchAction(r.whenAction, w.action)) ruleWindows[r.name]++;
       }
     });
 
@@ -118,9 +159,14 @@ export function validateCorpus(contract, tracePath) {
     }
   }
 
-  const underCovered = Object.entries(ruleWindows).filter(([, c]) => c < 3).map(([n, c]) => ({ rule: n, windows: c }));
+  // A rule whose whenState is prose cannot be tallied mechanically, so it is
+  // never counted as under-covered — that would be reporting a documentation
+  // style as missing test coverage.
+  const underCovered = Object.entries(ruleWindows)
+    .filter(([n, c]) => c < 3 && !unparseableRules.has(n))
+    .map(([n, c]) => ({ rule: n, windows: c }));
 
-  return { total, noops, coverage, ruleWindows, underCovered, problems };
+  return { total, noops, coverage, ruleWindows, underCovered, problems, unmeasurableRules: [...unparseableRules] };
 }
 
 function printReport(rep) {
@@ -131,8 +177,12 @@ function printReport(rep) {
   for (const [k, c] of rows) console.log(`  ${k.padEnd(w)}  ${c}`);
   if (Object.keys(rep.ruleWindows).length) {
     console.log('\nSpecial-rule coverage:');
+    const unmeasurable = new Set(rep.unmeasurableRules ?? []);
     for (const [n, c] of Object.entries(rep.ruleWindows)) {
-      console.log(`  ${n.padEnd(w)}  ${c}${c < 3 ? '  <-- WARNING: <3 windows' : ''}`);
+      const note = unmeasurable.has(n)
+        ? '  <-- not mechanically measurable (whenState is prose, not an expression)'
+        : (c < 3 ? '  <-- WARNING: <3 windows' : '');
+      console.log(`  ${n.padEnd(w)}  ${unmeasurable.has(n) ? '—' : c}${note}`);
     }
   }
   if (rep.problems.length) {

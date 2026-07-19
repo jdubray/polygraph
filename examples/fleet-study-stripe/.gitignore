@@ -1,0 +1,4 @@
+# Capture output is regenerable and mode-specific; a committed corpus must be
+# an explicit, provenance-labelled artifact (Tier 3), never an accidental
+# offline run.
+out/

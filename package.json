@@ -41,7 +41,8 @@
     "eval:check": "node eval/check-eval.mjs",
     "eval:ab": "node eval/skill-ab.mjs",
     "eval:ab-v2": "node eval/ab-v2.mjs",
-    "study:tier1": "node eval/fleet-study/tier1/run.mjs"
+    "study:tier1": "node eval/fleet-study/tier1/run.mjs",
+    "study:capture": "node examples/fleet-study-stripe/capture/capture.mjs --offline"
   },
   "bin": {
     "polygraph": "scripts/verify.mjs",
