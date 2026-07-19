@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+</style>
+</helmet>
+<div style="font-family: 'Space Grotesk', sans-serif; background: #f6f4ee; color: #1b1d1f; padding: 34px 40px 30px; width: 1040px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2px;">
+    <div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #71757c;">SDLC · fig 4</div>
+      <div style="font-size: 27px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap;">Which door are you entering?</div>
+    </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a09a8c; padding-bottom: 4px;">hover a door ↗</div>
+  </div>
+  <div style="font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: #55595f; margin-bottom: 16px;">Five engines, five ways in — but one spine. Whatever you arrive with, you leave through the same deploy gate and the same drift watch.</div>
+
+  <div style="display: flex; gap: 16px; align-items: flex-start;">
+
+    <!-- the doors -->
+    <div style="width: 452px; flex: none; display: flex; flex-direction: column; gap: 8px;">
+      <sc-for list="{{ doors }}" as="d" hint-placeholder-count="5">
+        <div onMouseEnter="{{ d.on }}" onMouseLeave="{{ clear }}" style="background: #fffdf8; border: 1px solid #e4dfcf; border-left: 3px solid {{ d.color }}; border-radius: 11px; padding: 11px 14px; cursor: default; box-shadow: {{ d.ring }}; opacity: {{ d.op }}; transition: box-shadow .16s, opacity .16s;">
+          <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.3; color: #1b1d1f;">“{{ d.q }}”</div>
+          <div style="display: flex; align-items: baseline; gap: 8px; margin-top: 5px;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: {{ d.color }};">{{ d.engine }}</span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #8a8578;">→ {{ d.lands }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- the spine -->
+    <div style="flex: 1;">
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #71757c; margin-bottom: 7px;">the shared spine · phases 0–7</div>
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <sc-for list="{{ phases }}" as="p" hint-placeholder-count="8">
+          <div style="display: flex; align-items: center; gap: 9px; background: {{ p.bg }}; border: 1px solid {{ p.border }}; border-radius: 9px; padding: 7px 11px; opacity: {{ p.op }}; transition: all .16s;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 600; color: {{ p.numColor }}; width: 12px;">{{ p.n }}</span>
+            <span style="font-size: 13px; font-weight: {{ p.weight }}; color: {{ p.fg }};">{{ p.name }}</span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: {{ p.tagColor }}; margin-left: auto;">{{ p.tag }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 14px; border: 1px solid #e4dfcf; border-left: 3px solid {{ detailColor }}; background: #fbf9f2; border-radius: 10px; padding: 13px 17px; min-height: 84px; transition: border-color .16s;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: {{ detailColor }};">{{ detailKicker }}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 15px; line-height: 1.4; color: #33373c; margin-top: 5px; max-width: 900px;">{{ detailBody }}</div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8a8578; margin-top: 7px;">{{ detailCmd }}</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1040, &quot;height&quot;: 620}}">
+class Component extends DCLogic {
+  state = { active: null };
+  set(a){ this.setState({ active: a }); }
+  renderVals(){
+    const A = this.state.active;
+    const C = { gen: '#6a4b9c', graph: '#2f6f8f', run: '#bc6a1e', vers: '#3f7a54', nv: '#a63d55' };
+    const doors = [
+      { id: 'gen', color: C.gen, engine: 'polygen · author', lands: 'enter at phase 1',
+        q: 'A new feature with nontrivial state.', entry: 1, path: [1,2,3,4,5,6,7],
+        body: 'Write one paragraph of intent. polygen drafts the contract, authors the SAM v2 module, proposes invariants, model-checks its own output and repairs code (never invariants), then synthesizes a replayed corpus. You hit both human gates on the way: the contract is the design spec, the invariants are your intent.',
+        cmd: '/polygraph:polygen   ·   gates #1 (contract) and #2 (invariants)' },
+      { id: 'graph', color: C.graph, engine: 'Polygraph · audit', lands: 'enter at phase 4',
+        q: 'Existing, legacy, or third-party code — does it do what I think?', entry: 4, path: [4,5,6,7],
+        body: 'You are not authoring, you are auditing: design the contract for code that already exists, capture real traces (instrument in-house code, or build a harness for foreign code — the Go OMS example does exactly this), prove the harness with controls, then generate specs, replay, and model-check. Source language is irrelevant; the spec is always JS.',
+        cmd: '/polygraph:polygraph  (or /polygraph:verify if contract + traces exist)   ·   gate #3 (triage)' },
+      { id: 'nv', color: C.nv, engine: 'polynv · elicit', lands: 'enter at phase 2 (or any phase)',
+        q: 'The rules are thin — what should never happen here?', entry: 2, path: [2,4,5,6,7],
+        body: 'The one door you can also walk through from anywhere else, because every other gate is only as good as invariants.mjs. polynv harvests candidate rules, pre-checks each against the reachable graph, and puts it to you as a story to judge — then grades the resulting set by mutation so you can tell a strong rule set from a merely present one.',
+        cmd: '/polygraph:polynv   ·   gate #2, mechanized — the agent prepares, you disposition' },
+      { id: 'run', color: C.run, engine: 'polyrun · execute', lands: 'enter at phase 3',
+        q: 'A verified machine that needs to run durably.', entry: 3, path: [3,4,5,6,7],
+        body: 'Register machine + contract + mapper + invariants, write idempotent effect handlers, and run the composition gate. This is the layer that closes the double-charge class before deploy — and its journal becomes the trace corpus phase 4 audits against.',
+        cmd: 'polyrun check-effects · check-product · deploy   ·   then simulate for the kernel surface' },
+      { id: 'vers', color: C.vers, engine: 'polyvers · evolve', lands: 'enter at phase 7',
+        q: 'A change to ship to a fleet that is already running.', entry: 7, path: [7,5,6],
+        body: 'The compatibility path, not the correctness path: classify what actually changed, then gate it against live fleet snapshots — round-trip, cross-version stimuli, a scaffolded migration, and the seeded model check asking whether anything production currently holds can be driven into a violation under the new rules.',
+        cmd: '/polygraph:polyvers   ·   product + matrix for parent/child fleets' },
+    ];
+    const names = ['Decide which door', 'Specify', 'Author', 'Integrate & execute', 'Verify against reality', 'Deploy', 'Operate & watch drift', 'Evolve'];
+    const tags = ['human', 'human + agent', 'agent', 'agent', 'agent', 'CI · no API key', 'CI · scheduled', 'human'];
+    const d = doors.find(x => x.id === A);
+    const phases = names.map((name, i) => {
+      const isEntry = d && d.entry === i;
+      const inPath = d && d.path.includes(i);
+      return {
+        n: i, name, tag: tags[i],
+        bg: isEntry ? '#fffdf8' : '#f3f0e7',
+        border: isEntry ? d.color : '#e4dfcf',
+        fg: (!d || inPath) ? '#1b1d1f' : '#9b968a',
+        numColor: isEntry ? d.color : '#a09a8c',
+        tagColor: (!d || inPath) ? '#8a8578' : '#b8b3a6',
+        weight: isEntry ? '600' : '400',
+        op: (!d || inPath) ? '1' : '0.45',
+      };
+    });
+    return {
+      doors: doors.map(x => ({
+        q: x.q, engine: x.engine, lands: x.lands, color: x.color,
+        on: () => this.set(x.id),
+        ring: A === x.id ? `0 0 0 2px ${x.color}` : '0 1px 0 #e9e4d5',
+        op: (!A || A === x.id) ? '1' : '0.42',
+      })),
+      phases,
+      clear: () => this.set(null),
+      detailColor: d ? d.color : '#b23b2e',
+      detailKicker: d ? d.engine : 'Phase 0 · decide, then commit to the path',
+      detailBody: d ? d.body : 'There is no wrong door — the engines share one artifact family, so an audit produces the contract an author would have written, and an authored machine produces the traces an audit would have captured. What matters is naming which one you are in, because it decides which gate you are heading for. Every path converges on the same deploy gate and the same drift watch.',
+      detailCmd: d ? d.cmd : 'humans own two things throughout: the contract (what is observable) and the invariants (what must never happen)',
+    };
+  }
+}
+</script>
+</body>
+</html>

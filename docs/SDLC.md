@@ -35,6 +35,20 @@ The division of labor, stated once and used everywhere:
   Polygraph) — `examples/polygraph-oms-go` is the template, including for
   code in another language.
 - **Verified machine that needs to run durably?** → Phase 3 (polyrun).
+- **Rules that are thin, or absent?** → Phase 2's gate, mechanized (elicit
+  with polynv) — the one door you can also enter from any other phase,
+  because every gate here is only as good as `invariants.mjs`.
+- **A change to ship to a fleet already running?** → Phase 7 (evolve with
+  polyvers) — the compatibility path, not the correctness path.
+
+There is no wrong door: the engines share one artifact family, so an audit
+produces the contract an author would have written, and an authored machine
+produces the traces an audit would have captured. What matters is naming
+which one you are in, because it decides which gate you are heading for —
+and every path converges on the same deploy gate and the same drift watch.
+
+[![Which door are you entering?](diagrams/thumbs/sdlc-04-entry-points.png)](diagrams/sdlc-04-entry-points.dc.html)
+*Interactive diagram — [Which door are you entering?](diagrams/sdlc-04-entry-points.dc.html) (hover a door to light its path through the phases)*
 
 ## Phase 1 — Specify (human + agent, minutes)
 

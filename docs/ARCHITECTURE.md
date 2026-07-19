@@ -27,8 +27,8 @@ the fleet snapshots are the versioning gate's initial states.
 > as in TLA+), and the abstraction gap between declared domain and real
 > data is not measured by any gate.
 
-[![Five engines, one artifact family](diagrams/thumbs/architecture-01-three-engines.png)](diagrams/architecture-01-three-engines.dc.html)
-*Interactive diagram — [Five engines, one artifact family](diagrams/architecture-01-three-engines.dc.html) (hover an engine)*
+[![Five engines, one artifact family](diagrams/thumbs/architecture-01-five-engines.png)](diagrams/architecture-01-five-engines.dc.html)
+*Interactive diagram — [Five engines, one artifact family](diagrams/architecture-01-five-engines.dc.html) (hover an engine)*
 
 ## The artifact family
 
