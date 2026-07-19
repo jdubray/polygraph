@@ -103,16 +103,31 @@ for (const r of rows) {
 const gen = rows.filter((r) => r.id !== 'reference');
 const loaded = gen.filter((r) => r.loads);
 const conformed = loaded.filter((r) => r.pass === r.total);
-// "Passes both" requires conformance AND an explorer result that is not a
-// violation and not merely bounded — the same bar the reference clears.
-const bothClean = loaded.filter((r) => r.pass === r.total && r.explore.verdict === 'clean');
-const survivedBounded = loaded.filter((r) => r.pass === r.total && r.explore.verdict === 'bounded');
+const violated = loaded.filter((r) => r.explore.verdict === 'violated');
 
 console.log(`\ngenerated specs:            ${gen.length}`);
 console.log(`  load at all:              ${loaded.length}/${gen.length}`);
 console.log(`  conform on all windows:   ${conformed.length}/${gen.length}`);
-console.log(`  + explorer clean:         ${bothClean.length}/${gen.length}`);
-if (survivedBounded.length) console.log(`  + explorer BOUNDED:       ${survivedBounded.length}/${gen.length}  (inconclusive, not a pass)`);
+console.log(`  explorer found a violation: ${violated.length}/${gen.length}`);
+
+// NO "passes the explorer" TALLY, DELIBERATELY. `clean` is UNREACHABLE on this
+// machine: ElectionTimeout increments `term` with no bound in the contract, so
+// the reachable state space is INFINITE even though every action domain is
+// finite. Exploration therefore always terminates at the cap, for every spec
+// including the reference. An earlier version of this file reported
+// "+ explorer clean: 0/5", which read as five failures when it was really a
+// metric that nothing could ever satisfy.
+//
+// The asymmetry that survives is the useful one: a violation is DEFINITIVE
+// (a counterexample exists), and a bounded run is INCONCLUSIVE (not a pass and
+// not a failure). Raising the bound can only ever convert inconclusive into
+// violated, never into clean.
+const bounded = loaded.filter((r) => r.explore.verdict === 'bounded').length;
+if (bounded) {
+  console.log(`\n  ${bounded}/${loaded.length} explorer runs ended BOUNDED — inconclusive, not passes.`);
+  console.log('  `clean` is unreachable here: ElectionTimeout grows `term` without bound,');
+  console.log('  so the state space is infinite and exhaustive exploration cannot terminate.');
+}
 
 writeFileSync(join(here, 'gen', 'results.json'), JSON.stringify({
   corpusWindows: windows.length, maxStates: MAX_STATES, rows,

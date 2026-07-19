@@ -311,6 +311,41 @@ complicates the premise that conformance against reality is the phase that
 separates good specifications from plausible ones: on this task it also
 separates modest ones from ambitious ones, in favour of the modest.
 
+### The explorer cannot ever return "clean" on this task
+
+Worth stating separately, because it bounds every explorer number above and it
+is a property of the task rather than of any specification.
+
+```
+term after each successive ElectionTimeout on node 1:  1 -> 2 -> 3 -> 4 -> 5 -> 6
+contract stateKeys:                                    ["nodes"]
+```
+
+`ElectionTimeout` increments `term` with **no bound anywhere in the contract**,
+so the reachable state space is **infinite** — even though every declared action
+domain is finite. Exploration therefore terminates at the cap for every
+specification, the reference included, at every bound. `clean` is not a verdict
+this machine can produce.
+
+Two consequences.
+
+The first is local: an earlier version of the scorer reported
+`+ explorer clean: 0/5`, which reads as five failures when it was a bar nothing
+could clear. Removed. What survives is the asymmetry that is actually
+meaningful — a violation is **definitive**, a bounded run is **inconclusive**,
+and raising the bound can only convert inconclusive into violated, never into
+clean.
+
+The second is not local. The paper's threats section says "exhaustive" means
+exhaustive over the declared finite domains. This task shows that **finite
+action domains do not imply a finite state space**: the domains here are finite
+and small, and the state space is still unbounded, because `term` accumulates
+across steps rather than being drawn from a domain. Any machine with an
+accumulating unbounded field has the same property. The honest phrasing is that
+exhaustiveness requires a finite *reachable state space*, which is a stronger
+condition than finite action domains and one a contract does not currently have
+to declare.
+
 ### What these numbers are not
 
 Five generations, one task, one model family, one-shot. That is a signature, not
