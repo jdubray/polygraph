@@ -45,20 +45,37 @@ fleet holds a state the new version's rules forbid and the new version's own
 `init`-reachable space never contains — a subscription mid-dunning at the exact
 depth the narrowed budget makes terminal.
 
-The two findings are distinct, and the second is the one that would have hurt:
+Two rules are violated, and they are **one defect, not two** — a distinction
+that took a deliberate check to establish:
 
 1. `exhausted-dunning-is-unpaid` — `fleet.json#10` violates it *at rest*. Under
    a budget of 2, depth 2 means exhausted, so the record must be `unpaid`; it
    is `pastDue`.
 2. `dunning-within-budget` — from that same live state, a single
-   `PAYMENT_FAILED` drives `dunningAttempts` to 3, over the new budget. The
-   machine can be driven past its own declared limit, but **only starting from
-   a state the fleet holds and `init` cannot reach.**
+   `PAYMENT_FAILED` drives `dunningAttempts` to 3, over the new budget.
 
-This is the landmine the paper argues for, as an artifact rather than an
-argument: from-`init` checking and a synthesized corpus both report clean,
-because a synthesized corpus contains only states the model says are reachable.
-Provenance is the whole difference.
+An earlier draft of this file called these two independent findings and said
+the second "is the one that would have hurt." **That was wrong**, and the
+correction is worth recording because it is the kind of overclaim a study like
+this invites. Finding 2 is reachable only by seeding the search from the state
+finding 1 condemns. Remediating finding 1 — moving that record to `unpaid`, as
+an operator would — makes the entire check **PASS**; finding 2 disappears with
+it. Verified directly against a remediated corpus.
+
+So the honest claim is: the fleet holds **one** state the new version's rules
+forbid, and finding 2 is the diagnosis of what that state can be driven to, not
+separate evidence. That is still useful to an operator — it says what happens
+if the record is left alone — but it is not independent detection.
+
+The scale is also worth stating plainly: in this corpus **exactly one snapshot**
+is affected. The result is about a class of defect, not a large blast radius.
+
+What survives the correction intact is the claim the paper actually needs:
+
+**from `init` this machine is clean; from the fleet it is not.** From-`init`
+checking and a synthesized corpus both report a clean bill, because a
+synthesized corpus contains only states the old model says are reachable.
+Provenance is the whole difference, and one live state is enough to show it.
 
 ## The migrations, and what they cost
 

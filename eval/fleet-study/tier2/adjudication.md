@@ -24,6 +24,14 @@ For each row write one bucket in the `bucket` column of `results.json`
 Record the judge, and resolve disagreements with a third reader; the count of
 disagreements is part of the result.
 
+**`defectKey` collapses gate views, NOT causal chains.** Two rows naming
+different rules on the same witness are counted as two defects, but one may
+be reachable only from the state the other condemns — remediating the first
+would erase the second. This is not hypothetical: it is exactly what happened
+with `exhausted-dunning-is-unpaid` and `dunning-within-budget` on this corpus.
+Before reporting a defect count, re-run the check against a corpus with the
+root violation remediated and see which findings survive.
+
 **One defect can appear as several rows.** The gates are deliberately
 overlapping views — a violating state is seen by `migrate` as an output it
 produced, by `invariants-pointwise` as a state the fleet holds, and by

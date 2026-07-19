@@ -530,6 +530,14 @@ test('m2: a STRUCTURAL migration failure withholds the corpus', async () => {
   assert.equal(migrateGate(flaky, corpus).migratedCorpus, null);
 });
 
+test('m2: an empty corpus is refused, never validated vacuously', async () => {
+  const newA = await load('order-v2-shape-migrated');
+  const g = migrateGate(newA, []);
+  assert.equal(g.ok, false);
+  assert.equal(g.migratedCorpus, null, '[] is truthy at the CLI — it must not be handed downstream');
+  assert.ok(g.failures[0].message.includes('zero snapshots'));
+});
+
 test('m2: cli end-to-end — shape change + migration passes the full pipeline over migrated states', () => {
   const r = runCli(['check', '--old', fix('order-v1'), '--new', fix('order-v2-shape-migrated'), '--synthesize']);
   assert.equal(r.code, 0);

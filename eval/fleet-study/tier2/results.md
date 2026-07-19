@@ -9,20 +9,26 @@ Each change is run twice: once before any migration exists, and once with the
 migration an operator authored from the scaffold. Both are results — the first
 says what the tool demanded, the second says whether the work satisfied it.
 
-| change | lanes fired | migration | pre-migration | post-migration | final | predicted | held? | findings | ms (classify / checks) |
-|---|---|---|---|---|---|---|---|---|---|
-| v2-addition | vocabulary, semantic | none needed | PASS | n/a | **PASS** | PASS | yes | 0 | 2705 / 2198 |
-| v2-dunning | shape, migration, intent, semantic | authored | FAIL (1) | FAIL (4) | **FAIL** | FAIL | yes | 5 | 2067 / 5532 |
-| v2-shape | shape, migration, intent, semantic | authored | FAIL (1) | PASS | **PASS** | PASS | yes | 1 | 2317 / 5566 |
+| change | lanes fired | migration | pre-migration | post-migration | final | predicted | held? | rows | defects | ms (classify / checks) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| v2-addition | vocabulary, semantic | none needed | PASS | n/a | **PASS** | PASS | yes | 0 | 0 | 2633 / 2648 |
+| v2-dunning | shape, migration, intent, semantic | authored | FAIL (1) | FAIL (4) | **FAIL** | FAIL via invariants-pointwise | yes | 5 | 3 | 2418 / 4640 |
+| v2-shape | shape, migration, intent, semantic | authored | FAIL (1) | PASS | **PASS** | PASS | yes | 1 | 1 | 2204 / 5043 |
 
 Corpus: 11 distinct fleet states.
+
+**rows** counts gate findings; **defects** collapses the overlapping gate views
+onto (witness, rule). The gates are deliberately redundant — one violation is
+seen by `migrate` as output it produced, by `invariants-pointwise` as a state
+the fleet holds, and by `semantic-model-check` as a root or reachable state.
+Any TP/FP rate must be computed over **defects**; rows measure operator noise.
 
 ## What each change is
 
 - **v2-addition** — pure addition: a REFUND_ISSUED action; nothing removed, no existing transition or invariant altered.
   Predicted PASS: adding vocabulary cannot strand a live state: no fleet record carries the new action, and every existing transition is untouched
 - **v2-dunning** — rules + intent: the retry budget drops from 3 to 2, and the invariants tighten with it.
-  Predicted FAIL: the fleet already holds records mid-dunning, and no migration can make them legal without making a billing decision — so the failure should SURVIVE a correct migration. This is the archetypal fleet event and the one the study exists to exhibit
+  Predicted FAIL: the fleet already holds records mid-dunning, and no migration can make them legal without making a billing decision — so the failure should SURVIVE a correct migration, and it must surface as the pointwise gate naming live violators. This is the archetypal fleet event and the one the study exists to exhibit
   Gates still red after migration: migrate, invariants-pointwise, semantic-model-check.
 - **v2-shape** — shape: `cents` splits into `amountCents` + `currency`.
   Predicted PASS: the old shape cannot round-trip unmigrated, but the rename is faithful and total — so a correct migration should CLEAR it. A shape change that stayed red after a correct migration would mean the gate was measuring something other than shape

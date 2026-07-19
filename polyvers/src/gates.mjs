@@ -293,6 +293,16 @@ export function semanticModelCheckGate(newA, corpus, { maxStates = 100000, allow
 // after the migration applies. Apply remains `polyrun migrate --apply`.
 export function migrateGate(newA, corpus) {
   const failures = [];
+  // Defense in depth: the CLI already refuses an empty corpus before any gate
+  // runs, so this is unreachable through `polyvers check`. It matters because
+  // migrateGate is exported and called directly (tests, polyvers/src/product),
+  // and an empty corpus would otherwise validate vacuously AND hand `[]`
+  // downstream — which is truthy at the CLI's `if (result.migratedCorpus)`,
+  // so every later gate would report clean over zero snapshots.
+  if (!corpus || corpus.length === 0) {
+    failures.push({ message: 'corpus is empty — a migration cannot be validated over zero snapshots; refusing to report a migrated corpus' });
+    return { ...done('migrate', failures, 'refused: empty corpus'), migratedCorpus: null };
+  }
   if (typeof newA.migrate !== 'function') {
     failures.push({ message: 'the shape changed but the new version has no migrate.cjs — a failing round-trip in this lane needs a verified migration; start with `polyvers migrate scaffold`' });
     return { ...done('migrate', failures, 'refused: no migrate.cjs in the new version'), migratedCorpus: null };

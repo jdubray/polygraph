@@ -28,9 +28,24 @@ const CLI = join(repo, 'polyvers', 'bin', 'polyvers.mjs');
 const MACHINES = join(repo, 'examples', 'fleet-study-stripe', 'machines');
 
 const args = process.argv.slice(2);
-const flag = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
+// A flag given without a value is an ERROR, never the default. `--seed` alone
+// used to yield undefined → NaN → mulberry32's `a |= 0` coerced it to 0, so
+// the worksheet was shuffled with seed 0 while results.json recorded
+// `"seed": null`. Blind adjudication requires that the recorded seed
+// reproduce the ordering that was actually used.
+const flag = (n, d) => {
+  const i = args.indexOf(`--${n}`);
+  if (i < 0) return d;
+  const v = args[i + 1];
+  if (v === undefined || v.startsWith('--')) {
+    console.error(`--${n} needs a value`);
+    process.exit(2);
+  }
+  return v;
+};
 const CORPUS_DIR = resolve(flag('corpus', join(repo, 'examples', 'fleet-study-stripe', 'out')));
 const SEED = Number(flag('seed', 11));
+if (!Number.isFinite(SEED)) { console.error('--seed must be a number'); process.exit(2); }
 
 const manifestPath = join(CORPUS_DIR, 'manifest.json');
 const fleetPath = join(CORPUS_DIR, 'fleet.json');
@@ -57,35 +72,87 @@ const CHANGES = [
     id: 'v2-dunning', dir: 'subscription-v2-dunning',
     change: 'rules + intent: the retry budget drops from 3 to 2, and the invariants tighten with it',
     expect: 'FAIL',
-    why: 'the fleet already holds records mid-dunning, and no migration can make them legal without making a billing decision — so the failure should SURVIVE a correct migration. This is the archetypal fleet event and the one the study exists to exhibit',
+    // A verdict alone is too weak a prediction: FAIL for the wrong reason
+    // would score as held. It already did once — before the migrate gate was
+    // fixed this change failed because the gate SUPPRESSED invariants-pointwise,
+    // and the runner still printed "held: yes". Naming the gate is what makes
+    // the prediction falsifiable.
+    expectGate: 'invariants-pointwise',
+    why: 'the fleet already holds records mid-dunning, and no migration can make them legal without making a billing decision — so the failure should SURVIVE a correct migration, and it must surface as the pointwise gate naming live violators. This is the archetypal fleet event and the one the study exists to exhibit',
   },
   {
     id: 'v2-shape', dir: 'subscription-v2-shape',
     change: 'shape: `cents` splits into `amountCents` + `currency`',
     expect: 'PASS',
+    // The pre-migration run must fail at `migrate` specifically — a shape
+    // change caught by some other gate would mean the lane is mis-routed.
+    expectGatePre: 'migrate',
     why: 'the old shape cannot round-trip unmigrated, but the rename is faithful and total — so a correct migration should CLEAR it. A shape change that stayed red after a correct migration would mean the gate was measuring something other than shape',
   },
 ];
 
+/**
+ * Run the CLI with --json and return its parsed report.
+ *
+ * A CRASH MUST NOT LOOK LIKE A VERDICT. If the CLI dies before emitting a
+ * report — bad path, load error, unhandled throw, OOM — it exits nonzero with
+ * no parseable stdout, which is byte-for-byte how a legitimate FAIL exits
+ * apart from the report itself. Deriving a verdict from the exit code alone
+ * would score a crashed run as a clean FAIL with zero findings, and since two
+ * of the three changes PREDICT failure, that reads as a held prediction. The
+ * runner's whole anti-re-fitting discipline rests on predictions being
+ * falsifiable, so the one failure mode that can falsify nothing has to be
+ * named rather than absorbed.
+ */
 function runCli(cliArgs) {
   const t0 = process.hrtime.bigint();
-  let stdout = '', code = 0;
+  let stdout = '', stderr = '', code = 0;
   try {
-    stdout = execFileSync(process.execPath, [CLI, ...cliArgs], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
-  } catch (err) { stdout = String(err.stdout ?? ''); code = err.status ?? 1; }
+    stdout = execFileSync(process.execPath, [CLI, ...cliArgs], {
+      encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (err) {
+    stdout = String(err.stdout ?? '');
+    stderr = String(err.stderr ?? '');
+    code = err.status ?? 1;
+  }
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-  let json = null; try { json = JSON.parse(stdout); } catch { /* prose path */ }
-  return { json, code, ms, stdout };
+  let json = null; try { json = JSON.parse(stdout); } catch { /* crash or prose path */ }
+  return { json, code, ms, stdout, stderr, crashed: json === null };
 }
 
 const results = { corpus: CORPUS_DIR, manifest, admissible: ADMISSIBLE, seed: SEED, changes: [] };
 const findings = [];
 
 /**
+ * Collapse a failure to the defect it is about: the witness state plus the
+ * named rule. Gate messages quote the rule name ('exhausted-dunning-is-unpaid'),
+ * so the same violation seen by migrate, invariants-pointwise and
+ * semantic-model-check keys identically. A failure that names no rule (the
+ * missing-migration refusal, say) falls back to gate + message, which never
+ * over-collapses — two distinct defects can never merge, only fail to merge.
+ */
+function defectKeyOf(f, gate) {
+  const rule = /'([^']+)'/.exec(f.message ?? '');
+  return rule ? `${f.id ?? '—'}::${rule[1]}` : `${gate}::${f.message}`;
+}
+
+/**
  * Summarise one `check --json` report into the columns the plan wants, and
  * push its failures onto the shared adjudication list.
  */
-function summarise(report, code, c, phase) {
+function summarise(run, c, phase) {
+  const { json: report, code } = run;
+  // No report means no verdict. CRASH is a distinct outcome that matches no
+  // prediction, so it can never be scored as held.
+  if (run.crashed) {
+    return {
+      verdict: 'CRASH', crashed: true, exitCode: code,
+      stderr: run.stderr.split('\n').filter(Boolean).slice(-5).join('\n'),
+      failedGates: [], findingCount: 0, skippedGates: [],
+      corpusStates: null, adequacy: null,
+    };
+  }
   const gates = report?.gates ?? [];
   const failed = gates.filter((g) => !g.ok);
   const before = findings.length;
@@ -102,6 +169,14 @@ function summarise(report, code, c, phase) {
         change: c.id, phase, gate: g.gate,
         witness: f.id ?? null,
         message: f.message,
+        // The gates are deliberately overlapping views, so ONE defect can
+        // surface as three rows (migrate produced it, pointwise holds it,
+        // the model check reaches it). Counting rows would inflate the
+        // denominator of every rate the study reports — and the migrate-gate
+        // fix that lets downstream gates run makes the overlap larger, not
+        // smaller. Key a defect by its witness + the rule it names, which is
+        // what a human adjudicator would collapse on.
+        defectKey: defectKeyOf(f, g.gate),
         // filled in by a human, blind to the prediction (see adjudication.md)
         bucket: null,
       });
@@ -109,9 +184,13 @@ function summarise(report, code, c, phase) {
   }
   return {
     verdict: report?.verdict ?? (code === 0 ? 'PASS' : 'FAIL'),
+    crashed: false,
     failedGates: failed.map((g) => g.gate),
-    // adjudicable findings only — refusals are excluded above
+    // Both counts are reported because they answer different questions:
+    // rows measure operator noise, distinct defects measure detection power.
+    // Any TP/FP rate must be computed over the latter.
     findingCount: findings.length - before,
+    distinctDefects: new Set(findings.slice(before).map((f) => f.defectKey)).size,
     skippedGates: failed.filter((g) => g.skipped).map((g) => g.gate),
     corpusStates: report?.corpus?.count ?? null,
     adequacy: report?.adequacy ?? null,
@@ -150,26 +229,40 @@ for (const c of CHANGES) {
   // phase 1 — before any migration exists
   const bare = hasMigration ? withoutMigration(newDir) : null;
   const pre = runCli(['check', '--old', oldDir, '--new', bare ? bare.dest : newDir, '--snapshots', fleetPath, '--json']);
-  const preSum = summarise(pre.json, pre.code, c, 'pre-migration');
+  const preSum = summarise(pre, c, 'pre-migration');
   bare?.cleanup();
 
   // phase 2 — with the authored migration in place
   const post = hasMigration
     ? runCli(['check', '--old', oldDir, '--new', newDir, '--snapshots', fleetPath, '--json'])
     : null;
-  const postSum = post ? summarise(post.json, post.code, c, 'post-migration') : null;
+  const postSum = post ? summarise(post, c, 'post-migration') : null;
 
   // The verdict the study reports is the FINAL one — after the operator has
   // done the work the tool asked for. A change that needs a migration and
   // gets a correct one is not thereby "incompatible".
-  const verdict = (postSum ?? preSum).verdict;
+  const final = postSum ?? preSum;
+  const verdict = final.verdict;
+
+  // A prediction is held only when the verdict matches AND the gate that was
+  // predicted to fire actually fired. Verdict-only scoring accepts a failure
+  // for entirely the wrong reason as confirmation.
+  const gateMissed = [];
+  if (c.expectGate && !final.failedGates.includes(c.expectGate)) gateMissed.push(`final: expected '${c.expectGate}' to fire, fired [${final.failedGates.join(', ') || 'none'}]`);
+  if (c.expectGatePre && !preSum.failedGates.includes(c.expectGatePre)) gateMissed.push(`pre-migration: expected '${c.expectGatePre}' to fire, fired [${preSum.failedGates.join(', ') || 'none'}]`);
+  const crashed = preSum.crashed || postSum?.crashed || cls.crashed;
 
   results.changes.push({
-    id: c.id, change: c.change, expect: c.expect, why: c.why,
+    id: c.id, change: c.change, expect: c.expect, expectGate: c.expectGate ?? null, why: c.why,
     lanes: cls.json?.lanes ?? [], gatesDemanded: cls.json?.gates ?? [],
+    classifyCrashed: cls.crashed,
     migrationRequired: hasMigration || preSum.failedGates.includes('migrate'),
     migrationAuthored: hasMigration,
-    verdict, predictionHeld: verdict === c.expect,
+    verdict,
+    // A crash matches no prediction, and a right verdict for the wrong reason
+    // is not a held prediction.
+    predictionHeld: !crashed && verdict === c.expect && gateMissed.length === 0,
+    gateMissed, crashed,
     pre: preSum, post: postSum,
     corpusStates: (postSum ?? preSum).corpusStates,
     corpusSource: (post?.json ?? pre.json)?.corpus?.source ?? null,
@@ -213,6 +306,13 @@ W.push('| **TI** | true but intended: the finding is correct and the behaviour i
 W.push('| **FP** | spurious: tool error — bad domain inference, an over-conservative superset, a BOUNDED run misread, a gate misfiring on a cosmetic change |', '');
 W.push('Record the judge, and resolve disagreements with a third reader; the count of');
 W.push('disagreements is part of the result.', '');
+W.push('**`defectKey` collapses gate views, NOT causal chains.** Two rows naming');
+W.push('different rules on the same witness are counted as two defects, but one may');
+W.push('be reachable only from the state the other condemns — remediating the first');
+W.push('would erase the second. This is not hypothetical: it is exactly what happened');
+W.push('with `exhausted-dunning-is-unpaid` and `dunning-within-budget` on this corpus.');
+W.push('Before reporting a defect count, re-run the check against a corpus with the');
+W.push('root violation remediated and see which findings survive.', '');
 W.push('**One defect can appear as several rows.** The gates are deliberately');
 W.push('overlapping views — a violating state is seen by `migrate` as an output it');
 W.push('produced, by `invariants-pointwise` as a state the fleet holds, and by');
@@ -240,14 +340,34 @@ R.push(`**Admissible as Tier 2 evidence: ${ADMISSIBLE ? 'YES' : 'NO'}**`, '');
 R.push('Each change is run twice: once before any migration exists, and once with the');
 R.push('migration an operator authored from the scaffold. Both are results — the first');
 R.push('says what the tool demanded, the second says whether the work satisfied it.', '');
-R.push('| change | lanes fired | migration | pre-migration | post-migration | final | predicted | held? | findings | ms (classify / checks) |');
-R.push('|---|---|---|---|---|---|---|---|---|---|');
+R.push('| change | lanes fired | migration | pre-migration | post-migration | final | predicted | held? | rows | defects | ms (classify / checks) |');
+R.push('|---|---|---|---|---|---|---|---|---|---|---|');
 for (const r of results.changes) {
   const f = (s) => (s ? `${s.verdict}${s.findingCount ? ` (${s.findingCount})` : ''}` : 'n/a');
-  R.push(`| ${r.id} | ${r.lanes.join(', ') || '—'} | ${r.migrationRequired ? (r.migrationAuthored ? 'authored' : 'REQUIRED, absent') : 'none needed'} | ${f(r.pre)} | ${f(r.post)} | **${r.verdict}** | ${r.expect} | ${r.predictionHeld ? 'yes' : '**NO**'} | ${(r.pre.findingCount + (r.post?.findingCount ?? 0))} | ${r.msClassify} / ${r.msCheck} |`);
+  const rows = r.pre.findingCount + (r.post?.findingCount ?? 0);
+  const defects = new Set(findings.filter((x) => x.change === r.id).map((x) => x.defectKey)).size;
+  R.push(`| ${r.id} | ${r.lanes.join(', ') || '—'} | ${r.migrationRequired ? (r.migrationAuthored ? 'authored' : 'REQUIRED, absent') : 'none needed'} | ${f(r.pre)} | ${f(r.post)} | **${r.verdict}** | ${r.expect}${r.expectGate ? ` via ${r.expectGate}` : ''} | ${r.predictionHeld ? 'yes' : '**NO**'} | ${rows} | ${defects} | ${r.msClassify} / ${r.msCheck} |`);
 }
 R.push('');
 R.push(`Corpus: ${results.changes[0]?.corpusStates ?? '—'} distinct fleet states.`, '');
+R.push('**rows** counts gate findings; **defects** collapses the overlapping gate views');
+R.push('onto (witness, rule). The gates are deliberately redundant — one violation is');
+R.push('seen by `migrate` as output it produced, by `invariants-pointwise` as a state');
+R.push('the fleet holds, and by `semantic-model-check` as a root or reachable state.');
+R.push('Any TP/FP rate must be computed over **defects**; rows measure operator noise.', '');
+const anyCrash = results.changes.filter((r) => r.crashed);
+if (anyCrash.length) {
+  R.push('> **A RUN CRASHED — these numbers are not results.**');
+  for (const r of anyCrash) R.push(`> \`${r.id}\`: ${(r.post ?? r.pre).stderr || `exit ${(r.post ?? r.pre).exitCode}`}`);
+  R.push('');
+}
+const anyMissed = results.changes.filter((r) => r.gateMissed.length);
+if (anyMissed.length) {
+  R.push('> **A PREDICTED GATE DID NOT FIRE.** The verdict may be right for the wrong');
+  R.push('> reason, which is not a held prediction.');
+  for (const r of anyMissed) for (const m of r.gateMissed) R.push(`> \`${r.id}\` — ${m}`);
+  R.push('');
+}
 R.push('## What each change is', '');
 for (const r of results.changes) {
   R.push(`- **${r.id}** — ${r.change}.`);
@@ -268,11 +388,23 @@ writeFileSync(join(here, 'results.json'), JSON.stringify(results, null, 2) + '\n
 writeFileSync(join(here, 'results.md'), R.join('\n') + '\n');
 writeFileSync(join(here, 'adjudication.md'), W.join('\n') + '\n');
 console.log(R.join('\n'));
-console.error(`\nwrote results.json, results.md, adjudication.md (${findings.length} findings to adjudicate)`);
+const distinct = new Set(findings.map((f) => f.defectKey)).size;
+console.error(`\nwrote results.json, results.md, adjudication.md (${findings.length} rows / ${distinct} distinct defects to adjudicate)`);
 if (!ADMISSIBLE) console.error('NOTE: corpus is not admissible as Tier 2 evidence — pipeline exercise only.');
 
-const broken = results.changes.filter((r) => !r.predictionHeld);
+// A crash is louder than a broken prediction: it means the study produced no
+// evidence at all, rather than evidence against a prediction.
+const crashed = results.changes.filter((r) => r.crashed);
+if (crashed.length) {
+  console.error(`\nRUN CRASHED for: ${crashed.map((r) => r.id).join(', ')} — no verdict was produced; these are NOT results.`);
+  for (const r of crashed) console.error((r.post ?? r.pre).stderr || `  exit ${(r.post ?? r.pre).exitCode}`);
+  process.exitCode = 2;
+}
+const broken = results.changes.filter((r) => !r.crashed && !r.predictionHeld);
 if (broken.length) {
-  console.error(`\nPREDICTION BROKEN for: ${broken.map((r) => r.id).join(', ')} — explain it, do not re-fit it.`);
-  process.exitCode = 1;
+  for (const r of broken) {
+    const why = r.gateMissed.length ? r.gateMissed.join('; ') : `verdict ${r.verdict}, predicted ${r.expect}`;
+    console.error(`\nPREDICTION BROKEN for ${r.id}: ${why} — explain it, do not re-fit it.`);
+  }
+  process.exitCode ||= 1;
 }

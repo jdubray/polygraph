@@ -21,6 +21,7 @@
       "id": "v2-addition",
       "change": "pure addition: a REFUND_ISSUED action; nothing removed, no existing transition or invariant altered",
       "expect": "PASS",
+      "expectGate": null,
       "why": "adding vocabulary cannot strand a live state: no fleet record carries the new action, and every existing transition is untouched",
       "lanes": [
         "vocabulary",
@@ -34,14 +35,19 @@
         "invariants-pointwise",
         "semantic-model-check"
       ],
+      "classifyCrashed": false,
       "migrationRequired": false,
       "migrationAuthored": false,
       "verdict": "PASS",
       "predictionHeld": true,
+      "gateMissed": [],
+      "crashed": false,
       "pre": {
         "verdict": "PASS",
+        "crashed": false,
         "failedGates": [],
         "findingCount": 0,
+        "distinctDefects": 0,
         "skippedGates": [],
         "corpusStates": 11,
         "adequacy": {
@@ -52,14 +58,15 @@
       "post": null,
       "corpusStates": 11,
       "corpusSource": "archive (fleet.json)",
-      "msClassify": 2705,
-      "msCheck": 2198
+      "msClassify": 2633,
+      "msCheck": 2648
     },
     {
       "id": "v2-dunning",
       "change": "rules + intent: the retry budget drops from 3 to 2, and the invariants tighten with it",
       "expect": "FAIL",
-      "why": "the fleet already holds records mid-dunning, and no migration can make them legal without making a billing decision — so the failure should SURVIVE a correct migration. This is the archetypal fleet event and the one the study exists to exhibit",
+      "expectGate": "invariants-pointwise",
+      "why": "the fleet already holds records mid-dunning, and no migration can make them legal without making a billing decision — so the failure should SURVIVE a correct migration, and it must surface as the pointwise gate naming live violators. This is the archetypal fleet event and the one the study exists to exhibit",
       "lanes": [
         "shape",
         "migration",
@@ -74,12 +81,16 @@
         "invariants-pointwise",
         "semantic-model-check"
       ],
+      "classifyCrashed": false,
       "migrationRequired": true,
       "migrationAuthored": true,
       "verdict": "FAIL",
       "predictionHeld": true,
+      "gateMissed": [],
+      "crashed": false,
       "pre": {
         "verdict": "FAIL",
+        "crashed": false,
         "failedGates": [
           "migrate",
           "shape-roundtrip",
@@ -87,6 +98,7 @@
           "semantic-model-check"
         ],
         "findingCount": 1,
+        "distinctDefects": 1,
         "skippedGates": [
           "shape-roundtrip",
           "invariants-pointwise",
@@ -100,12 +112,14 @@
       },
       "post": {
         "verdict": "FAIL",
+        "crashed": false,
         "failedGates": [
           "migrate",
           "invariants-pointwise",
           "semantic-model-check"
         ],
         "findingCount": 4,
+        "distinctDefects": 2,
         "skippedGates": [],
         "corpusStates": 11,
         "adequacy": {
@@ -115,13 +129,14 @@
       },
       "corpusStates": 11,
       "corpusSource": "archive (fleet.json)",
-      "msClassify": 2067,
-      "msCheck": 5532
+      "msClassify": 2418,
+      "msCheck": 4640
     },
     {
       "id": "v2-shape",
       "change": "shape: `cents` splits into `amountCents` + `currency`",
       "expect": "PASS",
+      "expectGate": null,
       "why": "the old shape cannot round-trip unmigrated, but the rename is faithful and total — so a correct migration should CLEAR it. A shape change that stayed red after a correct migration would mean the gate was measuring something other than shape",
       "lanes": [
         "shape",
@@ -137,12 +152,16 @@
         "invariants-pointwise",
         "semantic-model-check"
       ],
+      "classifyCrashed": false,
       "migrationRequired": true,
       "migrationAuthored": true,
       "verdict": "PASS",
       "predictionHeld": true,
+      "gateMissed": [],
+      "crashed": false,
       "pre": {
         "verdict": "FAIL",
+        "crashed": false,
         "failedGates": [
           "migrate",
           "shape-roundtrip",
@@ -150,6 +169,7 @@
           "semantic-model-check"
         ],
         "findingCount": 1,
+        "distinctDefects": 1,
         "skippedGates": [
           "shape-roundtrip",
           "invariants-pointwise",
@@ -163,8 +183,10 @@
       },
       "post": {
         "verdict": "PASS",
+        "crashed": false,
         "failedGates": [],
         "findingCount": 0,
+        "distinctDefects": 0,
         "skippedGates": [],
         "corpusStates": 11,
         "adequacy": {
@@ -174,8 +196,8 @@
       },
       "corpusStates": 11,
       "corpusSource": "archive (fleet.json)",
-      "msClassify": 2317,
-      "msCheck": 5566
+      "msClassify": 2204,
+      "msCheck": 5043
     }
   ],
   "findings": [
@@ -186,6 +208,7 @@
       "gate": "migrate",
       "witness": null,
       "message": "the shape changed but the new version has no migrate.cjs — a failing round-trip in this lane needs a verified migration; start with `polyvers migrate scaffold`",
+      "defectKey": "migrate::the shape changed but the new version has no migrate.cjs — a failing round-trip in this lane needs a verified migration; start with `polyvers migrate scaffold`",
       "bucket": null
     },
     {
@@ -195,6 +218,7 @@
       "gate": "migrate",
       "witness": "fleet.json#10",
       "message": "migrated state violates 'exhausted-dunning-is-unpaid'",
+      "defectKey": "fleet.json#10::exhausted-dunning-is-unpaid",
       "bucket": null
     },
     {
@@ -204,6 +228,7 @@
       "gate": "invariants-pointwise",
       "witness": "fleet.json#10",
       "message": "violates 'exhausted-dunning-is-unpaid' — this state exists (or is reachable); decide what it means BEFORE the deploy",
+      "defectKey": "fleet.json#10::exhausted-dunning-is-unpaid",
       "bucket": null
     },
     {
@@ -213,6 +238,7 @@
       "gate": "semantic-model-check",
       "witness": "fleet.json#10",
       "message": "'exhausted-dunning-is-unpaid' [state] — violated in a seeded initial state; shortest counterexample from snapshot fleet.json#10: (violated at the root state)",
+      "defectKey": "fleet.json#10::exhausted-dunning-is-unpaid",
       "bucket": null
     },
     {
@@ -222,6 +248,7 @@
       "gate": "semantic-model-check",
       "witness": "fleet.json#10",
       "message": "'dunning-within-budget' [state] — reachable state violates the rule; shortest counterexample from snapshot fleet.json#10: PAYMENT_FAILED({})",
+      "defectKey": "fleet.json#10::dunning-within-budget",
       "bucket": null
     },
     {
@@ -231,6 +258,7 @@
       "gate": "migrate",
       "witness": null,
       "message": "the shape changed but the new version has no migrate.cjs — a failing round-trip in this lane needs a verified migration; start with `polyvers migrate scaffold`",
+      "defectKey": "migrate::the shape changed but the new version has no migrate.cjs — a failing round-trip in this lane needs a verified migration; start with `polyvers migrate scaffold`",
       "bucket": null
     }
   ]
