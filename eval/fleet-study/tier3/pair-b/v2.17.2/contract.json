@@ -1,0 +1,104 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "status",
+      "type": "enum: 'authorized' | 'captured' | 'pending' | 'requires_more' | 'error' | 'canceled' | 'pending_authorization'"
+    },
+    {
+      "name": "authorizedAt",
+      "type": "boolean — ABSTRACTION of authorized_at; the code tests presence only"
+    },
+    {
+      "name": "hasPayment",
+      "type": "boolean — ABSTRACTION of a linked Payment row; the code tests presence only"
+    }
+  ],
+  "initState": {
+    "status": "pending",
+    "authorizedAt": false,
+    "hasPayment": false
+  },
+  "actions": {
+    "PROVIDER_INITIATE": {
+      "dataFields": {
+        "providerStatus": "string"
+      }
+    },
+    "PROVIDER_UPDATE": {
+      "dataFields": {
+        "providerStatus": "string"
+      }
+    },
+    "PROVIDER_AUTHORIZE": {
+      "dataFields": {
+        "providerStatus": "string"
+      }
+    }
+  },
+  "dataDomain": {
+    "PROVIDER_INITIATE": {
+      "providerStatus": [
+        "authorized",
+        "captured",
+        "pending",
+        "requires_more",
+        "error",
+        "canceled",
+        "pending_authorization"
+      ]
+    },
+    "PROVIDER_UPDATE": {
+      "providerStatus": [
+        "authorized",
+        "captured",
+        "pending",
+        "requires_more",
+        "error",
+        "canceled",
+        "pending_authorization"
+      ]
+    },
+    "PROVIDER_AUTHORIZE": {
+      "providerStatus": [
+        "authorized",
+        "captured",
+        "pending",
+        "requires_more",
+        "error",
+        "canceled",
+        "pending_authorization"
+      ]
+    }
+  },
+  "terminalKey": "status",
+  "terminalStates": [],
+  "specialRules": [
+    {
+      "name": "already-authorized",
+      "note": "authorizePaymentSession short-circuits when a linked Payment exists AND authorized_at is set. Note it keys on those two fields, NOT on the status value — the only guard in this machine, and it does not guard on status. Unchanged at v2.17.2: PR #15085 does not touch payment-module.ts.",
+      "whenState": "status = 'authorized'",
+      "whenAction": "PROVIDER_AUTHORIZE"
+    }
+  ],
+  "noOpRule": "An action that does not apply is reject(reason) — an observable no-op. IMPORTANT: the non-authorized branch of authorizePaymentSession is NOT a no-op. It WRITES the provider's status and then raises a MedusaError. The row is persisted; the throw is control flow for the caller. Modelling it as a rejection would falsely imply the state did not change.",
+  "trustBound": "The provider's reported status is written VERBATIM. packages/modules/payment/src/services/payment-module.ts performs no enum-membership check, no validation, and no mapping — the sole transformation anywhere is authorizePaymentSession_ collapsing CAPTURED into AUTHORIZED. Domain membership is enforced by the DATABASE (the model.enum column), not by the application, so a provider reporting an unknown status fails at write time as a constraint violation rather than being rejected in code. At v2.17.2 this is what makes the new member consequential: pending_authorization is something PROVIDERS emit, into paths that still write verbatim.",
+  "projectionBound": "These three keys are the ENTIRE observable state. Amounts, currency_code, the provider `data` blob, `context`/idempotency keys, the provider id, and the linked PaymentCollection and Payment entities are OUTSIDE the projection. They are passed to providers but never read to decide a session status. Every guarantee made here is relative to this list.",
+  "upstream": {
+    "repo": "medusajs/medusa",
+    "tag": "v2.17.2",
+    "commit": "b67dcab7477cea6b362dcf5e946e6e642d508409",
+    "changeCommit": "b50a9dbaf3eeb29753fa28afbc1b529c44ec5a51",
+    "changePr": "https://github.com/medusajs/medusa/pull/15085",
+    "migration": "packages/modules/payment/src/migrations/Migration20260411223700.ts — widens payment_session_status_check to the seven members. Shipped 2026-04, ~2 months BEFORE the 2026-06 feature commit: the constraint was widened ahead of the code using it.",
+    "moduleServiceUnchanged": "packages/modules/payment/src/services/payment-module.ts is NOT in the change commit file list — every status write path is identical to v2.17.1.",
+    "sources": [
+      "packages/core/utils/src/payment/payment-session.ts",
+      "packages/core/types/src/payment/common.ts",
+      "packages/core/types/src/payment/provider.ts",
+      "packages/modules/payment/src/models/payment-session.ts",
+      "packages/modules/payment/src/services/payment-module.ts",
+      "packages/core/core-flows/src/payment/steps/authorize-payment-session.ts"
+    ]
+  }
+}

@@ -280,7 +280,19 @@ export function semanticModelCheckGate(newA, corpus, { maxStates = 100000, allow
   }
   // One witness per invariant (the checker dedupes by rule): a FAIL is a
   // compatibility verdict, not the affected-instance list.
-  const summary = `exhaustive check from ${corpus.length} fleet snapshot(s) + init, ${result.statesExplored} state(s) discovered${result.capHit ? ' (BOUNDED)' : ''}; one witness per violated rule — not an affected-instance list`;
+  // `statesExplored` counts only what exploration DISCOVERED beyond the seeds.
+  // Reporting it alone understates coverage badly on exactly the runs this gate
+  // exists for: a fleet-seeded check over 12 snapshots that discovers 3 new
+  // states read as "3 state(s) discovered", which an operator would reasonably
+  // take for a vacuous check. The seeded states ARE the coverage — they are the
+  // fleet — so the total is what makes a PASS legible. check.mjs's own renderer
+  // has always printed both; this summary dropped one of them.
+  const seeded = result.seededStates ?? 0;
+  const total = seeded + result.statesExplored;
+  const coverage = seeded
+    ? `${total} state(s) checked = ${seeded} seeded from the fleet + ${result.statesExplored} discovered from them`
+    : `${result.statesExplored} state(s) discovered`;
+  const summary = `exhaustive check from ${corpus.length} fleet snapshot(s) + init, ${coverage}${result.capHit ? ' (BOUNDED)' : ''}; one witness per violated rule — not an affected-instance list`;
   return done('semantic-model-check', failures, summary);
 }
 

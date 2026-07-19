@@ -473,6 +473,29 @@ test('m1: cli end-to-end — the landmine pair fails check with the semantic gat
   assert.ok(!r.stdout.includes('NOT RUN (M1)')); // the gate is live, not deferred
 });
 
+// The semantic gate's summary must not understate its own coverage. It reported
+// only `statesExplored`, which counts states discovered BEYOND the seeds — so a
+// fleet-seeded run over N snapshots that discovers few new states read as
+// "3 state(s) discovered" and looked vacuous. The seeded states ARE the fleet,
+// and therefore are the coverage. Found while running Tier 3 Pair B, where a
+// 12-snapshot corpus reported 3.
+test('m1: the semantic gate reports seeded coverage, not just newly discovered states', async () => {
+  const [oldA, newA] = [await load('order-v1'), await load('order-v1')];
+  const corpus = synthesizeCorpus(oldA.module).entries;
+  assert.ok(corpus.length > 1, 'need a multi-state corpus for this to be meaningful');
+  const g = semanticModelCheckGate(newA, corpus, {});
+  assert.equal(g.ok, true);
+  // Both numbers and their total must be legible. The seeded count is NOT
+  // asserted to equal corpus.length: a snapshot that happens to equal init()
+  // dedupes to the init root, so seeded is corpus.length or one less.
+  const m = /(\d+) state\(s\) checked = (\d+) seeded from the fleet \+ (\d+) discovered from them/.exec(g.summary);
+  assert.ok(m, `summary must report seeded coverage, got: ${g.summary}`);
+  const [, total, seeded, discovered] = m.map(Number);
+  assert.equal(total, seeded + discovered, 'the reported total must be the sum');
+  assert.ok(seeded >= corpus.length - 1, `seeded (${seeded}) should account for the corpus (${corpus.length})`);
+  assert.ok(total > discovered, 'the total must exceed the newly-discovered count — that was the bug');
+});
+
 // ── M2: the migration lane + the stimuli gate ───────────────────────────────
 
 test('m2: a shape change without migrate.cjs fails the migrate gate with the scaffold hint', async () => {
