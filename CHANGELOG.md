@@ -3,6 +3,68 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 5.0.0 — 2026-07-19
+
+No new engine: **polyvers gains an evidence base**. The compatibility
+mechanism was previously argued for; it is now measured, in a
+pre-registered three-tier fleet study (`docs/fleet-study-plan.md`,
+`eval/fleet-study`, `examples/fleet-study-stripe`), and replicated against
+an external benchmark (`docs/tier3-protocol.md`, `eval/sysmobench`). The
+headline result is that **corpus provenance is decisive**: four incompatible
+changes run against corpora differing only in where the states came from
+give 4/4 caught from archived (real-provenance) states and 3/4 from
+synthesized BFS-reachable ones, no false positives on either tier. The
+escapee is the landmine the design exists for — a state the old version
+could reach, that production therefore holds, and that the new version
+forbids — and a synthesized corpus cannot contain it by construction, since
+it holds only states the old *model* says are reachable. Same tool, same
+change, same gates; the verdict turns on provenance alone. A dunning-budget
+narrowing separately explores 19 states clean from `init()` and fails when
+seeded from the fleet: a machine can be internally consistent and still
+unsafe to deploy. Affected population is stated per finding (one snapshot),
+because class of defect and blast radius are different claims.
+
+The external replication finds that **conformance and exploration fail in
+different directions**, and neither subsumes the other. On SysMoBench's etcd
+Raft task, over real traces from a real 3-node cluster via the tracing hook
+upstream in `etcd-io/raft`: replay catches 2/8 injected defects and 4/5
+one-shot generated specs; the explorer with invariants catches 1/8
+definitive (6/8 inconclusive) and 0/5. Replay misses defensive code a
+correct system never drives, including the heartbeat clamp this project's
+own prior work singles out; the explorer misses anything the stated
+invariants omit. A specification graded by either alone gets a clean bill it
+has not earned. Two Medusa version pairs replayed under a freeze protocol
+(the old-version model committed before the new version's diff is read)
+make the same point about release notes: `v2.4.0 → v2.5.0` and
+`v2.17.1 → v2.17.2` summarize interchangeably as "enum gains members" and
+behave oppositely — 6 of 32 states stranded versus 0 — because the first
+changed a status *derivation* and the second changed nothing but a domain.
+
+Reported against itself: a **projection-bound miss** (a zero-amount payment
+collection reads unpaid under one version and completed under the next; the
+declared money abstraction collapses at zero, so the case is inexpressible —
+out-of-projection, with the bound declared before the analysis); a
+**self-inflicted false positive** (reworded type-description prose
+manufactured a shape diff — operator error, reported rather than quietly
+fixed); two measurement bugs caught by control rows deliberately scored on
+identical terms; and a corrected claim in the paper — finite action domains
+do not imply a finite state space, since exhaustiveness requires a finite
+*reachable* state space, which a contract is not currently required to
+declare. Commit `f6743a7`'s title reports "the explorer catches 8/8"; that
+figure is **wrong** — a regex matching the word "violations" inside `no
+invariant violations reachable` — and was corrected in `59345b6`. The
+figures above are authoritative.
+
+Also in this release: two polyvers defects the study found and fixed (the
+migrate gate conflating structural with invariant failures, the semantic
+gate understating its own coverage); `polyrun simulate`
+(`polyrun/src/simulate.mjs`); the joint product check
+(`polyvers/src/product.mjs`, `polyrun/src/check-product.mjs`, with a
+narrowed cancel window that passes the pairwise matrix and fails the joint
+product); engine READMEs rewritten as introductions; and the SDLC and
+five-engine diagrams. Bounded results are not passes — enforced in code
+throughout, not assumed.
+
 ## 4.0.0 — 2026-07-18
 
 New engine: **polynv**, invariant elicitation — the fifth engine (Polygraph
