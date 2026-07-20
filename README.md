@@ -29,6 +29,12 @@ path to each violation — is done for you.
 > *lead to investigate by hand*, not an established result. Do not rely on it
 > as your only safeguard for correctness- or safety-critical code.
 
+## About
+
+Polygraph is developed by Cognitive Fab LLC (<https://cognitivefab.com>). For
+questions, commercial support, or collaboration, reach us at
+<hello@cognitivefab.com>.
+
 ## Why Polygraph
 
 Unit tests execute the scenarios you wrote. A state machine of even modest
