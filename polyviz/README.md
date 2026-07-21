@@ -10,19 +10,24 @@ Full spec: [`docs/polyviz-spec.md`](../docs/polyviz-spec.md).
 
 ## Status
 
-**M1–M4 — shipped.** The full v1 diagram catalog: `invariants` (D2),
+**M1–M5 — shipped.** The full v1 diagram catalog: `invariants` (D2),
 `counterexample` (D3), `state-machine` (D1, elkjs), `model-card` (D1+D2, fig2),
 and `compat-gate` (D4). Bug **and** fix faces for D3 and D4, dark & light themes,
-golden + determinism tests. Remaining work is M5 plumbing.
+golden + determinism tests. Plus the M5 plumbing: adapters from real
+Polygraph/polyvers artifacts, PNG export, and report injection.
 
-| id | diagram | milestone |
-|----|---------|-----------|
+| id | diagram / capability | milestone |
+|----|----------------------|-----------|
 | D2 | `invariants` — the must-nevers, pass/fail | ✅ M1 |
 | D3 | `counterexample` — the bug trace (+ clean-pass "fix" variant) | ✅ M2 |
 | D1 | `state-machine` — lifecycle graph (elkjs auto-layout) | ✅ M3 |
 | —  | `model-card` — D1 + D2 composed (fig2) | ✅ M3 |
 | D4 | `compat-gate` — blocked / clear verdict (portrait, fig4) | ✅ M4 |
-| —  | adapters (real artifacts), PNG export, report injection | M5 |
+| —  | adapters (machine / invariants / counterexample / compat) | ✅ M5 |
+| —  | PNG export, report injection (`polyviz report`) | ✅ M5 |
+
+The one spec item still open is a two-OS determinism CI workflow (needs a CI
+environment); everything renderable ships.
 
 D3 (`trace.violation` present/absent) and D4 (`verdict.status` blocked/clear)
 each render the bug and the fix from the same renderer — see the paired
@@ -58,9 +63,39 @@ From the repo root: `npm run polyviz -- render --in polyviz/fixtures/daao.polyvi
 
 ## Installing (optional, separate from polygraph)
 
-polyviz is a **separate plugin** in the marketplace (`source: ./polyviz`) — you
-install it only if you want the visuals; polygraph does not pull it in. Its two
-runtime components are **optional and lazy**:
+polyviz is a **separate plugin** in the same marketplace (`source: ./polyviz`) —
+you install it only if you want the visuals; polygraph does not pull it in.
+
+**As a Claude Code plugin.** Add the marketplace once, then install polyviz:
+
+```
+/plugin marketplace add jdubray/polygraph
+/plugin install polyviz@polygraph
+```
+
+This gives you the `/polyviz` skill, the `polyviz` command, and the `polyviz`
+agent. (Install `polygraph@polygraph` the same way for the verification engines.)
+
+**Standalone (CLI only).** Clone the repo and run the bin directly:
+
+```
+git clone https://github.com/jdubray/polygraph && cd polygraph
+npm install                    # optional deps (elkjs, @resvg/resvg-js) install here;
+                               # if the native rasterizer can't build, SVG still works
+node polyviz/bin/polyviz.mjs render --in polyviz/fixtures/daao.polyviz.json \
+     --diagram all --out out/
+```
+
+The optional deps are pulled on `npm install` but are only *loaded* on use, so a
+failed native build (resvg) never blocks the SVG path — install just those you
+need:
+
+```
+npm i elkjs             # only if you render state-machine / model-card
+npm i @resvg/resvg-js   # only if you export PNG (--format png)
+```
+
+Its two runtime components are **optional and lazy**:
 
 - The pure **viz-model → SVG** path (invariants, counterexample, compat-gate)
   needs no optional dependency and **executes no user code**.
