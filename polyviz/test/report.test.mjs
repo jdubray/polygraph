@@ -33,6 +33,21 @@ test('re-injection updates the ref in place', () => {
   assert.match(markdown, /img\/model-card\.svg/);
 });
 
+test('an already-injected block for another id is not swallowed', () => {
+  // model-card open marker immediately followed by counterexample's full block,
+  // then model-card's close. A greedy matcher would eat counterexample's block.
+  const md = [
+    '<!-- polyviz:model-card -->',
+    '<!-- polyviz:counterexample -->',
+    '![counterexample](img/counterexample.svg)',
+    '<!-- /polyviz:counterexample -->',
+    '<!-- /polyviz:model-card -->'
+  ].join('\n');
+  const { markdown } = injectReport(md, figures);
+  assert.match(markdown, /!\[counterexample\]\(img\/counterexample\.svg\)/, 'counterexample block survives');
+  assert.match(markdown, /!\[model-card\]\(img\/model-card\.svg\)/, 'model-card gets injected');
+});
+
 test('buildManifest lists figures with dimensions and hashes', () => {
   const m = buildManifest([{ id: 'x', width: 100, height: 50, sha256: 'abc' }], { svg: true, png: true });
   assert.equal(m.tool, 'polyviz');

@@ -10,10 +10,13 @@ import { adaptDir } from '../src/adapters/index.mjs';
 import { validate } from '../src/model/validate.mjs';
 import { renderModelCard } from '../src/diagrams/model-card.mjs';
 import { loadTheme } from '../src/render/theme.mjs';
-import { HERE } from './helpers.mjs';
+import { HERE, ROOT } from './helpers.mjs';
 
 const DIR = join(HERE, 'fixtures', 'artifacts-machine');
 const contract = () => JSON.parse(readFileSync(join(DIR, 'contract.json'), 'utf8'));
+
+// A real in-repo machine whose state field is NOT named "state" (orderState).
+const OMS = join(ROOT, '..', 'examples', 'polyvers-oms', 'order-v1');
 
 test('deriveMachine BFSes the module into an abstract transition graph', () => {
   const m = deriveMachine(contract(), join(DIR, 'next.cjs'));
@@ -23,8 +26,23 @@ test('deriveMachine BFSes the module into an abstract transition graph', () => {
   assert.ok(edge('A', 'go', 'B'), 'A --go--> B');
   const fin = edge('B', 'finish', 'DONE');
   assert.ok(fin, 'B --finish--> DONE');
-  assert.equal(fin.effect, 'execute ×1', 'executed flag flip → effect');
+  assert.equal(fin.effect, 'executed', 'executed flag flip → effect labelled by the contract field name');
   assert.equal(fin.emphasis, 'accent');
+});
+
+test('bare next() returning undefined for a no-op does not crash the BFS', () => {
+  // The fixture module returns undefined for inapplicable actions; deriveMachine
+  // must treat that as a no-op (guard before sanitize), not throw.
+  assert.doesNotThrow(() => deriveMachine(contract(), join(DIR, 'next.cjs')));
+});
+
+test('a machine whose state field is not "state" (orderState) still yields edges', () => {
+  const c = JSON.parse(readFileSync(join(OMS, 'contract.json'), 'utf8'));
+  const m = deriveMachine(c, join(OMS, 'next.cjs'));
+  assert.ok(m.transitions.length > 0, 'derives transitions from the orderState field');
+  const ids = new Set(m.states.map((s) => s.id));
+  const orphans = m.transitions.filter((t) => !ids.has(t.from) || !ids.has(t.to));
+  assert.deepEqual(orphans, [], 'every edge endpoint is a declared state (quotes stripped)');
 });
 
 test('deriveMachine is deterministic', () => {

@@ -129,6 +129,8 @@ async function cmdReport(args) {
   const model = await loadModel(args.in);
   const ids = selectDiagrams(model, args.diagram);
   const formats = String(args.format || 'svg').split(',').map((s) => s.trim());
+  const unsupported = formats.filter((f) => f !== 'svg' && f !== 'png');
+  if (unsupported.length) die(`unknown format(s): ${unsupported.join(', ')} (expected svg, png)`);
   const imgDir = args.img ? resolve(args.img) : die('missing --img <dir>');
   mkdirSync(imgDir, { recursive: true });
   const tokens = resolveTokens(model, { theme: args.theme, tokensFile: args.tokens });

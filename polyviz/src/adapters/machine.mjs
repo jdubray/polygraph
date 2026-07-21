@@ -42,15 +42,28 @@ function requireModule(modulePath) {
   }
 }
 
-// Parse the `state` key's "enum: A | B | C" type into ordered state names.
-function statesFromContract(contract) {
+// The abstract-state key: its NAME (the field holding the lifecycle state — not
+// necessarily "state"; e.g. OMS uses "orderState") and its ordered enum VALUES.
+function stateKeyInfo(contract) {
   const key = (contract.stateKeys ?? []).find(
     (k) => k.name === 'state' || /^\s*enum\s*:/i.test(k.type ?? '')
   );
-  if (!key) return [];
+  if (!key) return { name: 'state', values: [] };
   const m = /enum\s*:(.*)$/i.exec(key.type ?? '');
-  if (!m) return [];
-  return m[1].split('|').map((s) => s.trim()).filter(Boolean);
+  // Strip surrounding quotes so declared ids match the module's runtime values
+  // (some contracts quote the enum members: `enum: 'pending' | 'charging'`).
+  const values = m
+    ? m[1].split('|').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean)
+    : [];
+  return { name: key.name ?? 'state', values };
+}
+
+// One-shot effect flags: boolean stateKeys whose false→true flip marks an effect
+// emission (transmit/execute/…). Field names come from the contract, not baked in.
+function effectFlags(contract) {
+  return (contract.stateKeys ?? [])
+    .filter((k) => /^\s*boolean\b/i.test(k.type ?? ''))
+    .map((k) => k.name);
 }
 
 // Cartesian product of an action's declared data-field domains (as the checker
@@ -95,7 +108,10 @@ function makeDriver(mod) {
   }
   const bare = typeof mod === 'function' ? mod : mod?.next;
   if (typeof bare === 'function') {
-    return (state, action, data) => sanitize(bare(state, action, data)) ?? state;
+    return (state, action, data) => {
+      const out = bare(state, action, data);
+      return out == null ? state : sanitize(out); // guard undefined/null before sanitize()
+    };
   }
   throw new Error('machine adapter: module is neither a SAM v2 module nor a bare next() export');
 }
@@ -120,27 +136,27 @@ export function deriveMachine(contract, modulePath, { log = () => {} } = {}) {
 
   const steps = Object.keys(contract.actions ?? {}).flatMap((a) => stepsForAction(contract, a));
   const terminal = new Set(contract.terminalStates ?? []);
-  const declared = statesFromContract(contract);
+  const { name: stateField, values: declared } = stateKeyInfo(contract);
+  const effFlags = effectFlags(contract);
 
-  // BFS over full states; collapse to abstract (from.state --event--> to.state).
+  // BFS over full states; collapse to abstract (from[stateField] --event--> to).
   const key = (s) => JSON.stringify(s);
   const init = initialState(mod, contract);
   const seen = new Set([key(init)]);
   const queue = [init];
-  const edges = new Map(); // "from|event|to" -> { from, event, to, transmit, execute }
+  const edges = new Map(); // "from|event|to" -> { from, event, to, effects:Set }
   let capped = false;
 
   while (queue.length) {
     const s = queue.shift();
     for (const { action, data } of steps) {
       const p = next(s, action, data);
-      const from = s.state;
-      const to = p.state;
+      const from = s[stateField];
+      const to = p[stateField];
       if (from !== to) {
         const ek = `${from}|${action}|${to}`;
-        const rec = edges.get(ek) ?? { from, event: action, to, transmit: false, execute: false };
-        if (!s.transmitted && p.transmitted) rec.transmit = true;
-        if (!s.executed && p.executed) rec.execute = true;
+        const rec = edges.get(ek) ?? { from, event: action, to, effects: new Set() };
+        for (const f of effFlags) if (!s[f] && p[f]) rec.effects.add(f);
         edges.set(ek, rec);
       }
       const pk = key(p);
@@ -167,9 +183,7 @@ export function deriveMachine(contract, modulePath, { log = () => {} } = {}) {
       a.event.localeCompare(b.event) ||
       (order.get(a.to) ?? 0) - (order.get(b.to) ?? 0))
     .map((e) => {
-      const eff = [];
-      if (e.transmit) eff.push('transmit ×1');
-      if (e.execute) eff.push('execute ×1');
+      const eff = [...e.effects];
       const t = { from: e.from, event: e.event, to: e.to, guard: '', effect: eff.join(' · ') };
       t.emphasis = eff.length ? 'accent' : 'none';
       return t;

@@ -81,10 +81,17 @@ export async function adaptDir(dir, { log = () => {} } = {}) {
 
   // counterexample ← a findings.json with a failure, resolved to its trace file.
   // Prefer a findings.json that actually reports failures (a clean run has none).
-  const findingsFiles = findAllFiles(dir, 'findings.json');
-  const cePath = findingsFiles.find((p) => (JSON.parse(readFileSync(p, 'utf8')).findings ?? []).length) ?? findingsFiles[0];
-  if (cePath) {
-    const findings = JSON.parse(readFileSync(cePath, 'utf8'));
+  // Parse each once and skip any that are unreadable — one bad file must not
+  // abort adapting the rest of the directory.
+  let findings = null;
+  for (const p of findAllFiles(dir, 'findings.json')) {
+    let parsed;
+    try { parsed = JSON.parse(readFileSync(p, 'utf8')); }
+    catch { log(`polyviz: skipping unreadable findings.json at ${p}`); continue; }
+    if (!findings) findings = parsed;                        // first valid, as a fallback
+    if ((parsed.findings ?? []).length) { findings = parsed; break; } // prefer one with failures
+  }
+  if (findings) {
     const fail = (findings.findings ?? [])[0];
     const traceName = ann.counterexample?.trace ?? fail?.scenario;
     const tracePath = traceName ? findFile(dir, traceName) : null;

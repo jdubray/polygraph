@@ -21,7 +21,12 @@ export function injectReport(markdown, figures) {
   let out = markdown;
 
   for (const [id, f] of byId) {
-    const block = new RegExp(`<!-- polyviz:${esc(id)} -->(?:[\\s\\S]*?<!-- /polyviz:${esc(id)} -->)?`, 'g');
+    const e = esc(id);
+    // Match the open marker, and — only if it's an already-injected block — the
+    // single image + close that follow. The optional group matches the exact
+    // injected shape (not arbitrary `[\s\S]*?`), so it can never swallow a
+    // neighbouring or nested polyviz block.
+    const block = new RegExp(`<!-- polyviz:${e} -->(?:\\s*!\\[[^\\]]*\\]\\([^)]*\\)\\s*<!-- /polyviz:${e} -->)?`, 'g');
     if (block.test(out)) {
       out = out.replace(block, `<!-- polyviz:${id} -->\n![${id}](${f.ref})\n<!-- /polyviz:${id} -->`);
       injected.push(id);
