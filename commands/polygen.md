@@ -19,7 +19,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs \
 ```
 
 Always needs `ANTHROPIC_API_KEY` and an explicit `--model` (no default — pass
-the exact Anthropic model id if not using a known alias; recommend `sonnet-5`
+the exact Anthropic model id if not using a known alias; recommend `opus-4.8`
 or `opus-4.8`). v1 is JS/TS only.
 
 What it does, in order:

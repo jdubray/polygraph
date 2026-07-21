@@ -84,7 +84,7 @@ node scripts/verify.mjs \
   --contract examples/subscription/contract.json \
   --source examples/subscription/source.cjs \
   --traces examples/subscription/traces \
-  --model sonnet-5 --n 5 --out /tmp/sub-gen
+  --model opus-4.8 --n 5 --out /tmp/sub-gen
 ```
 
 ## Why this demo makes the pitch's point

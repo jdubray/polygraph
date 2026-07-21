@@ -32,7 +32,7 @@ get presented as finished.
 ## How it works
 
 ```bash
-node scripts/polygen.mjs --intent "<feature description>" --model sonnet-5 --out out/
+node scripts/polygen.mjs --intent "<feature description>" --model opus-4.8 --out out/
 ```
 
 Six stages, each gated:

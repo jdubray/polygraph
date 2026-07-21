@@ -36,7 +36,7 @@ artifact instead. (House rule from sam-lib #29, fixed in 2.0.0-alpha.2: never re
 
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. `polygen.mjs` needs
 `ANTHROPIC_API_KEY` and an explicit `--model` (no default; recommend
-`sonnet-5` or `opus-4.8`).
+`opus-4.8` or better).
 
 ## Step 1 — Get the feature intent and the contract (do this WITH the user)
 
@@ -62,7 +62,7 @@ You have two paths:
 
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs \
-  --intent "<feature description>" --model sonnet-5 --out out/
+  --intent "<feature description>" --model opus-4.8 --out out/
 ```
 
 This authors the v2 SAM module (add `--legacy-bare-next` for `init()`/`next()`),

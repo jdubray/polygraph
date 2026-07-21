@@ -18,7 +18,7 @@ return the same completed/captured state without charging again. Retrying
 with a DIFFERENT (new) idempotency key is only allowed to proceed to a fresh
 capture attempt if the PRIOR key's capture attempt failed (was declined or
 errored) -- not if it already succeeded." \
-  --model sonnet-5 --out examples/polygen-cart-checkout --repair-max 3
+  --model opus-4.8 --out examples/polygen-cart-checkout --repair-max 3
 ```
 
 ## What happened (short version)
