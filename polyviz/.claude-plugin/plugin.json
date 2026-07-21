@@ -1,0 +1,24 @@
+{
+  "name": "polyviz",
+  "displayName": "polyviz",
+  "version": "0.1.0",
+  "description": "A deterministic, artifact-derived diagram renderer for Polygraph. Turns the artifacts the suite already produces — the state machine, the invariants, the counterexample, the polyvers compat verdict — into a fixed catalog of clean, brand-consistent SVGs (optional PNG). Same inputs → byte-identical output; no model call at render time. Renders from a viz-model JSON or straight from a Polygraph/polyvers artifacts directory (adapters derive the machine graph by bounded BFS over the module, read the invariants, resolve a failing findings.json to its counterexample trace, and map compat-report.json). Optional runtime components: the state-machine graph needs elkjs and PNG needs @resvg/resvg-js (both optionalDependencies, loaded lazily); the pure viz-model → SVG path needs neither and executes no user code. Deriving the machine graph from a real run does execute the target module (bounded reachability).",
+  "author": {
+    "name": "jdubray",
+    "url": "https://github.com/jdubray"
+  },
+  "homepage": "https://github.com/jdubray/polygraph",
+  "repository": "https://github.com/jdubray/polygraph",
+  "license": "Apache-2.0",
+  "keywords": [
+    "visualization",
+    "diagram",
+    "svg",
+    "state-machine",
+    "verification",
+    "polygraph",
+    "polyvers",
+    "deterministic",
+    "counterexample"
+  ]
+}

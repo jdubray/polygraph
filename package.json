@@ -26,8 +26,10 @@
     "test:polyrun": "node --no-warnings --test polyrun/test/kernel.test.mjs polyrun/test/m1.test.mjs polyrun/test/m2.test.mjs polyrun/test/m3.test.mjs polyrun/test/check-product.test.mjs polyrun/test/simulate.test.mjs polyrun/test/soak.test.mjs",
     "test:polyvers": "node --no-warnings --test polyvers/test/m0.test.mjs polyvers/test/product.test.mjs",
     "test:polynv": "node --no-warnings --test polynv/test/m0.test.mjs polynv/test/m1.test.mjs polynv/test/m2.test.mjs polynv/test/review-fixes.test.mjs polynv/test/completion.test.mjs",
+    "test:polyviz": "node --no-warnings --test polyviz/test/determinism.test.mjs polyviz/test/counterexample.test.mjs polyviz/test/state-machine.test.mjs polyviz/test/compat.test.mjs polyviz/test/adapter.test.mjs polyviz/test/adapter-machine.test.mjs polyviz/test/adapter-ce.test.mjs polyviz/test/golden.test.mjs polyviz/test/schema.test.mjs polyviz/test/overflow.test.mjs polyviz/test/theme.test.mjs polyviz/test/png.test.mjs polyviz/test/report.test.mjs polyviz/test/no-hex.test.mjs",
     "polyvers": "node polyvers/bin/polyvers.mjs",
     "polynv": "node polynv/bin/polynv.mjs",
+    "polyviz": "node polyviz/bin/polyviz.mjs",
     "bench:polyrun": "node --no-warnings polyrun/bench/bench.mjs",
     "demo:polyrun": "node --no-warnings polyrun/demo/run-demo.mjs",
     "test:oms": "node --no-warnings --test examples/polyrun-oms/test/oms.test.mjs",
@@ -58,5 +60,9 @@
     "@cognitive-fab/sam-pattern": "^2.0.0",
     "acorn": "^8.17.0",
     "pg": "^8.22.0"
+  },
+  "optionalDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "elkjs": "^0.9.3"
   }
 }

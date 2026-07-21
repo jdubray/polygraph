@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "brand": "COGNITIVE FAB · POLYGRAPH",
+    "footer": "verify, don't review",
+    "theme": "dark"
+  },
+  "trace": {
+    "kicker": "THE FIX, VERIFIED",
+    "title": "Guard restored — the same check now passes",
+    "subtitle": "I put the distinct-approvers guard back. The gate re-explored every reachable state and could not reach execute() with one approver.",
+    "steps": [
+      { "label": "submit(Alice)", "kind": "normal" },
+      { "label": "approve(Bob)", "kind": "normal" },
+      { "label": "approve(Bob)", "kind": "redelivered", "annotation": "(redelivered — ignored)" },
+      { "label": "PENDING", "kind": "approved", "annotation": "distinct approvers = 1 · blocked" }
+    ],
+    "callout": {
+      "title": "No reachable path drives this order to execute().",
+      "body": "The redelivered approval is de-duplicated by principal, so the second approve(Bob) does not advance the order. execute() stays unreachable until a second distinct approver acts.",
+      "cleanPasses": true
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{"pre":{"state":"DRAFT","approvers":[]},"action":"submit","data":{"actor":"alice"},"post":{"state":"PENDING","approvers":[]}}
+{"pre":{"state":"PENDING","approvers":[]},"action":"approve","data":{"actor":"bob"},"post":{"state":"PENDING","approvers":["bob"]}}
+{"pre":{"state":"PENDING","approvers":["bob"]},"action":"approve","data":{"actor":"bob"},"post":{"state":"PENDING","approvers":["bob"]}}
+{"pre":{"state":"PENDING","approvers":["bob"]},"action":"execute","data":{},"post":{"state":"EXECUTED","approvers":["bob"]}}
