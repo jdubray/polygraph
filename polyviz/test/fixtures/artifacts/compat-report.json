@@ -1,0 +1,609 @@
+{
+  "tool": "polyvers",
+  "milestone": "M3",
+  "changeId": "2c284a8cc5c1",
+  "oldVersion": "ea94f8be5cf5",
+  "newVersion": "567141e63b32",
+  "lanes": [
+    "shape",
+    "migration",
+    "intent",
+    "semantic"
+  ],
+  "diffs": {
+    "shape": {
+      "changed": true,
+      "added": [
+        "amendCount"
+      ],
+      "removed": [],
+      "retyped": []
+    },
+    "vocabulary": {
+      "changed": false,
+      "actions": {
+        "added": [],
+        "removed": [],
+        "fieldsChanged": [],
+        "domainChanged": false,
+        "possibleRenames": []
+      },
+      "rejectReasons": {
+        "added": [],
+        "removed": []
+      },
+      "terminal": {
+        "keyChanged": false,
+        "added": [],
+        "removed": [],
+        "changed": false
+      },
+      "effects": {
+        "kindsAdded": [],
+        "kindsRemoved": [],
+        "wiringChanged": []
+      }
+    },
+    "intent": {
+      "changed": true,
+      "added": [
+        "state:amend-count-nonnegative"
+      ],
+      "removed": [],
+      "renamed": [],
+      "edited": false
+    },
+    "moduleChanged": true,
+    "migrationChanged": true,
+    "mapperChanged": false
+  },
+  "corpus": {
+    "source": "synthesized (BFS-reachable states of the OLD machine — the weakest tier; prefer live or archived snapshots)",
+    "count": 33,
+    "truncated": false,
+    "notes": [],
+    "migrated": true,
+    "migratedCount": 33
+  },
+  "adequacy": {
+    "measured": false
+  },
+  "intentProvenance": null,
+  "gates": [
+    {
+      "gate": "load",
+      "ok": true,
+      "summary": "module surface, validate(), contract/manifest cross-checks",
+      "failures": []
+    },
+    {
+      "gate": "invariant-diff",
+      "ok": true,
+      "summary": "strengthened: state:amend-count-nonnegative",
+      "failures": []
+    },
+    {
+      "gate": "migrate",
+      "ok": true,
+      "summary": "migrate.cjs validated over 33 snapshot(s) (pure, accepted, projection-equal, state+transition invariants hold) — against this corpus tier; polyrun migrate's live dry run remains the apply-time gate",
+      "failures": [],
+      "migratedCorpus": [
+        {
+          "id": "synthesized#0",
+          "state": {
+            "orderState": "pending",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":0,\"orderState\":\"pending\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#1",
+          "state": {
+            "orderState": "fraudCheck",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"fraudCheck\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#2",
+          "state": {
+            "orderState": "fraudCheck",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"fraudCheck\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#3",
+          "state": {
+            "orderState": "cancelled",
+            "fulfillments": 0,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 0,
+            "txId": "",
+            "cancelReason": "customer-request",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"customer-request\",\"fulfillments\":0,\"orderState\":\"cancelled\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":0,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#4",
+          "state": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"charging\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#5",
+          "state": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"awaitingAmend\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#6",
+          "state": {
+            "orderState": "rejected",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "suspicious",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"suspicious\",\"fulfillments\":1,\"orderState\":\"rejected\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#7",
+          "state": {
+            "orderState": "cancelled",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "customer-request",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"customer-request\",\"fulfillments\":1,\"orderState\":\"cancelled\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#8",
+          "state": {
+            "orderState": "charging",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"charging\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#9",
+          "state": {
+            "orderState": "awaitingAmend",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"awaitingAmend\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#10",
+          "state": {
+            "orderState": "rejected",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "suspicious",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"suspicious\",\"fulfillments\":2,\"orderState\":\"rejected\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#11",
+          "state": {
+            "orderState": "cancelled",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "customer-request",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"customer-request\",\"fulfillments\":2,\"orderState\":\"cancelled\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#12",
+          "state": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"fulfilling\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#13",
+          "state": {
+            "orderState": "paymentFailed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "declined",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"declined\",\"fulfillments\":1,\"orderState\":\"paymentFailed\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#14",
+          "state": {
+            "orderState": "paymentFailed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "charge-timed-out",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"charge-timed-out\",\"fulfillments\":1,\"orderState\":\"paymentFailed\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#15",
+          "state": {
+            "orderState": "charging",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"charging\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#16",
+          "state": {
+            "orderState": "cancelled",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "amend-window-expired",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"amend-window-expired\",\"fulfillments\":1,\"orderState\":\"cancelled\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#17",
+          "state": {
+            "orderState": "fulfilling",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"fulfilling\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#18",
+          "state": {
+            "orderState": "paymentFailed",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "declined",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"declined\",\"fulfillments\":2,\"orderState\":\"paymentFailed\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#19",
+          "state": {
+            "orderState": "paymentFailed",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "charge-timed-out",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"charge-timed-out\",\"fulfillments\":2,\"orderState\":\"paymentFailed\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#20",
+          "state": {
+            "orderState": "cancelled",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "",
+            "cancelReason": "amend-window-expired",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"amend-window-expired\",\"fulfillments\":2,\"orderState\":\"cancelled\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#21",
+          "state": {
+            "orderState": "completed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 1,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"completed\",\"shipmentsDelivered\":1,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#22",
+          "state": {
+            "orderState": "partiallyDelivered",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 1,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"partiallyDelivered\",\"shipmentsDelivered\":0,\"shipmentsFailed\":1,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#23",
+          "state": {
+            "orderState": "fulfilling",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"fulfilling\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#24",
+          "state": {
+            "orderState": "paymentFailed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "",
+            "cancelReason": "declined",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"declined\",\"fulfillments\":1,\"orderState\":\"paymentFailed\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#25",
+          "state": {
+            "orderState": "paymentFailed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "",
+            "cancelReason": "charge-timed-out",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"charge-timed-out\",\"fulfillments\":1,\"orderState\":\"paymentFailed\",\"shipmentsDelivered\":0,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#26",
+          "state": {
+            "orderState": "fulfilling",
+            "fulfillments": 2,
+            "shipmentsDelivered": 1,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"fulfilling\",\"shipmentsDelivered\":1,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#27",
+          "state": {
+            "orderState": "fulfilling",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 1,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"fulfilling\",\"shipmentsDelivered\":0,\"shipmentsFailed\":1,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#28",
+          "state": {
+            "orderState": "completed",
+            "fulfillments": 1,
+            "shipmentsDelivered": 1,
+            "shipmentsFailed": 0,
+            "totalCents": 1900,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"completed\",\"shipmentsDelivered\":1,\"shipmentsFailed\":0,\"totalCents\":1900,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#29",
+          "state": {
+            "orderState": "partiallyDelivered",
+            "fulfillments": 1,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 1,
+            "totalCents": 1900,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":1,\"orderState\":\"partiallyDelivered\",\"shipmentsDelivered\":0,\"shipmentsFailed\":1,\"totalCents\":1900,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#30",
+          "state": {
+            "orderState": "completed",
+            "fulfillments": 2,
+            "shipmentsDelivered": 2,
+            "shipmentsFailed": 0,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"completed\",\"shipmentsDelivered\":2,\"shipmentsFailed\":0,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#31",
+          "state": {
+            "orderState": "partiallyDelivered",
+            "fulfillments": 2,
+            "shipmentsDelivered": 1,
+            "shipmentsFailed": 1,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"partiallyDelivered\",\"shipmentsDelivered\":1,\"shipmentsFailed\":1,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#32",
+          "state": {
+            "orderState": "partiallyDelivered",
+            "fulfillments": 2,
+            "shipmentsDelivered": 0,
+            "shipmentsFailed": 2,
+            "totalCents": 2500,
+            "txId": "tx-1",
+            "cancelReason": "",
+            "amendCount": 0
+          },
+          "key": "{\"amendCount\":0,\"cancelReason\":\"\",\"fulfillments\":2,\"orderState\":\"partiallyDelivered\",\"shipmentsDelivered\":0,\"shipmentsFailed\":2,\"totalCents\":2500,\"txId\":\"tx-1\"}",
+          "source": "migrated"
+        }
+      ]
+    },
+    {
+      "gate": "shape-roundtrip",
+      "ok": true,
+      "summary": "setState round-trip over 33 snapshot(s)",
+      "failures": []
+    },
+    {
+      "gate": "invariants-pointwise",
+      "ok": true,
+      "summary": "4 state invariant(s) × 33 snapshot(s) = 132 checks (6 transition invariant(s) need transitions, not snapshots — checked by the M1 model-check gate)",
+      "failures": []
+    },
+    {
+      "gate": "semantic-model-check",
+      "ok": true,
+      "summary": "exhaustive check from 33 fleet snapshot(s) + init, 7 state(s) discovered; one witness per violated rule — not an affected-instance list",
+      "failures": []
+    }
+  ],
+  "deferred": [],
+  "verdict": "PASS"
+}

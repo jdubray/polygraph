@@ -1,0 +1,1 @@
+{ "findings": [ { "scenario": "bug.ndjson", "index": 3, "action": "execute", "verdict": "code-finding", "classifications": ["mutated", "mutated", "rejected(duplicate-approver)"] } ] }

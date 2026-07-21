@@ -1,0 +1,11 @@
+{
+  "stateKeys": [
+    { "name": "state", "type": "enum: A | B | DONE" },
+    { "name": "executed", "type": "boolean" }
+  ],
+  "initState": { "state": "A", "executed": false },
+  "actions": { "go": { "dataFields": {} }, "finish": { "dataFields": {} } },
+  "dataDomain": { "go": {}, "finish": {} },
+  "terminalStates": ["DONE"],
+  "invariants": "invariants.mjs"
+}

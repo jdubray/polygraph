@@ -1,0 +1,10 @@
+{
+  "name": "dark",
+  "bg": "#0b1220", "panel": "#131c30", "panel2": "#0f172a", "border": "#26344a",
+  "ink": "#e6edf6", "muted": "#93a1b5",
+  "ok": "#4ade80", "fail": "#f87171",
+  "accentA": "#38bdf8", "accentB": "#818cf8", "warn": "#fbbf24",
+  "fontSans": "Helvetica, Arial, sans-serif",
+  "fontMono": "'DejaVu Sans Mono','Courier New', monospace",
+  "radius": 12, "gap": 20, "rule": "#4ade80"
+}

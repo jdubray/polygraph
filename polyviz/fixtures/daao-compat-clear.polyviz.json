@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "brand": "COGNITIVE FAB · POLYGRAPH",
+    "footer": "verify, don't review",
+    "theme": "dark"
+  },
+  "compat": {
+    "kicker": "THE HARD PART, CLEARED",
+    "title": "The migration closed the gap",
+    "subtitle": "Every live order was migrated to satisfy the 3-approver rule before v2 ships. No reachable state violates the new invariant.",
+    "from": { "label": "RULE v1", "detail": "2 approvers" },
+    "to":   { "label": "RULE v2  (deploy)", "detail": "3 approvers" },
+    "gate": "polyvers · seed the check with the live states",
+    "fleet": [
+      { "id": "o1", "state": "EXECUTED", "note": "done", "flagged": false },
+      { "id": "o2", "state": "APPROVED", "note": "re-approved under v2", "flagged": false },
+      { "id": "o3", "state": "PENDING", "note": "1 approval", "flagged": false }
+    ],
+    "verdict": {
+      "status": "clear",
+      "title": "SAFE TO DEPLOY",
+      "detail": "No live order can be driven to execute() with fewer than three distinct approvers under v2. The seeded model check found no counterexample.",
+      "offenders": []
+    }
+  }
+}
