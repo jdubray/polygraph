@@ -1,0 +1,29 @@
+{
+  "meta": { "theme": "dark" },
+  "machine": {
+    "kicker": "THE ORDER MACHINE",
+    "title": "The order lifecycle, and what it must never do"
+  },
+  "invariants": {
+    "S1-no-delivery-without-charge": { "id": "S1", "text": "Never deliver an order that was never charged" },
+    "S2-no-double-charge": { "id": "S2", "text": "Never charge an order twice — exactly once" },
+    "S3-no-ship-without-charge": { "id": "S3", "text": "Never ship an order that was never charged" },
+    "L1-cancellable-until-charged": { "id": "L1", "text": "An order stays cancellable until it is charged" }
+  },
+  "counterexample": {
+    "kicker": "THE BUG IT CAUGHT",
+    "title": "The gate wrote its own reproduction",
+    "subtitle": "I deleted the guard that blocks ship() until the charge succeeds. Then I asked the gate.",
+    "invariantId": "S1",
+    "violationTitle": "S1 VIOLATED — delivered without payment",
+    "violationDetail": "With the charge guard removed, the gate drove a never-charged order all the way to delivered()."
+  },
+  "compat": {
+    "kicker": "THE HARD PART",
+    "title": "State outlives its code",
+    "subtitle": "The bug isn't in the new code. It's in the state the old code already left behind.",
+    "from": { "label": "RULE v1", "detail": "ship after charge" },
+    "to": { "label": "RULE v2  (deploy)", "detail": "+ risk-hold blocks ship" },
+    "verdictTitle": "DEPLOY BLOCKED"
+  }
+}

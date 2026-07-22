@@ -14,7 +14,7 @@ a correct-looking or incorrect code -- an expired code should never verify,
 and checking an expired code should not count against the attempt limit the
 same way a live wrong-code guess does, since expiry is not evidence of user
 error." \
-  --model sonnet-5 --out examples/polygen-otp --repair-max 3
+  --model opus-4.8 --out examples/polygen-otp --repair-max 3
 ```
 
 Full run details, the drafted contract, the authored code, the proposed

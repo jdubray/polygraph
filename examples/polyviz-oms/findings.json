@@ -1,0 +1,12 @@
+{
+  "summary": { "specs": 3, "consistent": 40, "codeFinding": 1 },
+  "findings": [
+    {
+      "scenario": "bug.ndjson",
+      "index": 2,
+      "action": "deliver",
+      "verdict": "code-finding",
+      "classifications": ["mutated", "mutated", "rejected(not-charged)"]
+    }
+  ]
+}

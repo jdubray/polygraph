@@ -40,7 +40,7 @@ Useful flags:
 - `--invariants <inv.mjs>` / `--max-states N` — the model-checking half
   (Part 2); runs automatically when `invariants.mjs` sits beside the contract.
 
-Recommended models: `sonnet-5`, `fable-5` (configurable; no default — pass the
+Recommended models: `opus-4.8`, `fable-5` (configurable; no default — pass the
 exact Anthropic model id if you are not using a known alias).
 
 Steps to perform:

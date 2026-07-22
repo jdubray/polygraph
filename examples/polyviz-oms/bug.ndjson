@@ -1,0 +1,3 @@
+{"pre":{"state":"NEW","charged":false,"shipped":false},"action":"submit","data":{"actor":"alice"},"post":{"state":"PENDING","charged":false,"shipped":false}}
+{"pre":{"state":"PENDING","charged":false,"shipped":false},"action":"ship","data":{},"post":{"state":"SHIPPED","charged":false,"shipped":true}}
+{"pre":{"state":"SHIPPED","charged":false,"shipped":true},"action":"deliver","data":{},"post":{"state":"DELIVERED","charged":false,"shipped":true}}

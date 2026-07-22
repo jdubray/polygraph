@@ -24,7 +24,7 @@ replaying, and classifying.
 
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Node ≥ 20 is required.
 Generation needs `ANTHROPIC_API_KEY` and an explicit model (recommend
-`sonnet-5` or `fable-5`; there is no default). Replay and controls need no key.
+`opus-4.8` or `fable-5`; there is no default). Replay and controls need no key.
 
 **The artifact (v0.6):** by default the derived spec is a **SAM v2
 strict-profile module** (`@cognitive-fab/sam-pattern` 2.0.0-alpha, vendored at
@@ -123,7 +123,7 @@ Run the full loop:
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs \
   --contract contract.json --source path/to/source --traces traces/ \
-  --model sonnet-5 --n 5 --out out/
+  --model opus-4.8 --n 5 --out out/
 ```
 
 This builds a derivation-mode prompt (it never describes per-state semantics),
@@ -133,7 +133,7 @@ Add `--legacy-bare-next` to run the whole loop on the legacy bare-next
 artifact instead (prompt, replayer, and checker domains all follow the flag).
 
 If every window comes back `unscoreable-all`, the generations were empty — with
-a reasoning model (e.g. `claude-sonnet-5`) the thinking block spent the token
+a reasoning model (e.g. `claude-opus-4-8`) the thinking block spent the token
 budget before any answer. Add `--max-tokens 32000` (the default is already 32000;
 only lower it deliberately).
 
