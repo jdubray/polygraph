@@ -1,0 +1,27 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    { "name": "state", "type": "enum: NEW | PENDING | CHARGED | SHIPPED | DELIVERED | CANCELLED | REFUNDED" },
+    { "name": "charged", "type": "boolean — charge() effect emitted (one-shot)" },
+    { "name": "shipped", "type": "boolean — ship() effect emitted (one-shot)" }
+  ],
+  "initState": { "state": "NEW", "charged": false, "shipped": false },
+  "actions": {
+    "submit": { "dataFields": { "actor": "customer id" } },
+    "charge": { "dataFields": {} },
+    "ship": { "dataFields": {} },
+    "deliver": { "dataFields": {} },
+    "cancel": { "dataFields": {} },
+    "refund": { "dataFields": {} }
+  },
+  "dataDomain": {
+    "submit": { "actor": ["alice"] },
+    "charge": {},
+    "ship": {},
+    "deliver": {},
+    "cancel": {},
+    "refund": {}
+  },
+  "terminalStates": ["DELIVERED", "CANCELLED", "REFUNDED"],
+  "invariants": "invariants.mjs"
+}

@@ -1,0 +1,39 @@
+{
+  "tool": "polyvers",
+  "milestone": "M3",
+  "changeId": "a1b2c3d4e5f6",
+  "oldVersion": "11aa22bb33cc",
+  "newVersion": "44dd55ee66ff",
+  "lanes": ["shape", "migration", "semantic"],
+  "diffs": {
+    "shape": { "changed": true, "added": ["riskHold"], "removed": [], "retyped": [] },
+    "intent": { "changed": true, "added": ["state:no-ship-under-risk-hold"], "removed": [] },
+    "moduleChanged": true,
+    "migrationChanged": true
+  },
+  "corpus": { "source": "live fleet snapshots", "count": 3, "migrated": true },
+  "gates": [
+    { "gate": "load", "ok": true, "summary": "module surface, validate(), contract cross-checks", "failures": [] },
+    { "gate": "invariant-diff", "ok": true, "summary": "strengthened: state:no-ship-under-risk-hold", "failures": [] },
+    {
+      "gate": "migrate",
+      "ok": true,
+      "summary": "migrate.cjs validated over 3 live snapshot(s)",
+      "failures": [],
+      "migratedCorpus": [
+        { "id": "live#o1", "state": { "state": "DELIVERED", "charged": true, "shipped": true }, "source": "live" },
+        { "id": "live#o2", "state": { "state": "CHARGED", "charged": true, "shipped": false }, "source": "live" },
+        { "id": "live#o3", "state": { "state": "SHIPPED", "charged": true, "shipped": false }, "source": "live" }
+      ]
+    },
+    {
+      "gate": "semantic-model-check",
+      "ok": false,
+      "summary": "a live SHIPPED order can be driven past the new no-ship-under-risk-hold rule",
+      "failures": [
+        { "id": "live#o3", "reason": "already shipped; v2 would have blocked it under risk-hold" }
+      ]
+    }
+  ],
+  "verdict": "FAIL"
+}

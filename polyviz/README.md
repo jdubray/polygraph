@@ -6,7 +6,8 @@ counterexample, the compat verdict — into a fixed catalog of clean,
 brand-consistent SVGs. Same inputs → **byte-identical** output, no model call at
 render time.
 
-Full spec: [`docs/polyviz-spec.md`](../docs/polyviz-spec.md).
+Full spec: [`docs/polyviz-spec.md`](../docs/polyviz-spec.md). Worked example (real
+artifacts → the full catalog): [`examples/polyviz-oms/`](../examples/polyviz-oms/).
 
 ## Status
 
