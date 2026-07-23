@@ -39,6 +39,11 @@ Useful flags:
   written. Optional: `--tla-bound N`, `--tla-timeout <seconds>`.
 - `--invariants <inv.mjs>` / `--max-states N` — the model-checking half
   (Part 2); runs automatically when `invariants.mjs` sits beside the contract.
+- `--no-auto-regen` — generation mode regenerates ONCE automatically when the
+  first pass hits the reject-as-annotation signature uniformly (every live
+  spec rejected ≥2 windows the code acted on); this flag disables that. Both
+  spec sets are kept (`out/specs/`, `out/specs_regen/`) and findings.md names
+  both passes.
 - `--initial-states <states.json>` — a JSON array of state objects seeded into
   every per-spec model check alongside `init()`. This is the remedy for a
   `FROZEN STATE KEY` warning in `findings.md` (a key no action changes leaves

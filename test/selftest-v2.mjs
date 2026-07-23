@@ -7,7 +7,7 @@
 // Run: node test/selftest-v2.mjs   (also wired into `npm test`)
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, mkdirSync, writeFileSync, rmSync, cpSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, rmSync, cpSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -462,6 +462,42 @@ ${V2_FOOTER}`, 'utf-8');
   // A clean run reports zero and stays quiet.
   ok('clean v2 run: no rejected-but-code-acted noise',
     e2e.summary.rejectedActedWindows === 0);
+
+  // Auto-regeneration end-to-end via the test seam (_generateSpecs): the
+  // first pass "generates" the pure-reject trap spec, verify detects the
+  // uniform signature, regenerates once with the correction addendum, and
+  // reports the clean second pass — no API involved.
+  const goodSrc = readFileSync(join(EX, 'specs', readdirSync(join(EX, 'specs'))[0]), 'utf-8');
+  const trapSrc = readFileSync(join(pureDir, 'spec_0.js'), 'utf-8');
+  const genPrompts = [];
+  const fakeGen = async ({ prompt }) => { genPrompts.push(prompt); return [{ ok: true, index: 0, spec: genPrompts.length === 1 ? trapSrc : goodSrc }]; };
+  const hadKey = 'ANTHROPIC_API_KEY' in process.env;
+  if (!hadKey) process.env.ANTHROPIC_API_KEY = 'test-seam-key';
+  try {
+    const regenRun = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), source: join(EX, 'contract.json'), model: 'test-model', n: '1', out: join(TMP, 'out-regen'), _generateSpecs: fakeGen });
+    ok('regen triggered: one regeneration, correction addendum OVERRIDES the base prompt',
+      genPrompts.length === 2 && /CORRECTION FROM A PRIOR ATTEMPT/.test(genPrompts[1]) && /OVERRIDES everything above/.test(genPrompts[1]) && !/CORRECTION FROM A PRIOR ATTEMPT/.test(genPrompts[0]));
+    ok('second pass reported with first-pass numbers preserved',
+      regenRun.summary.regen && regenRun.summary.regen.firstPass.rejectedActedWindows >= 2
+      && regenRun.summary.consistent === 12);
+    ok('both spec sets on disk (specs/ + specs_regen/)',
+      readdirSync(join(TMP, 'out-regen', 'specs')).length === 1 && readdirSync(join(TMP, 'out-regen', 'specs_regen')).length === 1);
+    const regenMd = readFileSync(join(TMP, 'out-regen', 'findings.md'), 'utf-8');
+    ok('findings.md names both passes and the contract-question caveat',
+      /AUTO-REGENERATED/.test(regenMd) && /CONTRACT QUESTION FIRST/.test(regenMd));
+    // Opt-out: same trap, no regeneration, signature stays in the report.
+    const genPrompts2 = [];
+    const fakeGen2 = async ({ prompt }) => { genPrompts2.push(prompt); return [{ ok: true, index: 0, spec: trapSrc }]; };
+    const noRegen = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), source: join(EX, 'contract.json'), model: 'test-model', n: '1', out: join(TMP, 'out-noregen'), 'no-auto-regen': true, _generateSpecs: fakeGen2 });
+    ok('--no-auto-regen: single pass, signature reported, no regen block',
+      genPrompts2.length === 1 && noRegen.summary.rejectedActedWindows >= 2 && !noRegen.summary.regen);
+  } finally {
+    if (!hadKey) delete process.env.ANTHROPIC_API_KEY;
+  }
+  let regenSpecsErr = false;
+  try { await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: pureDir, 'no-auto-regen': true, out: join(TMP, 'out-x') }); }
+  catch (e) { regenSpecsErr = /only affects generation mode/.test(e.message); }
+  ok('--no-auto-regen with --specs is a loud error, never silently ignored', regenSpecsErr);
 
   // Projection basis: "the code ACTED" must use the replayer's own rule
   // (only keys present in the trace post count). In a delta-shaped corpus

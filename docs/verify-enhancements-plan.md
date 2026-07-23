@@ -102,6 +102,40 @@ write-then-reject belongs in the library — drafted upstream:
 
 All milestones done.
 
+## M8 — named-rule ≠ rejection (n8n field study)
+
+**Implemented** with `eval/FINDING-n8n-reject-no-write.md` (fifth target; no
+defect in n8n; the pure-reject trap reproduced 5/5 AFTER the 6.1.0 prompt
+wording fix — trigger isolated to "branch maps to a named specialRules
+entry", independent of whether the rule describes a no-op). Root cause was
+the tool's own directive: the template headed specialRules "REQUIRED
+reject(reason) cases" and the renderer commanded `reject('name')` for every
+rule. Fix (both suggested angles): (1)
+`renderSpecialRulesAsRejections(contract, windows)` classifies each rule
+against the corpus — [REJECTION] when its matching windows all no-op,
+[BEHAVIORAL — must NOT reject] when they change state, decide-from-source
+when unexercised; polygen's no-corpus path keeps the authored must-reject
+reading; the template teaches the observable-change decision test. (2) The
+`rejectedActedWindows` signal is promoted to an **auto-regeneration
+trigger**: uniform signature on ≥2 windows in generation mode → one
+regeneration with the offending windows called out, second pass reported,
+both spec sets kept, `--no-auto-regen` opts out. Review findings fixed:
+MIXED rules (some windows no-op, some change) render two-armed
+instructions split by pre-state — or the per-branch observable-change test
+when the arms overlap — never one absolute (an absolute manufactured the
+inverse act-instead-of-reject trap, reproduced on the repo's own
+m04-doc-approval corpus); whenState idioms ("key == 'value'", 'any')
+normalize before matching; name-only rules render as documentation, never
+a blanket command; `changed` uses `stable()` (the replayer's canonical
+equality); the regen addendum declares precedence over the base prompt's
+Special-rules lines; findings.md's regen banner and the skill's Step-5
+triage both flag the contract-question tension (if the contract
+deliberately declared those windows no-ops, the FIRST pass was the
+signal — `--no-auto-regen`); `--no-auto-regen` with `--specs` errors
+loudly. The regen path is tested end-to-end through the
+`opts._generateSpecs` seam (trigger, addendum, both-passes report,
+opt-out) — no live API in tests.
+
 **Upstream closure (2026-07-23):** both drafts filed and shipped —
 sam-lib **#35** (union types) and **#36** (reject-after-write hard-fail,
 per-acceptor: a different acceptor's veto after another wrote stays legal)

@@ -296,6 +296,79 @@ ok('the v2 reference spec passes the gate',
     /k: \{ type: 'object', nullable: true \}/.test(observedSingle));
 }
 
+// ── Special rules classified against the corpus (n8n field study) ───────────
+// The 5/5 reject-on-every-named-branch trigger was the renderer COMMANDING
+// reject('name') for every named rule, including rules naming behavioral
+// branches. With a corpus, each rule is classified by what the code actually
+// does on its matching windows.
+{
+  const { renderSpecialRulesAsRejections } = await import('../scripts/contract_render.mjs');
+  const srContract = {
+    stateKeys: [{ name: 'status', type: 'string' }],
+    initState: { status: 'running' },
+    actions: { FINISH: { dataFields: {} } },
+    specialRules: [
+      { name: 'wait-till-gates-outcome', whenState: 'running', whenAction: 'FINISH', note: 'gates between waiting and success.' },
+      { name: 'finish-after-done-is-noop', whenState: 'done', whenAction: 'FINISH', note: 'already finished.' },
+      { name: 'never-exercised-rule', whenState: 'ghost', whenAction: 'FINISH' },
+      { name: 'finish-any-gate', whenAction: 'FINISH', note: 'action-only rule spanning both arms.' },
+      { name: 'idiom-rule', whenState: "status == 'done'", whenAction: 'FINISH' },
+      { name: 'doc-note' },
+    ],
+  };
+  const srWindows = [
+    { pre: { status: 'running' }, action: 'FINISH', data: {}, post: { status: 'waiting' } },  // behavioral
+    { pre: { status: 'running' }, action: 'FINISH', data: {}, post: { status: 'success' } },  // behavioral
+    { pre: { status: 'done' }, action: 'FINISH', data: {}, post: { status: 'done' } },        // genuine no-op
+  ];
+  const classified = renderSpecialRulesAsRejections(srContract, srWindows);
+  ok('a named rule whose windows CHANGE state classifies BEHAVIORAL (must NOT reject)',
+    /wait-till-gates-outcome\*\* \[BEHAVIORAL/.test(classified) && /MUST NOT call reject\(\)/.test(classified));
+  ok('a named rule whose windows are all no-ops classifies REJECTION (must reject)',
+    /finish-after-done-is-noop\*\* \[REJECTION/.test(classified));
+  ok('a rule no window exercises defers to the source, not to its name',
+    /never-exercised-rule\*\* \(NOT exercised by any captured window\)/.test(classified) && /decide from the SOURCE/.test(classified));
+
+  // MIXED rules (review finding): one absolute for the whole rule would
+  // manufacture the inverse trap on one arm. Disjoint arms split by
+  // pre-state; overlapping arms get the per-branch decision test.
+  ok('a mixed rule with disjoint arms renders BOTH instructions, split by pre-state',
+    /finish-any-gate\*\* \[MIXED — 2\/3/.test(classified)
+    && /from status `running` the code TRANSITIONS/.test(classified)
+    && /from status `done` the code does NOTHING \(the acceptor MUST call `reject\('finish-any-gate'\)`\)/.test(classified));
+  const dd = renderSpecialRulesAsRejections(
+    { stateKeys: ['s'], specialRules: [{ name: 'dd', whenAction: 'GO' }] },
+    [{ pre: { s: 'a' }, action: 'GO', data: {}, post: { s: 'b' } },
+     { pre: { s: 'a' }, action: 'GO', data: {}, post: { s: 'a' } }]);
+  ok('overlapping (data-dependent) arms render the per-branch test, no absolutes',
+    /\[MIXED, data-dependent — 1\/2/.test(dd) && /PER BRANCH/.test(dd) && !/MUST NOT call reject\(\) —/.test(dd));
+
+  // whenState idioms used by in-repo contracts ("key == 'value'", 'any')
+  // must classify from evidence, not silently fall to decide-from-source.
+  ok("the \"key == 'value'\" whenState idiom matches and classifies",
+    /idiom-rule\*\* \[REJECTION/.test(classified));
+  const anyRule = renderSpecialRulesAsRejections(
+    { stateKeys: [{ name: 'status', type: 'string' }], specialRules: [{ name: 'wild', whenState: 'any', whenAction: 'FINISH' }] },
+    srWindows);
+  ok("whenState 'any' is a wildcard, not an unexercised rule", /wild\*\* \[MIXED/.test(anyRule));
+
+  // A name-only rule (neither whenState nor whenAction) must never become a
+  // blanket command in either direction.
+  ok('a name-only rule renders as documentation, not a command',
+    /doc-note\*\* \(name-only rule — documentation\)/.test(classified) && !/doc-note\*\* \[/.test(classified));
+
+  // Canonical equality: key-order-scrambled nested state is a NO-OP.
+  const ko = renderSpecialRulesAsRejections(
+    { stateKeys: ['s'], specialRules: [{ name: 'ko', whenAction: 'GO' }] },
+    [{ pre: { s: { a: 1, b: 2 } }, action: 'GO', data: {}, post: { s: { b: 2, a: 1 } } }]);
+  ok('key-order-scrambled no-op classifies REJECTION (stable equality, not raw stringify)',
+    /ko\*\* \[REJECTION/.test(ko));
+  ok('without a corpus (polygen authoring path) the must-reject reading is unchanged',
+    /MUST call `reject\('wait-till-gates-outcome'\)`/.test(renderSpecialRulesAsRejections(srContract)));
+  ok('the template says a named rule is NOT an instruction to reject',
+    /a named rule is NOT an instruction to reject/.test(v2Prompt) && /observable state CHANGE/i.test(v2Prompt));
+}
+
 // ── Reject-as-annotation trap (hatchet field study) ─────────────────────────
 // 5/5 generations appended reject(reason) after correct next.* writes,
 // reading the special-rule notes as "tag this success with its reason". The

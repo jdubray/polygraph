@@ -3,6 +3,31 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 6.2.0 — 2026-07-23
+
+**A named rule is not an instruction to reject (n8n field study, M8).**
+The fifth field target (`eval/FINDING-n8n-reject-no-write.md`, no defect in
+n8n) reproduced the pure-reject trap 5/5 even after 6.1.0's prompt wording
+fix, and isolated the real trigger: generations reject every branch that
+maps to a **named** `specialRules` entry — because the template and
+renderer literally commanded it ("REQUIRED reject(reason) cases" / "the
+acceptor MUST call reject('name')") for every rule, including rules naming
+behavioral branches.
+
+- `renderSpecialRulesAsRejections(contract, windows)` now **classifies each
+  rule against the captured corpus**: matching windows all no-op →
+  `[REJECTION — must reject]`; matching windows change state →
+  `[BEHAVIORAL — must perform the transition, MUST NOT reject; the name is
+  only the why]`; unexercised → decide from the source. The template
+  teaches the observable-change decision test; polygen's no-corpus
+  authoring path keeps the must-reject reading.
+- **Auto-regeneration**: when the first generation pass hits the
+  reject-as-annotation signature uniformly (every live spec rejected ≥2
+  windows the code acted on), verify regenerates once with the offending
+  (pre-state, action) windows called out and reports the second pass —
+  both spec sets kept (`specs/`, `specs_regen/`), `--no-auto-regen` opts
+  out, findings.md names both passes.
+
 ## 6.1.0 — 2026-07-23
 
 **sam-pattern 2.2.0 — both field-study traps fixed at the library layer.**

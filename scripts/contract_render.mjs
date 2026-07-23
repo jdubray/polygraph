@@ -2,7 +2,7 @@
 // contract's state keys / init state / action alphabet are shown to a model,
 // so build_prompt.mjs (audit mode) and polygen_prompts.mjs (author mode)
 // never drift into describing the same contract differently.
-import { dataFieldsOf } from './load-spec.mjs';
+import { dataFieldsOf, stable } from './load-spec.mjs';
 
 /** Render the observable-state key list from the contract. */
 export function renderStateKeys(contract) {
@@ -293,7 +293,19 @@ export function renderIntentDomains(contract) {
  * named rejection in the generated acceptor, so the replayer's rejection
  * column has a contract-anchored reason string to check.
  */
-export function renderSpecialRulesAsRejections(contract) {
+// windows: the trace corpus, when available. Field data (n8n study,
+// eval/FINDING-n8n-reject-no-write.md) isolated the trigger for the 5/5
+// reject-on-every-named-branch failure: generations reject ANY branch that
+// maps to a named specialRules entry, independent of whether the rule
+// describes a no-op — and this renderer used to COMMAND exactly that
+// ("the acceptor MUST call reject(name)") for every rule. The corpus knows
+// the truth: a rule whose matching windows all show post == pre (projection
+// basis) is a genuine rejection; one whose windows show observable change
+// names a BEHAVIORAL branch — the acceptor must perform the transition, and
+// the name is only the why. Without a corpus (polygen's authoring path) the
+// old must-reject reading is kept: there, specialRules are authored no-op
+// declarations by construction.
+export function renderSpecialRulesAsRejections(contract, windows = []) {
   const rules = contract.specialRules || [];
   if (!rules.length) {
     return (
@@ -301,13 +313,65 @@ export function renderSpecialRulesAsRejections(contract) {
       '  implementation ignores in a given state; never fall through silently)'
     );
   }
+  const primaryKey = contract.stateKeys && contract.stateKeys[0]
+    ? (typeof contract.stateKeys[0] === 'string' ? contract.stateKeys[0] : contract.stateKeys[0].name)
+    : null;
+  // stable(): the SAME canonical equality the replayer and the
+  // rejectedActedWindows detector use — raw JSON.stringify is key-order
+  // sensitive and would let a rebuilt-object trace misclassify a rule.
+  const changed = (w) => Object.keys(w.post || {}).some((k) => stable(w.pre?.[k]) !== stable(w.post[k]));
+  // In-repo contracts write whenState in several idioms: a bare value, the
+  // "<key> == VALUE" / "<key> == 'VALUE'" form, or the wildcard 'any'.
+  // Normalize before matching so those rules classify from evidence instead
+  // of silently falling into the decide-from-source bucket.
+  const normState = (s) => String(s).replace(/^\s*[\w.]+\s*==\s*/, '').replace(/^['"]|['"]$/g, '').trim();
+  const isWildcard = (s) => /^(any|\*)$/i.test(normState(s));
   return rules
     .map((r) => {
       const where = [r.whenState ? `the primary state is \`${r.whenState}\`` : null, r.whenAction ? `the action is \`${r.whenAction}\`` : null]
         .filter(Boolean)
         .join(' and ');
       const note = r.note ? ` ${r.note}` : '';
-      return `  - **${r.name}**: when ${where || 'this rule applies'}, the acceptor MUST call \`reject('${r.name}')\` (do not fall through silently).${note}`;
+      // A rule with NEITHER whenState nor whenAction would match every
+      // window — a name-only doc note must never become a blanket command
+      // in either direction.
+      if (!r.whenState && !r.whenAction) {
+        return `  - **${r.name}** (name-only rule — documentation): decide reject-vs-transition per branch by the observable-change test; the name is a reason string, not an instruction.${note}`;
+      }
+      const matching = windows.filter((w) =>
+        (!r.whenAction || w.action === r.whenAction)
+        && (!r.whenState || isWildcard(r.whenState) || !primaryKey || String(w.pre?.[primaryKey]) === normState(r.whenState)));
+      if (!windows.length || !matching.length) {
+        // Unclassifiable (no corpus, or no window exercises the rule): the
+        // authored-intent reading for polygen; a decide-from-source order for
+        // the audit path where a corpus exists but never hits the rule.
+        return windows.length
+          ? `  - **${r.name}** (NOT exercised by any captured window): when ${where || 'this rule applies'}, decide from the SOURCE — call \`reject('${r.name}')\` ONLY if the code observably does nothing there; if the code acts, perform the transition and treat the name as documentation.${note}`
+          : `  - **${r.name}**: when ${where || 'this rule applies'}, the acceptor MUST call \`reject('${r.name}')\` (do not fall through silently).${note}`;
+      }
+      const actedW = matching.filter(changed);
+      const noopW = matching.filter((w) => !changed(w));
+      if (actedW.length === 0) {
+        return `  - **${r.name}** [REJECTION — every captured window here is a no-op]: when ${where || 'this rule applies'}, the acceptor MUST call \`reject('${r.name}')\` (do not fall through silently).${note}`;
+      }
+      if (noopW.length === 0) {
+        return `  - **${r.name}** [BEHAVIORAL — the captured windows here CHANGE state (${actedW.length}/${matching.length})]: when ${where || 'this rule applies'}, the acceptor MUST perform the real transition via \`next.*\` writes and MUST NOT call reject() — this rule's name/note only documents WHY the transition looks the way it does.${note}`;
+      }
+      // MIXED rule: both arms exist in the corpus. Split by pre-state when
+      // the arms are disjoint on the primary key (the common guard shape);
+      // otherwise the branch is data-dependent and the instruction is the
+      // decision TEST, never an absolute in either direction — an absolute
+      // here would manufacture the inverse trap (act-instead-of-reject) on
+      // one of the arms.
+      const statesOf = (ws) => [...new Set(ws.map((w) => stable(w.pre?.[primaryKey])))];
+      const actedStates = primaryKey ? statesOf(actedW) : [];
+      const noopStates = primaryKey ? statesOf(noopW) : [];
+      const disjoint = primaryKey && !actedStates.some((s) => noopStates.includes(s));
+      if (disjoint) {
+        const fmt = (arr) => arr.map((s) => `\`${JSON.parse(s)}\``).join(', ');
+        return `  - **${r.name}** [MIXED — ${actedW.length}/${matching.length} captured windows change state]: when ${where || 'this rule applies'} — from ${primaryKey} ${fmt(actedStates)} the code TRANSITIONS (the acceptor MUST write \`next.*\`, MUST NOT reject); from ${primaryKey} ${fmt(noopStates)} the code does NOTHING (the acceptor MUST call \`reject('${r.name}')\`).${note}`;
+      }
+      return `  - **${r.name}** [MIXED, data-dependent — ${actedW.length}/${matching.length} captured windows change state]: when ${where || 'this rule applies'}, apply the observable-change test PER BRANCH: write \`next.*\` where the code acts, \`reject('${r.name}')\` where it observably does nothing — never one absolute for the whole rule.${note}`;
     })
     .join('\n');
 }

@@ -93,8 +93,11 @@ MUST export exactly this shape:
     entire `next` draft, silently throwing away work. There is NO
     "accept with a reason" primitive: never call `reject(reason)` to tag,
     annotate, or explain a SUCCESSFUL transition (a branch that assigns
-    `next.*` simply returns after its writes; the special-rule names below
-    are reasons for REJECTIONS only, not labels for accepted branches).
+    `next.*` simply returns after its writes). Decide reject-vs-transition
+    by the OBSERVABLE-CHANGE test alone (see Special rules) — NEVER by
+    whether the branch has a named rule: a named rule on a branch where the
+    code changes state documents a real transition, and rejecting there
+    throws the correct behavior away.
 - `init()` — resets to the initial state: EXACTLY `setState(INITIAL_STATE)` and
   nothing else. Do NOT call `instance({}).state()` (no clearError idiom;
   `getState()` is the safe snapshot accessor).
@@ -108,10 +111,15 @@ Action alphabet, for reference (name — data shape):
 
 {action_alphabet}
 
-## Special rules (REQUIRED reject(reason) cases)
+## Special rules (named rules from the contract — classified below)
 
-Each rule below must be an OBSERVABLE rejection in the matching acceptor —
-never a silent fall-through:
+A rule's name and note are DOCUMENTATION of why a branch behaves as it does
+— a named rule is NOT an instruction to reject. Decide reject-vs-transition
+ONLY by asking: does the code's observable state CHANGE on this
+(state, action)? If it changes, the acceptor MUST perform the transition via
+`next.*` writes (the rule name is just the why); if the code observably does
+nothing, the acceptor MUST `reject(reason)` — never a silent fall-through.
+Each rule below carries its classification from the captured trace corpus:
 
 {special_rules_rejections}
 

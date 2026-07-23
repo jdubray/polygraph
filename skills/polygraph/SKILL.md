@@ -76,9 +76,16 @@ Produce a `contract.json` (schema and example under
   action, one handled message).
 - **initState**, **terminalStates**, and **specialRules** (guards / rewrites /
   special cases that live outside the main state table — these are the rules
-  models most often miss, so flag them for extra trace coverage). In the v2
-  pipeline specialRules render as named rejection requirements, so the
-  replayer's rejection-reason column has something contract-anchored to check.
+  models most often miss, so flag them for extra trace coverage). A rule's
+  name/note is DOCUMENTATION of why a branch behaves as it does — naming a
+  rule does NOT make that branch a rejection. In the v2 pipeline each rule is
+  CLASSIFIED against the captured corpus (n8n field study,
+  `eval/FINDING-n8n-reject-no-write.md`: generations rejected every branch
+  that carried a rule name until the prompt distinguished them): windows all
+  no-op → rendered as a required `reject(name)`; windows change state →
+  rendered as a named BEHAVIORAL rule the acceptor must perform; unexercised
+  → decide-from-source. Name rules for behavioral branches freely — but give
+  every rule trace coverage so it classifies from evidence.
 - **dataDomain** — REQUIRED in the v2 default for every action with data
   fields: a finite list of representative payload values per field. It is the
   generation domain, the model-checking exploration domain, and the TLC
@@ -178,6 +185,11 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs \
 This builds a derivation-mode prompt (it never describes per-state semantics),
 generates N independent specs, replays each, and writes `out/findings.md` and
 `out/findings.json`. Use `--n 3` or more; a single generation may omit a rule.
+If the first pass hits the reject-as-annotation signature uniformly (every
+live spec rejected ≥2 windows the code acted on), verify **auto-regenerates
+once** with the offending branches called out and reports the second pass —
+both spec sets are preserved (`specs/`, `specs_regen/`); `--no-auto-regen`
+disables this.
 Add `--legacy-bare-next` to run the whole loop on the legacy bare-next
 artifact instead (prompt, replayer, and checker domains all follow the flag).
 
@@ -265,8 +277,13 @@ no-op classes (the spec explicitly declined, or explicitly re-committed the
 same state); `unhandled` — the spec neither acted nor rejected — is itself a
 finding (usually a missing acceptor case, or a rule the code has that the
 contract does not). A *uniform* rejection-reason on a code-finding window
-usually means the contract took a side (a specialRule rendered as a rejection
-requirement) that the code did not — triage it as a contract question first.
+usually means the contract took a side (a specialRule the corpus classified —
+or an authored rule declaring a no-op) that the code did not — triage it as a
+contract question first. Note the tension with auto-regeneration: the regen
+trigger fires on this same signature and re-prompts toward the CODE's
+behavior; if the contract deliberately declared those windows no-ops, the
+first pass in `specs/` was the real signal — re-run with `--no-auto-regen`
+before accepting the regenerated pass.
 And a `rejected(...)` classification on windows where the TRACE changed state
 (the report counts these as "REJECTED while the code ACTED") is the
 **reject-as-annotation trap** when uniform: a generation computes the correct

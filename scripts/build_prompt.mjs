@@ -59,7 +59,7 @@ export function buildPrompt(contract, sourceCode, { filePath = 'source', lang = 
       .replaceAll('{model_shape}', () => indent(renderModelShape(contract, windows)))
       .replaceAll('{intent_schemas}', () => indent(renderIntentSchemas(contract, windows)))
       .replaceAll('{intent_domains}', () => indent(renderIntentDomains(contract)))
-      .replaceAll('{special_rules_rejections}', () => renderSpecialRulesAsRejections(contract));
+      .replaceAll('{special_rules_rejections}', () => renderSpecialRulesAsRejections(contract, windows));
   }
   return out.replaceAll('{source_code}', () => sourceCode);
 }

@@ -36,7 +36,7 @@ function resolveInvariantsPath(opts, contract) {
 // The flags that ARE boolean. Every other flag takes a value — inferring
 // "boolean" from the next token being a flag turned `--n --tla` into
 // `n: true` (and `Number(true) === 1`), silently gutting the N-way vote.
-const BOOLEAN_FLAGS = new Set(['legacy-bare-next', 'tla']);
+const BOOLEAN_FLAGS = new Set(['legacy-bare-next', 'tla', 'no-auto-regen']);
 
 function parseArgs(argv) {
   const a = {};
@@ -95,10 +95,14 @@ export async function verify(opts) {
 
   // Obtain spec file paths.
   let specPaths = [];
+  let genContext = null; // set in generation mode; enables the auto-regeneration pass
   if (opts.specs && (opts.model || opts.source)) {
     // Replaying saved specs while silently ignoring --model/--source would
     // let a user believe they re-generated against new source.
     throw new Error('--specs replays SAVED specs and cannot be combined with --model/--source (drop --specs to generate, or drop the generation flags to replay)');
+  }
+  if (opts.specs && (opts['no-auto-regen'] || opts.noAutoRegen)) {
+    throw new Error('--no-auto-regen only affects generation mode — replaying saved specs (--specs) never regenerates');
   }
   if (opts.specs) {
     // Accept .js and .cjs (the CJS loader executes both). .mjs is ESM, which
@@ -129,7 +133,9 @@ export async function verify(opts) {
     // single-type declaration the strict checker throws on.
     const prompt = buildPrompt(contract, source, { filePath: opts.source, lang, mode, windows });
     const maxTokens = posInt(opts['max-tokens'], 'max-tokens', undefined);
-    const gens = await generateSpecs({ prompt, model: opts.model, n: posInt(opts.n, 'n', 5), apiKey, maxTokens });
+    genContext = { prompt, model: opts.model, n: posInt(opts.n, 'n', 5), apiKey, maxTokens };
+    const gen = opts._generateSpecs || generateSpecs; // test seam (selftest drives generation+regen without an API)
+    const gens = await gen({ prompt, model: genContext.model, n: genContext.n, apiKey, maxTokens });
     const specDir = join(outDir, 'specs');
     mkdirSync(specDir, { recursive: true });
     gens.forEach((g) => {
@@ -143,8 +149,10 @@ export async function verify(opts) {
   // result additionally carries the step classification from lastStep()
   // ('mutated' | 'rejected' | 'identity-by-mutation' | 'unhandled', plus
   // rejectionReason) — new triage evidence: a failing no-op window now says
-  // WHY the spec did nothing.
-  const detail = specPaths.map((p) => replaySpecResults(p, windows, mode)); // detail[spec]
+  // WHY the spec did nothing. Wrapped as a function so the auto-regeneration
+  // pass (below) can score a second spec set with identical rules.
+  const analyzeSpecs = (paths) => {
+  const detail = paths.map((p) => replaySpecResults(p, windows, mode)); // detail[spec]
   const matrix = detail.map((resp) =>
     resp.ok ? resp.results.map((r) => r.status) : windows.map(() => 'unscoreable')); // matrix[spec][window]
 
@@ -153,8 +161,8 @@ export async function verify(opts) {
   // as 'spec-error' and drown real signal. Windows are classified over live
   // specs only; dead specs are reported separately, never silently.
   const deadIdx = matrix.map((row, i) => (row.every((s) => s === 'unscoreable') ? i : -1)).filter((i) => i >= 0);
-  const liveIdx = specPaths.map((_, i) => i).filter((i) => !deadIdx.includes(i));
-  const deadSpecs = deadIdx.map((i) => specPaths[i].replace(/^.*[\\/]/, ''));
+  const liveIdx = paths.map((_, i) => i).filter((i) => !deadIdx.includes(i));
+  const deadSpecs = deadIdx.map((i) => paths[i].replace(/^.*[\\/]/, ''));
   // ── Spec-vs-spec agreement (M3) ───────────────────────────────────────────
   // The spec-vs-TRACE verdict below is blind to the structure of a
   // disagreement among the specs themselves. The raft field study's key
@@ -164,7 +172,7 @@ export async function verify(opts) {
   // lesson 3). Computed over LIVE specs only; a lopsided split is evidence
   // of a legibility trap in the source, NOT evidence the majority is right —
   // in the raft case the majority was wrong.
-  const liveNames = liveIdx.map((si) => specPaths[si].replace(/^.*[\\/]/, ''));
+  const liveNames = liveIdx.map((si) => paths[si].replace(/^.*[\\/]/, ''));
   let agreement = null;
   const windowSplits = windows.map(() => null); // per window: '4-vs-1 (minority: …)' when a strict majority exists
   if (liveIdx.length >= 2) {
@@ -249,7 +257,7 @@ export async function verify(opts) {
   });
 
   const summary = {
-    specs: specPaths.length,
+    specs: paths.length,
     liveSpecs: liveIdx.length,
     deadSpecs,
     agreement,
@@ -268,6 +276,61 @@ export async function verify(opts) {
     rejectedActedWindows: perWindow.filter((w) => w.rejectedButCodeActed).length,
   };
   const findings = perWindow.filter((w) => w.verdict !== 'consistent');
+  return { perWindow, summary, findings, matrix, liveIdx };
+  };
+
+  let analysis = analyzeSpecs(specPaths);
+
+  // ── Auto-regeneration on the uniform reject-as-annotation signature (M8) ──
+  // n8n field study (eval/FINDING-n8n-reject-no-write.md): the pure-reject
+  // variant of the trap reproduced 5/5 even after the 6.1.0 prompt fix — the
+  // trigger is a branch mapping to a NAMED specialRules entry, and the report
+  // detected it perfectly post-hoc. Promotion: when the signature is UNIFORM
+  // (every live spec rejected a window the code acted on, on >= 2 windows),
+  // regenerate ONCE with the offending branches called out instead of making
+  // the operator notice and re-run by hand. Generation mode + sam only; one
+  // extra API round at most; --no-auto-regen opts out; both passes reported.
+  if (genContext && mode === 'sam' && !(opts['no-auto-regen'] || opts.noAutoRegen)) {
+    const uniform = analysis.perWindow
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => e.rejectedButCodeActed
+        && (e.classifications || []).length > 0
+        && e.classifications.every((c) => typeof c === 'string' && c.startsWith('rejected')));
+    if (uniform.length >= 2) {
+      const examples = uniform.slice(0, 8).map(({ i }) => {
+        const w = windows[i];
+        return `- action '${w.action}' from pre-state ${JSON.stringify(w.pre)}: the code moves to ${JSON.stringify(w.post)}`;
+      }).join('\n');
+      const addendum = `\n\n## CORRECTION FROM A PRIOR ATTEMPT (read carefully — OVERRIDES everything above)\n\nA previous generation of this spec wrongly called reject() on the following windows, where the REAL code CHANGES observable state${uniform.length > 8 ? ` (showing 8 of ${uniform.length})` : ''}:\n\n${examples}\n\nOn these (pre-state, action) pairs the acceptor MUST perform the transition via next.* writes and MUST NOT call reject() — this correction takes PRECEDENCE over any Special rules line above that says to reject there (the captured behavior is the ground truth). A named special rule on such a branch documents WHY the transition looks the way it does — it does not make the branch a rejection.`;
+      console.error(`[verify] auto-regeneration: ${uniform.length} window(s) uniformly rejected-while-code-acted across all live specs — regenerating once with the offending branches called out (--no-auto-regen disables)`);
+      const gen2 = opts._generateSpecs || generateSpecs; // test seam (selftest drives the regen path without an API)
+      const gens2 = await gen2({ prompt: genContext.prompt + addendum, model: genContext.model, n: genContext.n, apiKey: genContext.apiKey, maxTokens: genContext.maxTokens });
+      const regenDir = join(outDir, 'specs_regen');
+      mkdirSync(regenDir, { recursive: true });
+      const regenPaths = [];
+      gens2.forEach((g) => {
+        if (g.ok) { const p = join(regenDir, `spec_${g.index}.js`); writeFileSync(p, g.spec, 'utf-8'); regenPaths.push(p); }
+        else console.error(`[verify] regeneration ${g.index} failed: ${g.error}`);
+      });
+      if (regenPaths.length) {
+        const second = analyzeSpecs(regenPaths);
+        second.summary.regen = {
+          triggeredBy: uniform.length,
+          firstPass: {
+            consistent: analysis.summary.consistent,
+            specError: analysis.summary.specError,
+            codeFinding: analysis.summary.codeFinding,
+            rejectedActedWindows: analysis.summary.rejectedActedWindows,
+          },
+        };
+        analysis = second;
+        specPaths = regenPaths;
+      } else {
+        console.error('[verify] regeneration produced no loadable specs — reporting the FIRST pass');
+      }
+    }
+  }
+  const { perWindow, summary, findings, matrix, liveIdx } = analysis;
 
   // ── Second half: model-check each spec against invariants (the bug-finder) ──
   // Replay only catches bugs where the spec DISAGREES with the code; a faithful
@@ -452,6 +515,10 @@ function renderMarkdown(summary, findings, invReport, tlaReport) {
     L.push(`- ⚠️ **${summary.deadSpecs.length} spec(s) failed to load/replay and were EXCLUDED from window verdicts: ${summary.deadSpecs.join(', ')}** — fix generation for these; the verdicts below cover the live specs only.`);
   }
   L.push(`- windows: **${summary.windows}**`);
+  if (summary.regen) {
+    const f = summary.regen.firstPass;
+    L.push(`- 🔁 **AUTO-REGENERATED**: the first generation pass hit the reject-as-annotation signature UNIFORMLY (every live spec rejected ${summary.regen.triggeredBy} window(s) the code acted on — first pass: ${f.consistent}/${summary.windows} consistent, ${f.rejectedActedWindows} rejected-while-acted). Specs were regenerated once with those branches called out; every number in this report is the SECOND pass (first-pass specs remain in \`specs/\`, regenerated specs in \`specs_regen/\`). ⚠️ CONTRACT QUESTION FIRST: if a specialRule DELIBERATELY declares those windows no-ops, the first pass was the contract-vs-code disagreement signal, and this regeneration pushed the specs to mimic the code — re-run with \`--no-auto-regen\` (or replay \`--specs out/specs\`) before accepting the second pass. \`--no-auto-regen\` disables this.`);
+  }
   if (summary.agreement) {
     const a = summary.agreement;
     const excluded = summary.windows - a.measuredWindows;
@@ -653,7 +720,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try { a = parseArgs(process.argv.slice(2)); }
   catch (e) { console.error('[verify] ' + e.message); process.exit(2); }
   if (!a.contract || !a.traces) {
-    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] | --specs <dir>) [--invariants <inv.mjs>] [--initial-states <states.json>] [--max-states N] [--out <dir>] [--legacy-bare-next] [--tla [--tla-bound N] [--tla-timeout <s>]]');
+    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] [--no-auto-regen] | --specs <dir>) [--invariants <inv.mjs>] [--initial-states <states.json>] [--max-states N] [--out <dir>] [--legacy-bare-next] [--tla [--tla-bound N] [--tla-timeout <s>]]');
     process.exit(2);
   }
   verify(a).then((r) => {
