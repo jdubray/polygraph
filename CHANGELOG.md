@@ -6,7 +6,9 @@ summarized from the git history; see `git log` for the full record.
 ## 6.0.0 — 2026-07-22
 
 **The strict-profile artifact moves to sam-pattern 2.1.2 — explicit
-next-state (prime) semantics.** sam-lib 2.1 (#25) makes strict acceptors
+next-state (prime) semantics.** sam-lib 2.1 ("#25" — the design's working
+name, used in the library's own error messages; tracked as sam-lib issue
+#34) makes strict acceptors
 TLA+-style next-state relations: `model` is the frozen pre-state, writes go
 to the `next` draft, and every declared variable is assigned or named
 `unchanged(...)` per accepted step — statement order can no longer change a
@@ -42,7 +44,11 @@ Coordinated upgrade across the toolset:
 Known nuance: under 2.1 an intent no acceptor constrains **throws**
 (`SamFrameError`, `unhandledIntent`) instead of warning, and async acceptors
 on a non-synchronized instance throw (2.1.2) instead of silently losing
-post-`await` writes.
+post-`await` writes. On that last class: the pre-2.1 form of the hazard (an
+async acceptor's late write landing in the live model) also existed in
+2.0.0, but no Polygraph artifact, prompt, or fixture has ever used an async
+acceptor (`hasAsyncActions: false` + synchronous acceptors are doctrine), so
+results produced under the 2.0.0 engine are unaffected.
 
 ## 5.0.0 — 2026-07-19
 
