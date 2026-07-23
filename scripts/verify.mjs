@@ -234,6 +234,7 @@ export async function verify(opts) {
     }));
     const violations = [...byName.values()].map((e) => ({ ...e, strength: ran.length > 0 && e.specs === ran.length ? 'all-specs' : 'some-specs' }));
     const domainNotes = [...new Set(ran.flatMap((r) => r.domainNotes || []))];
+    const driftWarnings = [...new Set(ran.flatMap((r) => r.driftWarnings || []))];
     // Frozen-key aggregation mirrors the violation strength rule: the claim
     // "the check is structurally blind behind this key" is strongest when
     // EVERY checked spec froze it; a key only some specs freeze is itself a
@@ -257,6 +258,7 @@ export async function verify(opts) {
       capHit: ran.some((r) => r.capHit),
       errors,
       domainNotes,
+      driftWarnings,
       frozenKeys,
       violations,
     };
@@ -421,6 +423,9 @@ function renderInvSection(L, invReport) {
   }
   L.push(`- states explored: **${invReport.statesExplored}** · specs checked: **${invReport.checkedSpecs}/${invReport.specs}**${invReport.capHit ? ' · ⚠️ **CAP HIT — exploration bounded, not exhaustive**' : ''}`);
   for (const n of invReport.domainNotes || []) L.push(`- ⚠️ WARNING: ${n}`);
+  // Likely-unbounded keys: the cap, not the machine, decided where exploration
+  // stopped — a clean verdict below covers an arbitrary prefix of the space.
+  for (const d of invReport.driftWarnings || []) L.push(`- ⚠️ WARNING: ${d}`);
   for (const f of invReport.frozenKeys || []) {
     const who = f.strength === 'all-specs' ? `every checked spec (${f.specs}/${invReport.checkedSpecs})` : `${f.specs}/${invReport.checkedSpecs} checked spec(s) — the others vary it, a spec disagreement worth a look`;
     // Two honesty qualifiers: (a) specs that froze the key at DIFFERENT

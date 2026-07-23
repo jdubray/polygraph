@@ -8,7 +8,22 @@ remedy works in the tool that prints the warning; capHit scopes the claim to
 EXPLORED states. Adversarially reviewed; all four confirmed findings fixed
 — non-object-state crash, first-spec-wins value aggregation, unactionable
 remedy flag, unqualified capHit claim. Deliberately NOT folded into
-`domainNotes`: polynv/polygen read those as "alphabet pruned".) M2–M5 open.
+`domainNotes`: polynv/polygen read those as "alphabet pruned".)
+
+**M2 implemented** (drift detector + heartbeat in `check.mjs` explore():
+per-key distinct-value tracking over init + BFS-discovered states, sampled
+every 256 discoveries; `driftWarnings` in the result, rendered in both
+reports; `POLYGRAPH_HEARTBEAT_MS`-tunable heartbeat, EPIPE-safe stderr.
+Review findings fixed: seeds excluded from the detector on both sides (a
+polyvers fleet corpus with per-instance ids would false-positive), drift
+verdicts reported only for TRUNCATED runs with a loud retraction line when
+a completed exploration disproves a mid-run warning, env parsing validated,
+consistent result shape on error paths. Recorded limits: the detector is
+single-key — a product-of-keys blowup is invisible to it (comment in code;
+absence of a warning is not evidence of boundedness); polynv/polyvers do
+not yet surface `driftWarnings` in their own verdict surfaces — follow-up.)
+
+M3–M5 open.
 
 **Thesis:** the first external field study
 ([eval/FINDING-raft-field-study.md](../eval/FINDING-raft-field-study.md),

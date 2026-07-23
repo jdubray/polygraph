@@ -477,5 +477,68 @@ console.log('9) frozen-field warning — the checker announces its structural bl
     undefRes.ok === false && undefRes.violations.length > 0 && Array.isArray(undefRes.frozenKeys) && undefRes.frozenKeys.length === 0);
 }
 
+console.log('10) runaway-exploration guardrails — drift detection + heartbeat');
+// An action that mints a fresh state forever (unbounded monotonic counter)
+// turns the default cap into a silent multi-minute grind; the guardrail warns
+// EARLY instead of guessing a universal bound.
+{
+  const runaway = { init: () => ({ phase: 'up', term: 0 }), next: (s, a) => (a === 'TICK' ? { phase: 'up', term: s.term + 1 } : { phase: s.phase, term: s.term }) };
+  const runContract = { stateKeys: ['phase', 'term'], actions: { TICK: { dataFields: {} } } };
+  const drifted = check({ specModule: runaway, contract: runContract, invariants: {}, maxStates: 600, driftThreshold: 256 });
+  ok('unbounded key detected before the cap grinds',
+    (drifted.driftWarnings || []).some((w) => /state key 'term' has \d+ distinct values/.test(w) && /likely unbounded/.test(w)));
+  ok('the bounded key is not flagged as drifting', !drifted.driftWarnings.some((w) => /'phase'/.test(w)));
+  ok('drift warning surfaces in check render', /WARNING: state key 'term'/.test(renderCheck(drifted)));
+  ok('drift tracking stays deterministic (double-pass digest unaffected)', drifted.nondeterministic === false);
+  ok('bounded machine emits no drift warnings (no new noise)',
+    check({ specModule: fixed, contract: counterContract, invariants: inv }).driftWarnings.length === 0);
+
+  // A COMPLETED exploration retracts any mid-run drift suspicion: an exhausted
+  // frontier is definitive disproof of "still growing", so a large bounded
+  // machine must never be called likely-unbounded in the result.
+  const boundedBig = { init: () => ({ n: 0 }), next: (s, a) => (a === 'TICK' && s.n < 700 ? { n: s.n + 1 } : { n: s.n }) };
+  const bigRes = check({ specModule: boundedBig, contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }, invariants: {}, maxStates: 5000, driftThreshold: 256 });
+  ok('bounded-but-large machine: completed exploration reports NO drift (mid-run suspicion retracted)',
+    bigRes.capHit === false && bigRes.driftWarnings.length === 0);
+
+  // Fleet-style seeds carrying a per-instance distinct key (polyvers seeds
+  // every snapshot) must not inflate the detector: drift is about what
+  // exploration MINTS, not what it was handed.
+  const idle = { init: () => ({ phase: 'up', id: 0 }), next: (s) => ({ phase: s.phase, id: s.id }) };
+  const fleetSeeds = Array.from({ length: 1200 }, (_, i) => ({ phase: 'up', id: i }));
+  const seededDrift = check({ specModule: idle, contract: { stateKeys: ['phase', 'id'], actions: { TICK: { dataFields: {} } } }, invariants: {}, initialStates: fleetSeeds, driftThreshold: 256 });
+  ok('seeded fleet snapshots do not trigger a false unbounded verdict',
+    seededDrift.driftWarnings.length === 0);
+
+  // Heartbeat: clock-driven and stderr-only; accelerate the clock via env and
+  // intercept stderr so the test asserts presence without waiting 10s.
+  process.env.POLYGRAPH_HEARTBEAT_MS = '0';
+  const beats = [];
+  const origWrite = process.stderr.write;
+  process.stderr.write = (chunk) => { beats.push(String(chunk)); return true; };
+  try {
+    check({ specModule: runaway, contract: runContract, invariants: {}, maxStates: 600, driftThreshold: 100000 });
+  } finally { process.stderr.write = origWrite; delete process.env.POLYGRAPH_HEARTBEAT_MS; }
+  ok('heartbeat line reports states/frontier/elapsed on a long exploration',
+    beats.some((b) => /\[check\] exploring \(pass 1\)… \d+ states discovered, frontier \d+/.test(b)));
+
+  // End-to-end at the DEFAULT threshold: the warning reaches findings.md.
+  const rwDir = join(TMP, 'runaway');
+  mkdirSync(join(rwDir, 'specs'), { recursive: true });
+  mkdirSync(join(rwDir, 'traces'), { recursive: true });
+  writeFileSync(join(rwDir, 'specs', 'spec_0.js'),
+    `module.exports = { init: () => ({ phase: 'up', term: 0 }), next: (s, a) => (a === 'TICK' ? { phase: 'up', term: s.term + 1 } : { phase: s.phase, term: s.term }) };`, 'utf-8');
+  writeFileSync(join(rwDir, 'contract.json'),
+    JSON.stringify({ stateKeys: ['phase', 'term'], actions: { TICK: { dataFields: {} } } }), 'utf-8');
+  writeFileSync(join(rwDir, 'traces', 's1.ndjson'),
+    JSON.stringify({ pre: { phase: 'up', term: 0 }, action: 'TICK', data: {}, post: { phase: 'up', term: 1 } }) + '\n', 'utf-8');
+  writeFileSync(join(rwDir, 'inv.mjs'), `export const stateInvariants = [{ name: 'term-non-negative', pred: (s) => s.term >= 0 }];\n`, 'utf-8');
+  const rwRun = await verify({ legacyBareNext: true, contract: join(rwDir, 'contract.json'), traces: join(rwDir, 'traces'), specs: join(rwDir, 'specs'), invariants: join(rwDir, 'inv.mjs'), 'max-states': '1500', out: join(rwDir, 'out') });
+  ok('invReport carries the drift warning at the default threshold',
+    rwRun.invReport.driftWarnings.length === 1 && /state key 'term'/.test(rwRun.invReport.driftWarnings[0]));
+  ok('drift warning is rendered in findings.md',
+    /likely unbounded in this key/.test(readFileSync(join(rwDir, 'out', 'findings.md'), 'utf-8')));
+}
+
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

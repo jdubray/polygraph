@@ -98,7 +98,15 @@ export function buildDomain(contract, windows = []) {
 // mutation grade drives adapter-wrapped mutants with the original module's
 // manifest domain). When provided it replaces domain building entirely; the
 // caller owns alphabet correctness.
-export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000, legacyBareNext = false, initialStates = [], steps: providedSteps = null }) {
+// Live progress/warning writes must never crash the check: a consumer that
+// closed stderr mid-run (`2>&1 | head`) raises EPIPE on write.
+const stderrLine = (line) => { try { process.stderr.write(line + '\n'); } catch { /* closed pipe */ } };
+
+// driftThreshold: minimum distinct-value count before a state key is flagged
+// as likely unbounded (see the drift detector inside explore()); exposed as an
+// option for tests — the default is deliberately far below the maxStates
+// default so a runaway machine warns long before the cap grinds.
+export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000, legacyBareNext = false, initialStates = [], steps: providedSteps = null, driftThreshold = 1000 }) {
   // ── Engine selection ──────────────────────────────────────────────────────
   // A v2 SAM strict-profile module is driven through the {init,next} adapter
   // (rejections return the input state — a legal, observable no-op) with the
@@ -120,7 +128,7 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
       if (typeof accessor.validate === 'function') {
         const problems = accessor.validate();
         if (Array.isArray(problems) && problems.length) {
-          return { ok: false, error: `v2 module fails validate(): ${problems.join('; ')}`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], engine: 'sam-v2' };
+          return { ok: false, error: `v2 module fails validate(): ${problems.join('; ')}`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [], engine: 'sam-v2' };
         }
       }
       let intentNames;
@@ -136,11 +144,11 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
         if (!manifestIntents.has(a)) notes.push(`contract action '${a}' is not in the module's manifest() — NOT explored`);
       }
     } catch (e) {
-      return { ok: false, error: `v2 SAM module rejected by the adapter: ${e && e.message}`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], engine: 'sam-v2' };
+      return { ok: false, error: `v2 SAM module rejected by the adapter: ${e && e.message}`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [], engine: 'sam-v2' };
     }
   } else {
     if (!mod || typeof mod.next !== 'function' || typeof mod.init !== 'function') {
-      return { ok: false, error: 'spec must export init() and next() (or the v2 SAM surface)', statesExplored: 0, capHit: false, violations: [] };
+      return { ok: false, error: 'spec must export init() and next() (or the v2 SAM surface)', statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [] };
     }
     ({ steps, notes } = providedSteps ? { steps: providedSteps, notes: [] } : buildDomain(contract, windows));
   }
@@ -150,20 +158,61 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
     const why = engine === 'sam-v2'
       ? "the module's manifest() yields no explorable (action, data) steps"
       : 'the contract declares no explorable actions (no dataDomain, none inferable from traces)';
-    return { ok: false, error: `exploration domain is empty — ${why}${notes.length ? ` [${notes.join('; ')}]` : ''}`, statesExplored: 0, capHit: false, violations: [], domainNotes: notes, engine };
+    return { ok: false, error: `exploration domain is empty — ${why}${notes.length ? ` [${notes.join('; ')}]` : ''}`, statesExplored: 0, capHit: false, violations: [], domainNotes: notes, frozenKeys: [], driftWarnings: [], engine };
   }
   const stateInv = invariants.stateInvariants || [];
   const transInv = invariants.transitionInvariants || [];
 
   // One full BFS exploration. Kept as an inner function so the determinism
-  // double-pass below can run it twice under identical inputs.
-  const explore = () => {
+  // double-pass below can run it twice under identical inputs. `live` labels
+  // the pass for the progress heartbeat; live console output NEVER enters the
+  // determinism digest (heartbeats are clock-driven; drift warnings are
+  // deterministic but printed only on pass 1 to avoid duplicates).
+  const explore = (live = null) => {
     const violations = [];
+    // ── Runaway guardrails (eval/FINDING-raft-field-study.md, lesson 2) ─────
+    // An action that mints a fresh state forever (an unbounded monotonic
+    // counter: raft's ElectionTimeout term bump) turns the default cap into a
+    // silent multi-minute grind. The fix is telling the user EARLY, not
+    // guessing a universal bound: (a) a drift detector — a key whose distinct
+    // values track the number of discovered states is likely unbounded; (b) a
+    // heartbeat line every ~10s so a long run is visibly alive and visibly
+    // runaway. Both stderr-only; drift is also recorded in the result.
+    const keyValues = new Map(); // key -> Set(stable(value)) over all graph states
+    const driftWarned = new Set();
+    const driftWarnings = [];
+    const trackDrift = (state) => {
+      if (!state || typeof state !== 'object' || Array.isArray(state)) return;
+      for (const [k, v] of Object.entries(state)) {
+        (keyValues.get(k) || keyValues.set(k, new Set()).get(k)).add(stable(v));
+      }
+    };
+    // KNOWN SCOPE LIMIT: the detector is single-key (the raft term-bump
+    // shape). A blowup that is a PRODUCT of two or more moderately-sized keys
+    // (independent unbounded counters exploring a grid) keeps every per-key
+    // ratio near zero and is invisible here — the heartbeat is the only
+    // signal for that shape. Absence of a drift warning is NOT evidence of
+    // boundedness.
+    const checkDrift = (discovered) => {
+      for (const [k, vals] of keyValues) {
+        if (driftWarned.has(k) || vals.size < driftThreshold || vals.size < discovered * 0.5) continue;
+        driftWarned.add(k);
+        const msg = `state key '${k}' has ${vals.size} distinct values across ${discovered} discovered states and is still growing — the state space is likely unbounded in this key; abstract it in the contract or use a much smaller --max-states`;
+        driftWarnings.push(msg);
+        if (live === 'pass 1') stderrLine(`[check] WARNING: ${msg}`);
+      }
+    };
+    // Env override validated: NaN (typo) falls back to the default instead of
+    // silently disabling the heartbeat; negative values clamp to 0.
+    const hbRaw = Number(process.env.POLYGRAPH_HEARTBEAT_MS ?? 10000);
+    const heartbeatMs = Number.isFinite(hbRaw) ? Math.max(0, hbRaw) : 10000;
+    const started = Date.now();
+    let lastBeat = started;
     const seen = new Set(); // invariant names already recorded (keep shortest = first via BFS)
     let capHit = false;
     let init;
     try { init = mod.init(); }
-    catch (e) { return { error: `init() threw: ${e && e.message}`, parent: new Map(), violations, capHit, seededStates: 0 }; }
+    catch (e) { return { error: `init() threw: ${e && e.message}`, parent: new Map(), violations, capHit, seededStates: 0, driftWarnings }; }
     const initKey = stable(init);
     const parent = new Map([[initKey, { prev: null, action: null, data: null, state: init, origin: 'init' }]]);
     // Roots are collected EXPLICITLY (not inferred from "parent has only roots
@@ -212,8 +261,25 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
 
     // The cap counts DISCOVERED states (init + everything BFS finds); seeds
     // are excluded so discovered = parent.size - seededStates.
+    // Drift is about what exploration MINTS, so only init and BFS-discovered
+    // states feed the detector. Seeded states are excluded on BOTH sides: a
+    // fleet corpus (polyvers seeds every snapshot) carrying a per-instance
+    // distinct key — an id, a timestamp — would otherwise inflate the
+    // numerator past a denominator that already excludes seeds and flag a
+    // perfectly bounded machine as unbounded.
+    trackDrift(init);
+
     let head = 0; // index cursor — Array.shift() is O(n) per pop, O(n²) overall
     while (head < queue.length && parent.size - seededStates < maxStates) {
+      // Heartbeat: clock-driven, stderr-only, checked every 256 pops so the
+      // clock read never dominates a fast exploration.
+      if (live && (head & 255) === 0) {
+        const now = Date.now();
+        if (now - lastBeat >= heartbeatMs) {
+          lastBeat = now;
+          stderrLine(`[check] exploring (${live})… ${parent.size - seededStates} states discovered, frontier ${queue.length - head}, ${Math.round((now - started) / 1000)}s elapsed`);
+        }
+      }
       const [s, sKey] = queue[head++];
       const sJson = JSON.stringify(s); // one stringify per state, one parse per step
       for (const { action, data } of steps) {
@@ -236,13 +302,29 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
           }
           parent.set(pKey, { prev: sKey, action, data, state: post });
           queue.push([post, pKey]);
+          trackDrift(post);
+          const discovered = parent.size - seededStates;
+          if ((discovered & 255) === 0) checkDrift(discovered);
         }
       }
     }
     // CAP HIT means the exploration was truncated: states remained unexpanded.
     // Completing with parent.size exactly AT the cap is a full exploration.
     if (head < queue.length) capHit = true;
-    return { parent, violations, capHit, seededStates };
+    // Drift verdicts are only REPORTED for truncated runs: a runaway stopped
+    // by a small cap between sampling points still deserves the warning (the
+    // final checkDrift catches the tail), but an EXHAUSTED frontier is
+    // definitive disproof of "still growing" — a large bounded machine (a
+    // counter capped at 2000 in next()) must not be called likely-unbounded
+    // after a complete exploration. A mid-run warning that exploration later
+    // disproves is retracted LOUDLY, never silently contradicted by the result.
+    if (capHit) {
+      checkDrift(parent.size - seededStates);
+    } else if (driftWarnings.length) {
+      if (live === 'pass 1') stderrLine(`[check] exploration completed without hitting the cap — earlier drift warning(s) retracted; the flagged key(s) turned out bounded`);
+      driftWarnings.length = 0;
+    }
+    return { parent, violations, capHit, seededStates, driftWarnings };
   };
 
   // ── Determinism double-pass ───────────────────────────────────────────────
@@ -257,12 +339,12 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
     capHit: r.capHit,
     error: r.error || null,
   });
-  const pass1 = explore();
-  const pass2 = explore();
+  const pass1 = explore('pass 1');
+  const pass2 = explore('pass 2');
   const nondeterministic = digestOf(pass1) !== digestOf(pass2);
 
-  const { parent, violations, capHit, error, seededStates } = pass1;
-  if (error) return { ok: false, error, statesExplored: 0, capHit: false, violations: [], engine, seededStates: 0 };
+  const { parent, violations, capHit, error, seededStates, driftWarnings } = pass1;
+  if (error) return { ok: false, error, statesExplored: 0, capHit: false, violations: [], domainNotes: notes, frozenKeys: [], driftWarnings, engine, seededStates: 0 };
 
   // ── Frozen-field scan ─────────────────────────────────────────────────────
   // A state key whose value is identical across EVERY reachable state (init,
@@ -311,7 +393,7 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   // statesExplored counts what exploration DISCOVERED (init + BFS finds);
   // seeded roots are reported separately so a seeded run cannot overstate
   // its coverage by counting states it was merely handed.
-  return { ok: violations.length === 0, statesExplored: parent.size - seededStates, seededStates, capHit, violations, domainNotes: notes, frozenKeys, engine, nondeterministic };
+  return { ok: violations.length === 0, statesExplored: parent.size - seededStates, seededStates, capHit, violations, domainNotes: notes, frozenKeys, driftWarnings, engine, nondeterministic };
 }
 
 // ── Readable render ─────────────────────────────────────────────────────────
@@ -323,6 +405,9 @@ export function render(result) {
   // data domain means the clean verdict below only covers the explored subset.
   const notes = result.domainNotes || [];
   for (const n of notes) L.push(`WARNING: ${n}`);
+  // A likely-unbounded key means the cap (not the machine) decided where
+  // exploration stopped — the verdict below covers an arbitrary prefix.
+  for (const d of result.driftWarnings || []) L.push(`WARNING: ${d}`);
   // A frozen key means part of the machine's behavior space was structurally
   // out of reach — the clean verdict below is silent about anything it gates.
   for (const f of result.frozenKeys || []) {
