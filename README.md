@@ -121,6 +121,10 @@ practical bug-finder.
 
 ## How it works
 
+<p align="center">
+  <img src="assets/polygraph-architecture.png" alt="Polygraph architecture — one deterministic gate at the center, founded on SAM v2: polygen/polynv/polyvers author, elicit, and evolve the machine at design time; polyrun executes it durably at runtime; polysec and polyman prove and enforce policy for agents; SysMoBench qualifies SAM v2 across models; 100 production state machines tune the toolset" width="900">
+</p>
+
 Everything revolves around three artifacts you can read and diff:
 
 1. **A contract** (`contract.json`) — what's observable: the state fields
