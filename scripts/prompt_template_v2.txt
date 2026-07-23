@@ -62,13 +62,22 @@ MUST export exactly this shape:
 
   - `acceptors` — an OBJECT keyed by the same action names (the framework
     binds proposals to acceptors; do NOT write flag guards or a dispatch
-    switch). Each acceptor is `(model) => (proposal, { reject }) => { ... }`.
-  - COMMIT RULE: for a FLAT state key, assign it directly
-    (`model.someKey = value`). For a state key holding a NESTED map/object,
-    commit every mutation with a TOP-LEVEL write so the strict profile's write
-    tracker sees it: compute the updated record, then
-    `model.<key> = { ...model.<key>, [k]: updated };` — do NOT mutate
-    `model.<key>[k].field` in place.
+    switch). Each acceptor is
+    `(model) => (proposal, { reject, next, unchanged }) => { ... }` — a
+    NEXT-STATE relation (sam-pattern 2.1 prime semantics): `model` is the
+    FROZEN pre-state (read-only; writing `model.x` throws), and every write
+    goes to the `next` draft.
+  - COMMIT RULE (next-state form): for a FLAT state key, assign
+    `next.someKey = value` — the right-hand side reads the PRE-state
+    (`next.count = model.count + 1`). For a state key holding a NESTED
+    map/object, assign the key WHOLE:
+    `next.<key> = { ...model.<key>, [k]: updated };` — do NOT mutate
+    `model.<key>[k].field` or `next.<key>[k].field` in place.
+  - FRAME RULE: on every ACCEPTED path, every declared modelShape key must be
+    either assigned via `next.<key> = …` or explicitly named unchanged:
+    `unchanged('keyA', 'keyB')` — otherwise the step throws `SamFrameError`.
+    A rejected step (`return reject(reason)`) needs NO framing. Never assign
+    the same key twice in one step.
 - `init()` — resets to the initial state: EXACTLY `setState(INITIAL_STATE)` and
   nothing else. Do NOT call `instance({}).state()` (no clearError idiom;
   `getState()` is the safe snapshot accessor).
@@ -124,18 +133,22 @@ const control = instance({
       ABORT: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      START: (model) => (proposal, { reject }) => {
+      START: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.status !== 'ready') return reject('start-only-when-ready');
-        model.status = 'counting';
+        next.status = 'counting';
+        unchanged('counter');
       },
-      DECREMENT: (model) => (proposal, { reject }) => {
+      DECREMENT: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.status !== 'counting') return reject('not-counting');
-        model.counter -= 1;
-        if (model.counter === 0) model.status = 'launched';
+        const counter = model.counter - 1;   // RHS reads the PRE-state
+        next.counter = counter;
+        if (counter === 0) next.status = 'launched';
+        else unchanged('status');
       },
-      ABORT: (model) => (proposal, { reject }) => {
+      ABORT: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.status !== 'counting') return reject('nothing-to-abort');
-        model.status = 'aborted';
+        next.status = 'aborted';
+        unchanged('counter');
       },
     },
     reactors: [],

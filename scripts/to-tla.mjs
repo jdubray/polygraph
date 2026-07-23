@@ -82,6 +82,26 @@
 //   * in-place writes through the alias (`n.f = e`) are nested writes that
 //     bypass the strict-profile write tracker — rejected, not guessed at
 //
+// E1-v2.1 front end (sam-lib 2.1 strict profile; next-state acceptors):
+//   * acceptor signature (model) => (p, { reject, next, unchanged }) => {...}
+//     — any subset of { reject, next, unchanged }, any order. The bare
+//     { reject } 2.0 form is still accepted (legacy specs transpile), but a
+//     body that destructures `next`/`unchanged` is a 2.1 body: writing
+//     model.* there is a runtime SamShapeError and is refused loudly.
+//   * `next.<var> = expr` is THE write form; `model.*` on the RHS is ALWAYS
+//     the pre-state (unprimed) — even after a next-write. There is no
+//     sequential-mutation fold in 2.1 bodies.
+//   * `unchanged('a','b')` (statement or `return unchanged(...)`) is an
+//     explicit frame declaration: validated (unknown names and frames that
+//     contradict an unconditional next-write are refused loudly), then a
+//     no-op — UNCHANGED emission derives from the unwritten-variable
+//     analysis.
+//   * a second state shape joins the map-of-flat-records one: FLAT SCALAR
+//     state (every top-level key is num/str/bool). Each key becomes its own
+//     TLA+ VARIABLE; per action, written vars get primed assignments and the
+//     rest one UNCHANGED <<...>> conjunct. The map shape keeps its EXCEPT
+//     commit (written `next.<sv> = { ...model.<sv>, [k]: rec }` in 2.1).
+//
 // A bare { init, next } module has no acceptors: its guards are implicit in
 // arbitrary control flow (loops, dispatch on the action string, object
 // spreads), so there is nothing mechanical to lift into preconditions. The
@@ -212,45 +232,68 @@ export async function transpile(specPath, opts) {
   // can just hand us.
   const { state, intents } = probeSpec(FILE);
   const stateKeys = Object.keys(state);
-  if (stateKeys.length !== 1) {
-    die(`unsupported state shape: expected exactly one top-level state key ` +
-        `(a map of records), got [${stateKeys.join(', ')}]`);
-  }
-  const stateVar = stateKeys[0];
-  const nodesObj = state[stateVar];
-  if (!nodesObj || typeof nodesObj !== 'object' || Array.isArray(nodesObj)) {
-    die(`unsupported state shape: '${stateVar}' is not a map of records`);
-  }
-  const nodeIds = Object.keys(nodesObj);
-  if (nodeIds.length === 0) {
-    die(`unsupported state shape: '${stateVar}' has no entries in the init state`);
-  }
-  const fieldNames = Object.keys(nodesObj[nodeIds[0]]);
-  const fieldTypes = {};
-  for (const f of fieldNames) fieldTypes[f] = jsType(nodesObj[nodeIds[0]][f]);
-  for (const id of nodeIds) {
-    const rec = nodesObj[id];
-    if (!rec || typeof rec !== 'object' || Array.isArray(rec)) {
-      die(`unsupported state shape: '${stateVar}["${id}"]' is not a flat record`);
+  // Two supported shapes:
+  //   'scalar' — every top-level state key holds a scalar (num/str/bool);
+  //              each key becomes its own TLA+ VARIABLE, acceptors write
+  //              them via the 2.1 next-state form (next.<var> = expr) and
+  //              unwritten variables become UNCHANGED conjuncts per action.
+  //   'map'    — exactly one top-level key holding a map of flat records
+  //              (the original shape; one VARIABLE updated with EXCEPT).
+  const mode =
+    stateKeys.length > 0 && stateKeys.every((k) => jsType(state[k]) !== 'unknown')
+      ? 'scalar'
+      : 'map';
+  let stateVar = null;
+  let nodesObj = null;
+  let fieldNames = [];
+  let fieldTypes = {};
+  let scalarVars = [];
+  const scalarTypes = {};
+  if (mode === 'scalar') {
+    scalarVars = stateKeys;
+    for (const k of stateKeys) scalarTypes[k] = jsType(state[k]);
+  } else {
+    if (stateKeys.length !== 1) {
+      die(`unsupported state shape: expected either all-scalar top-level state ` +
+          `keys or exactly one top-level key holding a map of flat records, ` +
+          `got [${stateKeys.join(', ')}]`);
     }
-    const fields = Object.keys(rec);
-    if (
-      fields.length !== fieldNames.length ||
-      fields.some((f) => !fieldNames.includes(f))
-    ) {
-      die(
-        `unsupported state shape: records under '${stateVar}' do not share ` +
-          `one field set ("${id}" has [${fields.join(', ')}], ` +
-          `"${nodeIds[0]}" has [${fieldNames.join(', ')}])`
-      );
+    stateVar = stateKeys[0];
+    nodesObj = state[stateVar];
+    if (!nodesObj || typeof nodesObj !== 'object' || Array.isArray(nodesObj)) {
+      die(`unsupported state shape: '${stateVar}' is not a map of records`);
     }
-    for (const f of fields) {
-      if (jsType(rec[f]) === 'unknown') {
+    const nodeIds = Object.keys(nodesObj);
+    if (nodeIds.length === 0) {
+      die(`unsupported state shape: '${stateVar}' has no entries in the init state`);
+    }
+    fieldNames = Object.keys(nodesObj[nodeIds[0]]);
+    fieldTypes = {};
+    for (const f of fieldNames) fieldTypes[f] = jsType(nodesObj[nodeIds[0]][f]);
+    for (const id of nodeIds) {
+      const rec = nodesObj[id];
+      if (!rec || typeof rec !== 'object' || Array.isArray(rec)) {
+        die(`unsupported state shape: '${stateVar}["${id}"]' is not a flat record`);
+      }
+      const fields = Object.keys(rec);
+      if (
+        fields.length !== fieldNames.length ||
+        fields.some((f) => !fieldNames.includes(f))
+      ) {
         die(
-          `unsupported state shape: field '${f}' of '${stateVar}["${id}"]' is ` +
-            `not a scalar (num/str/bool) — nested structures are outside the ` +
-            'map-of-flat-records subset'
+          `unsupported state shape: records under '${stateVar}' do not share ` +
+            `one field set ("${id}" has [${fields.join(', ')}], ` +
+            `"${nodeIds[0]}" has [${fieldNames.join(', ')}])`
         );
+      }
+      for (const f of fields) {
+        if (jsType(rec[f]) === 'unknown') {
+          die(
+            `unsupported state shape: field '${f}' of '${stateVar}["${id}"]' is ` +
+              `not a scalar (num/str/bool) — nested structures are outside the ` +
+              'map-of-flat-records subset'
+          );
+        }
       }
     }
   }
@@ -265,18 +308,29 @@ export async function transpile(specPath, opts) {
     const names = (contract.stateKeys || []).map((k) =>
       typeof k === 'string' ? k : k.name
     );
-    if (names.length !== 1) {
-      die(
-        `contract declares ${names.length} state keys [${names.join(', ')}] — ` +
-          'the TLC tier supports exactly one top-level key holding a map of ' +
-          'flat records'
-      );
-    }
-    if (names[0] !== stateVar) {
-      die(
-        `contract state key '${names[0]}' does not match the spec's ` +
-          `top-level state key '${stateVar}'`
-      );
+    if (mode === 'scalar') {
+      const missing = scalarVars.filter((v) => !names.includes(v));
+      const extra = names.filter((n) => !scalarVars.includes(n));
+      if (missing.length || extra.length) {
+        die(
+          `contract state keys [${names.join(', ')}] do not match the spec's ` +
+            `top-level scalar state keys [${scalarVars.join(', ')}]`
+        );
+      }
+    } else {
+      if (names.length !== 1) {
+        die(
+          `contract declares ${names.length} state keys [${names.join(', ')}] — ` +
+            'the map-of-records TLC tier supports exactly one top-level key ' +
+            'holding a map of flat records'
+        );
+      }
+      if (names[0] !== stateVar) {
+        die(
+          `contract state key '${names[0]}' does not match the spec's ` +
+            `top-level state key '${stateVar}'`
+        );
+      }
     }
   }
 
@@ -288,11 +342,19 @@ export async function transpile(specPath, opts) {
   // --- translate each acceptor ---------------------------------------------
   const spec = {
     flagToName, actionNames, discToName, dataKeys, intentsByName, stateVar,
-    fieldNames, fieldTypes, helpers: collectHelpers(ast),
+    fieldNames, fieldTypes, mode, scalarVars, scalarTypes,
+    helpers: collectHelpers(ast),
     constArrays: collectConstArrays(ast),
   };
   const actionsOut = [];
   if (acceptors) {
+    if (mode === 'scalar') {
+      die(
+        'a v1 acceptors ARRAY over a flat scalar state is not supported — ' +
+          'scalar state keys require the v2.1 strict profile (an acceptors ' +
+          'OBJECT keyed by intent name, next-state writes)'
+      );
+    }
     for (const el of acceptors) {
       actionsOut.push(translateAcceptor(el, spec));
     }
@@ -309,7 +371,7 @@ export async function transpile(specPath, opts) {
   const skippedInvariants = [];
   if (invSource) {
     const loaded = await loadInvariants(invSource);
-    const shape = { stateVar, fieldNames, fieldTypes };
+    const shape = { mode, stateVar, fieldNames, fieldTypes, scalarVars, scalarTypes };
     for (const inv of loaded.stateInvariants) {
       translatedInvariants.push(translateInvariant(inv, shape));
     }
@@ -340,7 +402,8 @@ export async function transpile(specPath, opts) {
   // --- emit ----------------------------------------------------------------
   const moduleName = path.basename(outPath).replace(/\.tla$/i, '');
   const tla = emitModule({
-    moduleName, specPath: FILE, stateVar, nodesObj, fieldNames, fieldTypes,
+    moduleName, specPath: FILE, mode, stateVar, nodesObj, fieldNames, fieldTypes,
+    scalarVars, scalarTypes, scalarInit: state,
     actions: actionsOut, bound, invariants: translatedInvariants,
   });
   const cfg = emitCfg(translatedInvariants.map((iv) => iv.name));
@@ -454,9 +517,12 @@ function translateInvariant(inv, shape) {
     invName: inv.name,
     src,
     stateName: fn.params[0].name,
+    mode: shape.mode ?? 'map',
     stateVar: shape.stateVar,
     fieldNames: shape.fieldNames,
     fieldTypes: shape.fieldTypes,
+    scalarVars: shape.scalarVars ?? [],
+    scalarTypes: shape.scalarTypes ?? {},
     // quantified bindings: name -> { kind: 'record'|'key', keyTla }
     bindings: new Map(),
     fresh: 0,
@@ -637,6 +703,19 @@ function invExpr(node, ictx) {
       break;
     }
     case 'MemberExpression': {
+      // scalar mode: state.<var> -> the (unprimed) TLA+ variable
+      if (
+        ictx.mode === 'scalar' && !node.computed &&
+        node.object.type === 'Identifier' && node.object.name === ictx.stateName &&
+        node.property.type === 'Identifier'
+      ) {
+        const sv = node.property.name;
+        if (!ictx.scalarVars.includes(sv)) {
+          invDie(ictx, `read of unknown state variable '${sv}' — state keys ` +
+            `are [${ictx.scalarVars.join(', ')}]`, node);
+        }
+        return { tla: sv, type: ictx.scalarTypes[sv] ?? 'unknown' };
+      }
       // <record>.<field>
       if (
         !node.computed &&
@@ -742,6 +821,23 @@ function invExpr(node, ictx) {
           ictx,
           "includes() on something other than a literal array or " +
             `Object.keys(${ictx.stateName}.${ictx.stateVar})`,
+          node
+        );
+      }
+      // Number.isInteger / Number.isFinite on an already-numeric value: TRUE
+      if (
+        node.type === 'CallExpression' &&
+        node.callee.type === 'MemberExpression' && !node.callee.computed &&
+        node.callee.object.type === 'Identifier' &&
+        node.callee.object.name === 'Number' &&
+        ['isInteger', 'isFinite'].includes(node.callee.property.name) &&
+        node.arguments.length === 1
+      ) {
+        const a = invExpr(node.arguments[0], ictx);
+        if (a.type === 'num') return { tla: 'TRUE', type: 'bool' };
+        invDie(
+          ictx,
+          `Number.${node.callee.property.name} on a non-numeric value`,
           node
         );
       }
@@ -1318,35 +1414,69 @@ function translateAcceptorV2(actionName, el, spec) {
     );
   }
   const pName = inner.params[0].name;
+  // sam-pattern 2.1 STRICT-profile acceptor context: any subset of
+  // { reject, next, unchanged }, in any order. The bare { reject } form (the
+  // 2.0 contract, commits via `model.<sv> = {...}`) is still accepted for
+  // legacy specs; destructuring `next` or `unchanged` switches the body to
+  // the 2.1 next-state form (writes via next.*, model.* always pre-state).
   let rejectName = null;
+  let nextName = null;
+  let unchangedName = null;
   if (inner.params.length === 2) {
     const meta = inner.params[1];
-    if (meta.type === 'ObjectPattern') {
-      for (const prop of meta.properties) {
-        if (
-          prop.type === 'Property' && !prop.computed &&
-          prop.key.type === 'Identifier' && prop.key.name === 'reject' &&
-          prop.value.type === 'Identifier'
-        ) {
-          rejectName = prop.value.name;
-        }
-      }
-      if (!rejectName) {
-        failAt(
-          `acceptor '${actionName}': second parameter destructures no ` +
-            "'reject' — outside the subset",
-          meta
-        );
-      }
-    } else {
+    if (meta.type !== 'ObjectPattern') {
       failAt(
         `acceptor '${actionName}': second inner parameter must be a ` +
-          '{ reject } pattern — outside the subset',
+          '{ reject, next, unchanged } pattern — outside the subset',
+        meta
+      );
+    }
+    for (const prop of meta.properties) {
+      if (
+        prop.type !== 'Property' || prop.computed ||
+        prop.key.type !== 'Identifier' || prop.value.type !== 'Identifier'
+      ) {
+        failAt(
+          `acceptor '${actionName}': second parameter must destructure plain ` +
+            '{ reject, next, unchanged } names (no defaults/rest/computed ' +
+            'keys) — outside the subset',
+          prop
+        );
+      }
+      if (prop.key.name === 'reject') rejectName = prop.value.name;
+      else if (prop.key.name === 'next') nextName = prop.value.name;
+      else if (prop.key.name === 'unchanged') unchangedName = prop.value.name;
+      else {
+        failAt(
+          `acceptor '${actionName}': unknown acceptor-context key ` +
+            `'${prop.key.name}' — sam-pattern 2.1 provides only ` +
+            '{ reject, next, unchanged }',
+          prop
+        );
+      }
+    }
+    if (!rejectName && !nextName && !unchangedName) {
+      failAt(
+        `acceptor '${actionName}': second parameter destructures none of ` +
+          "'reject', 'next', 'unchanged' — outside the subset",
         meta
       );
     }
   } else if (inner.params.length > 2) {
-    failAt(`acceptor '${actionName}' takes more than (proposal, { reject })`, inner);
+    failAt(
+      `acceptor '${actionName}' takes more than ` +
+        '(proposal, { reject, next, unchanged })',
+      inner
+    );
+  }
+  const nextForm = !!(nextName || unchangedName);
+  if (spec.mode === 'scalar' && !nextForm) {
+    failAt(
+      `acceptor '${actionName}' over a flat scalar state does not destructure ` +
+        "'next' (or 'unchanged') — sam-pattern 2.1 next-state form required: " +
+        '(model) => (p, { reject, next, unchanged }) => { next.<var> = ...; }',
+      inner
+    );
   }
   if (inner.body.type !== 'BlockStatement') {
     failAt(`acceptor '${actionName}' body must be a block statement`, inner);
@@ -1369,6 +1499,12 @@ function translateAcceptorV2(actionName, el, spec) {
     isV2: true,
     snapshotAlias: true,
     rejectName,
+    nextName,
+    unchangedName,
+    nextForm,
+    mode: spec.mode ?? 'map',
+    scalarVars: spec.scalarVars ?? [],
+    scalarTypes: spec.scalarTypes ?? {},
     actionFlag: null,
     actionName,
     discFields: {},
@@ -1384,6 +1520,7 @@ function translateAcceptorV2(actionName, el, spec) {
     },
     guards: [],
     hasMutated: false,
+    unconditionalWrites: new Set(),
     alive: 'TRUE',
     helpers: spec.helpers,
     constArrays: spec.constArrays,
@@ -1392,7 +1529,7 @@ function translateAcceptorV2(actionName, el, spec) {
 
   walkStmts(inner.body.body, ctx, true);
 
-  if (!ctx.env.alias) {
+  if (ctx.mode !== 'scalar' && !ctx.env.alias) {
     failAt(
       `acceptor for '${actionName}' never binds ` +
         `'const n = ${modelName}.${spec.stateVar}[${pName}.<key>];' — ` +
@@ -1403,7 +1540,7 @@ function translateAcceptorV2(actionName, el, spec) {
 
   return {
     name: actionName,
-    keyTla: ctx.env.alias.keyTla,
+    keyTla: ctx.mode === 'scalar' ? null : ctx.env.alias.keyTla,
     guards: ctx.guards,
     fields: ctx.env.fields,
     payloads,
@@ -1485,10 +1622,14 @@ function walkStmts(stmts, ctx, topLevel, branchCond = 'TRUE') {
   for (const st of stmts) {
     switch (st.type) {
       case 'ReturnStatement': {
-        if (st.argument && !isRejectCall(st.argument, ctx)) {
+        if (st.argument && isUnchangedCall(st.argument, ctx)) {
+          // `return unchanged(...)`: an accepted no-op path — same control
+          // flow as a bare return; the frame declaration is cross-checked.
+          checkUnchangedArgs(st.argument, ctx);
+        } else if (st.argument && !isRejectCall(st.argument, ctx)) {
           failAt(
-            'acceptors must not return values (only bare `return` or ' +
-              '`return reject(...)`)',
+            'acceptors must not return values (only bare `return`, ' +
+              '`return reject(...)`, or `return unchanged(...)`)',
             st
           );
         }
@@ -1502,7 +1643,12 @@ function walkStmts(stmts, ctx, topLevel, branchCond = 'TRUE') {
 
       case 'IfStatement':
         if (isReturnLike(st.consequent, ctx) && !st.alternate) {
-          // early-return guard (bare return or `return reject(...)`)
+          // early-return guard (bare return, `return reject(...)`, or
+          // `return unchanged(...)` — an accepted no-op exit)
+          const retStmt = singleReturn(st.consequent);
+          if (retStmt && retStmt.argument && isUnchangedCall(retStmt.argument, ctx)) {
+            checkUnchangedArgs(retStmt.argument, ctx);
+          }
           const cond = txBool(st.test, ctx);
           if (
             topLevel && !ctx.hasMutated &&
@@ -1601,12 +1747,16 @@ function walkStmts(stmts, ctx, topLevel, branchCond = 'TRUE') {
           if (d.id.type !== 'Identifier' || !d.init) {
             failAt('only simple `const x = expr;` declarations are supported', d);
           }
-          const alias = matchAliasBinding(stripModelMapPrefix(d.init, ctx), ctx);
+          const alias = ctx.mode === 'scalar'
+            ? null // scalar state has no map to alias into
+            : matchAliasBinding(stripModelMapPrefix(d.init, ctx), ctx);
           if (alias) {
             // A fresh alias bound AFTER a mutation/commit reads the
             // PRE-state variable in TLA+, but JS would see the committed
             // value — a well-formed, silently wrong translation. Refuse.
-            if (ctx.hasMutated) {
+            // (Not applicable to 2.1 next-form bodies: model.* is the frozen
+            // pre-state there, which IS the unprimed TLA+ variable.)
+            if (ctx.hasMutated && !ctx.nextForm) {
               failAt(
                 'node alias bound after a state mutation/commit — the alias ' +
                   'would read the pre-state in TLA+ but the post-state in JS ' +
@@ -1633,8 +1783,33 @@ function walkStmts(stmts, ctx, topLevel, branchCond = 'TRUE') {
         if (e.type === 'UnaryExpression' && e.operator === 'void') {
           break; // `void x;` — an explicit no-op
         }
+        if (isUnchangedCall(e, ctx)) {
+          // statement-position `unchanged('a','b');` — an explicit frame
+          // declaration: validated + cross-checked, then a no-op (the
+          // UNCHANGED emission derives from the unwritten-variable analysis)
+          checkUnchangedArgs(e, ctx);
+          break;
+        }
         if (e.type === 'AssignmentExpression') {
-          // v2 commit: model.<sv> = { ...model.<sv>, [key]: rec }
+          // 2.1 next-state write: next.<var> = expr
+          const nt = matchNextTarget(e.left, ctx);
+          if (nt) {
+            handleNextWrite(e, nt.prop, ctx, branchCond);
+            break;
+          }
+          // In a 2.1 next-form body (or over a scalar state, which is
+          // 2.1-only), writing model.* is a runtime SamShapeError in
+          // sam-pattern 2.1 STRICT — refuse loudly, never transpile it.
+          if ((ctx.nextForm || ctx.mode === 'scalar') && isModelMemberTarget(e.left, ctx)) {
+            failAt(
+              `assignment through '${ctx.modelName}.*' in a STRICT acceptor — ` +
+                'a runtime SamShapeError in sam-pattern 2.1; 2.1 next-state ' +
+                `form required: write '${ctx.nextName ?? 'next'}.<stateVar> = ` +
+                `expr' (reads of ${ctx.modelName}.* stay pre-state)`,
+              e.left
+            );
+          }
+          // legacy v2.0 commit: model.<sv> = { ...model.<sv>, [key]: rec }
           if (ctx.isV2 && isModelStateVarTarget(e.left, ctx)) {
             if (e.operator !== '=') {
               failAt(`state commit with operator '${e.operator}'`, e);
@@ -1773,16 +1948,150 @@ function isRejectCall(node, ctx) {
   );
 }
 
-// bare `return;` or `return reject(...)` (possibly in a one-statement block)
+// bare `return;`, `return reject(...)`, or `return unchanged(...)`
+// (possibly in a one-statement block)
 function isReturnLike(s, ctx) {
   if (!s) return false;
   if (s.type === 'ReturnStatement') {
-    return !s.argument || isRejectCall(s.argument, ctx);
+    return (
+      !s.argument ||
+      isRejectCall(s.argument, ctx) ||
+      isUnchangedCall(s.argument, ctx)
+    );
   }
   if (s.type === 'BlockStatement' && s.body.length === 1) {
     return isReturnLike(s.body[0], ctx);
   }
   return false;
+}
+
+// `unchanged('a', 'b')` — the 2.1 explicit frame declaration
+function isUnchangedCall(node, ctx) {
+  return !!(
+    ctx.unchangedName &&
+    node.type === 'CallExpression' &&
+    node.callee.type === 'Identifier' &&
+    node.callee.name === ctx.unchangedName
+  );
+}
+
+// Validate an unchanged('a','b') frame declaration: every argument must be a
+// string literal naming a real state variable, and naming one this acceptor
+// has already assigned UNCONDITIONALLY (guard TRUE on every live path) is a
+// contradictory frame — refused loudly. The per-action UNCHANGED emission is
+// still derived from the unwritten-variable analysis, not from these calls.
+function checkUnchangedArgs(call, ctx) {
+  const un = ctx.unchangedName;
+  for (const arg of call.arguments) {
+    if (arg.type !== 'Literal' || typeof arg.value !== 'string') {
+      failAt(
+        `${un}(...) arguments must be string literals naming state variables`,
+        arg
+      );
+    }
+    const name = arg.value;
+    if (ctx.mode === 'scalar') {
+      if (!ctx.scalarVars.includes(name)) {
+        failAt(
+          `${un}('${name}') names an unknown state variable — state keys ` +
+            `are [${ctx.scalarVars.join(', ')}]`,
+          arg
+        );
+      }
+      if (ctx.unconditionalWrites.has(name)) {
+        failAt(
+          `contradictory frame: '${name}' is both assigned via ` +
+            `${ctx.nextName ?? 'next'}.${name} and declared ` +
+            `${un}('${name}') on the same path`,
+          arg
+        );
+      }
+    } else {
+      if (name !== ctx.stateVar) {
+        failAt(
+          `${un}('${name}') names an unknown state variable — the ` +
+            `observable state variable is '${ctx.stateVar}'`,
+          arg
+        );
+      }
+      if (ctx.unconditionalWrites.size > 0) {
+        failAt(
+          `contradictory frame: '${name}' is committed via ` +
+            `${ctx.nextName ?? 'next'}.${name} and declared ` +
+            `${un}('${name}') on the same path`,
+          arg
+        );
+      }
+    }
+  }
+}
+
+// `next.<prop>` as an assignment target (the 2.1 next-state write LHS).
+// A more complex LHS rooted at `next` (next.sv[k] = ..., next.sv.f = ...) is
+// refused loudly — 2.1 writes are whole-variable.
+function matchNextTarget(left, ctx) {
+  if (!ctx.nextName) return null;
+  if (
+    left.type === 'MemberExpression' && !left.computed &&
+    left.object.type === 'Identifier' && left.object.name === ctx.nextName &&
+    left.property.type === 'Identifier'
+  ) {
+    return { prop: left.property.name };
+  }
+  let n = left;
+  while (n.type === 'MemberExpression') n = n.object;
+  if (n.type === 'Identifier' && n.name === ctx.nextName) {
+    failAt(
+      `writes through '${ctx.nextName}' must assign a whole state variable ` +
+        `('${ctx.nextName}.<var> = expr') — nested/computed next-writes are ` +
+        'outside the subset',
+      left
+    );
+  }
+  return null;
+}
+
+// any assignment LHS rooted at the model parameter (model.x, model.sv[k], ...)
+function isModelMemberTarget(left, ctx) {
+  let n = left;
+  while (n.type === 'MemberExpression') n = n.object;
+  return n.type === 'Identifier' && n.name === ctx.modelName;
+}
+
+// 2.1 next-state write: next.<var> = expr. RHS reads of model.* are the
+// pre-state (unprimed) by construction — there is no sequential-mutation
+// fold in the 2.1 form.
+function handleNextWrite(e, prop, ctx, branchCond) {
+  if (e.operator !== '=') {
+    failAt(
+      `compound assignment '${e.operator}' through '${ctx.nextName}' reads ` +
+        `the post-state — outside the subset (write '${ctx.nextName}.${prop} ` +
+        `= ${ctx.modelName}.${prop} ...' instead)`,
+      e
+    );
+  }
+  if (ctx.mode === 'scalar') {
+    if (!ctx.scalarVars.includes(prop)) {
+      failAt(
+        `write to unknown state variable '${ctx.nextName}.${prop}' — state ` +
+          `keys are [${ctx.scalarVars.join(', ')}]`,
+        e.left
+      );
+    }
+    const v = txExpr(e.right, ctx);
+    requireDefined(v, e, `state variable '${prop}'`);
+    guardedWrite(ctx, prop, v.tla, branchCond);
+    return;
+  }
+  // map mode: next.<stateVar> = { ...model.<stateVar>, [key]: rec }
+  if (prop !== ctx.stateVar) {
+    failAt(
+      `write to '${ctx.nextName}.${prop}' but the observable state variable ` +
+        `is '${ctx.stateVar}'`,
+      e.left
+    );
+  }
+  handleCommit(e.right, ctx, branchCond);
 }
 
 // `model.<stateVar>` as an assignment target (the v2 commit LHS)
@@ -2024,6 +2333,7 @@ function guardedWrite(ctx, f, v, branchCond) {
   const cur = ctx.env.fields.get(f) ?? fieldRead(ctx, f);
   ctx.env.fields.set(f, g === 'TRUE' ? v : `(IF ${g} THEN ${v} ELSE ${cur})`);
   ctx.hasMutated = true;
+  if (g === 'TRUE') ctx.unconditionalWrites?.add(f);
 }
 
 // `model.<sv> && <rest>` -> <rest> (the state map object is always truthy)
@@ -2077,6 +2387,7 @@ function matchAliasField(m, ctx) {
 }
 
 function fieldRead(ctx, f) {
+  if (ctx.mode === 'scalar') return f; // the unprimed TLA+ variable itself
   return `${ctx.stateVar}[${ctx.env.alias.keyTla}].${f}`;
 }
 
@@ -2231,6 +2542,37 @@ function txExpr(node, ctx) {
         }
         return { tla: `d.${f}`, type: ctx.payloadTypes[f] };
       }
+      // next.* is write-only: reading it back is outside the subset
+      {
+        let root = node;
+        while (root.type === 'MemberExpression') root = root.object;
+        if (ctx.nextName && root.type === 'Identifier' && root.name === ctx.nextName) {
+          failAt(
+            `read of '${ctx.nextName}.*' — next holds the post-state and is ` +
+              `write-only in the transpilable subset (read ${ctx.modelName}.* ` +
+              'for the pre-state instead)',
+            node
+          );
+        }
+      }
+      // scalar mode: model.<var> is ALWAYS the pre-state (unprimed) — the
+      // 2.1 contract freezes model, so a read after `next.<var> = ...` still
+      // sees the pre-state (no sequential-mutation fold).
+      if (
+        ctx.mode === 'scalar' && !node.computed &&
+        node.object.type === 'Identifier' && node.object.name === ctx.modelName &&
+        node.property.type === 'Identifier'
+      ) {
+        const sv = node.property.name;
+        if (!ctx.scalarVars.includes(sv)) {
+          failAt(
+            `read of unknown state variable '${ctx.modelName}.${sv}' — state ` +
+              `keys are [${ctx.scalarVars.join(', ')}]`,
+            node
+          );
+        }
+        return { tla: sv, type: ctx.scalarTypes[sv] ?? 'unknown' };
+      }
       // n.<field>
       const f = matchAliasField(node, ctx);
       if (f) {
@@ -2322,7 +2664,10 @@ function txExpr(node, ctx) {
           if (!ctx.fieldNames.includes(df)) {
             failAt(`read of unknown state field '${df}'`, node);
           }
-          if (ctx.hasMutated) {
+          // 2.1 next-form bodies: model.* is the frozen pre-state, so a read
+          // after a next-commit is still the unprimed variable — no aliasing
+          // hazard. Legacy bodies keep the refusal.
+          if (ctx.hasMutated && !ctx.nextForm) {
             failAt(
               'direct state read after a mutation — could alias the mutated ' +
                 'node, which symbolic execution does not track (outside the ' +
@@ -2529,6 +2874,28 @@ function txExpr(node, ctx) {
         const fn = callee.property.name === 'max' ? 'Max' : 'Min';
         return { tla: `${fn}(${a.tla}, ${b.tla})`, type: 'num' };
       }
+      // `[lit, ...].includes(e)` -> set membership (inline literal array)
+      if (
+        callee.type === 'MemberExpression' && !callee.computed &&
+        callee.object.type === 'ArrayExpression' &&
+        callee.property.type === 'Identifier' &&
+        callee.property.name === 'includes' && node.arguments.length === 1
+      ) {
+        const els = callee.object.elements;
+        if (
+          !els.every(
+            (el) => el && el.type === 'Literal' &&
+              (typeof el.value === 'string' || typeof el.value === 'number')
+          )
+        ) {
+          failAt('includes() on a non-literal array is outside the subset', node);
+        }
+        const a = txExpr(node.arguments[0], ctx);
+        const set = els
+          .map((el) => (typeof el.value === 'string' ? `"${el.value}"` : String(el.value)))
+          .join(', ');
+        return { tla: `(${a.tla} \\in {${set}})`, type: 'bool' };
+      }
       // Extension: `CONSTARRAY.includes(e)` -> set membership
       if (
         callee.type === 'MemberExpression' && !callee.computed &&
@@ -2669,6 +3036,7 @@ function tlaRecord(obj) {
 }
 
 function emitModule(m) {
+  if (m.mode === 'scalar') return emitModuleScalar(m);
   const L = [];
   const header = `---------------------------- MODULE ${m.moduleName} ----------------------------`;
   L.push(header);
@@ -2764,6 +3132,87 @@ function emitModule(m) {
       ? '  TRUE'
       : `  \\A i \\in DOMAIN ${m.stateVar} : ` +
         numFields.map((f) => `${m.stateVar}[i].${f} <= ${m.bound}`).join(' /\\ ')
+  );
+  L.push('');
+  L.push('='.repeat(header.length));
+  L.push('');
+  return L.join('\n');
+}
+
+// Scalar-mode emission: each top-level scalar state key is its own TLA+
+// VARIABLE; per action, every written variable gets a primed assignment
+// (var' = expr, RHS over unprimed variables — 2.1 reads are pre-state) and
+// the unwritten variables become one UNCHANGED conjunct.
+function emitModuleScalar(m) {
+  const L = [];
+  const header = `---------------------------- MODULE ${m.moduleName} ----------------------------`;
+  L.push(header);
+  L.push(`\\* Generated by polygraph scripts/to-tla.mjs from`);
+  L.push(`\\*   ${m.specPath}`);
+  L.push(`\\* Do not edit by hand.`);
+  L.push(`EXTENDS Integers, TLC`);
+  L.push('');
+  L.push(`VARIABLES ${m.scalarVars.join(', ')}`);
+  L.push('');
+  L.push(`Max(a, b) == IF a >= b THEN a ELSE b`);
+  L.push(`Min(a, b) == IF a <= b THEN a ELSE b`);
+  L.push('');
+
+  L.push('Init ==');
+  for (const v of m.scalarVars) {
+    L.push(`  /\\ ${v} = ${tlaValue(m.scalarInit[v])}`);
+  }
+  L.push('');
+
+  for (const a of m.actions) {
+    const noPayload = a.payloads.every((p) => Object.keys(p).length === 0);
+    const conj = [];
+    for (const g of a.guards) conj.push(`/\\ ${g}`);
+    const written = m.scalarVars.filter((v) => a.fields.has(v));
+    const unwritten = m.scalarVars.filter((v) => !a.fields.has(v));
+    for (const v of written) conj.push(`/\\ ${v}' = ${a.fields.get(v)}`);
+    if (unwritten.length > 0) {
+      conj.push(`/\\ UNCHANGED <<${unwritten.join(', ')}>>`);
+    }
+    if (conj.length === 0) conj.push('/\\ TRUE');
+    if (noPayload) {
+      // an empty payload domain record set ({ [] }) is not valid TLA+ — and
+      // the quantifier would be vacuous anyway
+      L.push(`${a.name} ==`);
+      for (const c of conj) L.push(`  ${c}`);
+    } else {
+      const setName = `${a.name}Payloads`;
+      L.push(`${setName} == {`);
+      L.push(a.payloads.map((p) => `  ${tlaRecord(p)}`).join(',\n'));
+      L.push('}');
+      L.push('');
+      L.push(`${a.name} ==`);
+      L.push(`  \\E d \\in ${setName} :`);
+      for (const c of conj) L.push(`    ${c}`);
+    }
+    L.push('');
+  }
+
+  L.push('Next ==');
+  L.push(m.actions.map((a) => `  \\/ ${a.name}`).join('\n'));
+  L.push('');
+
+  for (const iv of m.invariants) {
+    for (const line of iv.jsSource.split('\n')) {
+      L.push(`\\* ${line.replace(/\s+$/, '')}`);
+    }
+    L.push(`${iv.name} ==`);
+    L.push(`  ${iv.tla}`);
+    L.push('');
+  }
+
+  const numVars = m.scalarVars.filter((v) => m.scalarTypes[v] === 'num');
+  L.push(`\\* Bound the only unbounded counters (payload domains are finite).`);
+  L.push('StateConstraint ==');
+  L.push(
+    numVars.length === 0
+      ? '  TRUE'
+      : '  ' + numVars.map((v) => `${v} <= ${m.bound}`).join(' /\\ ')
   );
   L.push('');
   L.push('='.repeat(header.length));

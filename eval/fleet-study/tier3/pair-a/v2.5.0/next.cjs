@@ -89,34 +89,41 @@ const control = instance({
       CANCEL_ORDER: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      ADD_SESSION: (model) => (p, { reject }) => {
+      // (2.1 next-state: `derive` recomputes from the values being written
+      // this step, so the post-write inputs are threaded explicitly.)
+      ADD_SESSION: (model) => (p, { reject, next, unchanged }) => {
         if (model.hasSessions) return reject('session-already-present');
-        model.hasSessions = true;
-        model.status = derive(model);
+        next.hasSessions = true;
+        next.status = derive({ hasSessions: true, authorized: model.authorized, captured: model.captured });
+        unchanged('authorized', 'captured', 'refunded');
       },
-      AUTHORIZE_SESSION: (model) => (p, { reject }) => {
+      AUTHORIZE_SESSION: (model) => (p, { reject, next, unchanged }) => {
         if (!model.hasSessions) return reject('no-session-to-authorize');
         if (model.authorized !== 'none') return reject('session-already-authorized');
-        model.authorized = p.level;
-        model.status = derive(model);
+        next.authorized = p.level;
+        next.status = derive({ hasSessions: model.hasSessions, authorized: p.level, captured: model.captured });
+        unchanged('hasSessions', 'captured', 'refunded');
       },
       // Unchanged guards (capturePayment_ still throws on canceled_at and
       // short-circuits on captured_at), but the RESULT now differs: a full
       // capture moves the collection to `completed`.
-      CAPTURE_PAYMENT: (model) => (p, { reject }) => {
+      CAPTURE_PAYMENT: (model) => (p, { reject, next, unchanged }) => {
         if (model.authorized === 'none') return reject('nothing-authorized-to-capture');
         if (model.captured !== 'none') return reject('already-captured');
-        model.captured = p.level;
-        model.status = derive(model);
+        next.captured = p.level;
+        next.status = derive({ hasSessions: model.hasSessions, authorized: model.authorized, captured: p.level });
+        unchanged('hasSessions', 'authorized', 'refunded');
       },
-      REFUND_PAYMENT: (model) => (p, { reject }) => {
+      REFUND_PAYMENT: (model) => (p, { reject, next, unchanged }) => {
         if (model.captured === 'none') return reject('nothing-captured-to-refund');
         if (model.refunded !== 'none') return reject('already-refunded');
-        model.refunded = p.level;
-        model.status = derive(model);
+        next.refunded = p.level;
+        next.status = derive({ hasSessions: model.hasSessions, authorized: model.authorized, captured: model.captured });
+        unchanged('hasSessions', 'authorized', 'captured');
       },
-      CANCEL_ORDER: (model) => () => {
-        model.status = 'canceled';
+      CANCEL_ORDER: (model) => (p, { next, unchanged }) => {
+        next.status = 'canceled';
+        unchanged('hasSessions', 'authorized', 'captured', 'refunded');
       },
     },
     reactors: [],

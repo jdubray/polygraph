@@ -26,12 +26,12 @@ const { intents } = instance({
       },
     },
     acceptors: {
-      BOOKED: (model) => (p, { reject }) => {
+      BOOKED: (model) => (p, { reject, next }) => {
         if (model.booked) return reject('booking-first');
-        model.status = 'booked';
-        model.booked = true;
+        next.status = 'booked';
+        next.booked = true;
       },
-      CARRIER_UPDATE: (model) => (p, { reject }) => {
+      CARRIER_UPDATE: (model) => (p, { reject, next, unchanged }) => {
         // Before booking the loop is not draining; after delivery the
         // workflow has completed: observably a no-op either way.
         if (!model.booked || model.status === 'delivered') {
@@ -42,7 +42,8 @@ const { intents } = instance({
         if (!['booked', 'dispatched', 'delivered'].includes(p.status)) {
           return reject('carrier-update-verbatim');
         }
-        model.status = p.status;
+        next.status = p.status;
+        unchanged('booked');
       },
     },
     reactors: [],

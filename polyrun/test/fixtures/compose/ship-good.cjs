@@ -20,17 +20,17 @@ const control = instance({
       CANCEL_SHIPMENT: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      SHIP: (model) => (p, { reject }) => {
+      SHIP: (model) => (p, { reject, next }) => {
         if (model.shipState !== 'preparing') return reject('already-shipped');
-        model.shipState = 'inTransit';
+        next.shipState = 'inTransit';
       },
-      DELIVER: (model) => (p, { reject }) => {
+      DELIVER: (model) => (p, { reject, next }) => {
         if (model.shipState !== 'inTransit') return reject('not-in-transit');
-        model.shipState = 'delivered';
+        next.shipState = 'delivered';
       },
-      CANCEL_SHIPMENT: (model) => (p, { reject }) => {
+      CANCEL_SHIPMENT: (model) => (p, { reject, next }) => {
         if (!['preparing', 'inTransit'].includes(model.shipState)) return reject('cancel-too-late');
-        model.shipState = 'cancelledShipment';
+        next.shipState = 'cancelledShipment';
       },
     },
     reactors: [],

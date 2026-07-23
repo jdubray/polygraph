@@ -11,14 +11,15 @@ const instance = createInstance({ strict: true, hasAsyncActions: false, instance
 
 const INITIAL_STATE = { status: 'pending', fulfillments: [] };
 
-const finishRollup = (model) => {
-  const fs = model.fulfillments;
+// Returns the rolled-up terminal status for a finished fulfillment set, or
+// null when unfinished (caller keeps its current status).
+const finishRollup = (fs) => {
   const unfinished = fs.some((f) => f === 'pending' || f === 'processing');
-  if (unfinished) return;
+  if (unfinished) return null;
   // Mirrors allFulfillmentsFailed(): failed only when EVERY fulfillment
   // failed (>=1); everything else — including all-cancelled — completes.
   const failures = fs.filter((f) => f === 'failed').length;
-  model.status = failures >= 1 && failures === fs.length ? 'failed' : 'completed';
+  return failures >= 1 && failures === fs.length ? 'failed' : 'completed';
 };
 
 const { intents } = instance({
@@ -36,50 +37,54 @@ const { intents } = instance({
       SHIPMENT_RESULT: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{ index: 0, ok: true }, { index: 0, ok: false }, { index: 1, ok: true }, { index: 1, ok: false }] },
     },
     acceptors: {
-      RESERVED: (model) => (p, { reject }) => {
+      RESERVED: (model) => (p, { reject, next }) => {
         if (model.status !== 'pending') return reject('reservation-splits-and-routes');
         if (!Array.isArray(p.available) || p.available.length === 0) return reject('reservation-splits-and-routes');
         const fs = p.available.map((a) => (a ? 'pending' : 'unavailable'));
         if (fs.includes('unavailable')) {
-          model.status = 'customerActionRequired';
-          model.fulfillments = fs;
+          next.status = 'customerActionRequired';
+          next.fulfillments = fs;
         } else {
-          model.status = 'processing';
-          model.fulfillments = fs.map(() => 'processing');
+          next.status = 'processing';
+          next.fulfillments = fs.map(() => 'processing');
         }
       },
-      CUSTOMER_ACTION: (model) => (p, { reject }) => {
+      CUSTOMER_ACTION: (model) => (p, { reject, next, unchanged }) => {
         if (model.status !== 'customerActionRequired') return reject('out-of-scope-actions-are-noops');
         if (p.action === 'cancel') {
           // The code path returns without touching fulfillment statuses.
-          model.status = 'cancelled';
-          return;
+          next.status = 'cancelled';
+          return unchanged('fulfillments');
         }
         if (p.action !== 'amend') return reject('out-of-scope-actions-are-noops');
-        model.fulfillments = model.fulfillments.map((f) => (f === 'unavailable' ? 'cancelled' : f));
-        model.status = 'processing';
-        model.fulfillments = model.fulfillments.map((f) => (f === 'pending' ? 'processing' : f));
-        finishRollup(model); // all-cancelled amend completes IN THE SAME STEP
+        const fs = model.fulfillments
+          .map((f) => (f === 'unavailable' ? 'cancelled' : f))
+          .map((f) => (f === 'pending' ? 'processing' : f));
+        next.fulfillments = fs;
+        // all-cancelled amend completes IN THE SAME STEP
+        next.status = finishRollup(fs) || 'processing';
       },
-      CUSTOMER_TIMEOUT: (model) => (p, { reject }) => {
+      CUSTOMER_TIMEOUT: (model) => (p, { reject, next }) => {
         if (model.status !== 'customerActionRequired') return reject('out-of-scope-actions-are-noops');
-        model.fulfillments = model.fulfillments.map(() => 'cancelled');
-        model.status = 'timedOut';
+        next.fulfillments = model.fulfillments.map(() => 'cancelled');
+        next.status = 'timedOut';
       },
-      CHARGE_RESULT: (model) => (p, { reject }) => {
+      CHARGE_RESULT: (model) => (p, { reject, next }) => {
         if (model.status !== 'processing') return reject('out-of-scope-actions-are-noops');
         if (!Number.isInteger(p.index) || model.fulfillments[p.index] !== 'processing') return reject('out-of-scope-actions-are-noops');
-        if (p.success === false) {
-          model.fulfillments = model.fulfillments.map((f, i) => (i === p.index ? 'failed' : f));
-        }
+        const fs = p.success === false
+          ? model.fulfillments.map((f, i) => (i === p.index ? 'failed' : f))
+          : model.fulfillments.slice();
         // success: the shipment child starts; no observable change
-        finishRollup(model);
+        next.fulfillments = fs;
+        next.status = finishRollup(fs) || model.status;
       },
-      SHIPMENT_RESULT: (model) => (p, { reject }) => {
+      SHIPMENT_RESULT: (model) => (p, { reject, next }) => {
         if (model.status !== 'processing') return reject('out-of-scope-actions-are-noops');
         if (!Number.isInteger(p.index) || model.fulfillments[p.index] !== 'processing') return reject('out-of-scope-actions-are-noops');
-        model.fulfillments = model.fulfillments.map((f, i) => (i === p.index ? (p.ok ? 'completed' : 'failed') : f));
-        finishRollup(model);
+        const fs = model.fulfillments.map((f, i) => (i === p.index ? (p.ok ? 'completed' : 'failed') : f));
+        next.fulfillments = fs;
+        next.status = finishRollup(fs) || model.status;
       },
     },
     reactors: [],

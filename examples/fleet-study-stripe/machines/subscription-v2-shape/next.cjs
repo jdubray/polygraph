@@ -62,20 +62,22 @@ const control = instance({
       INCOMPLETE_EXPIRED: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      START_TRIAL: (model) => (p, { reject }) => {
+      START_TRIAL: (model) => (p, { reject, next, unchanged }) => {
         if (model.subState !== 'incomplete') return reject('trial-only-at-creation');
-        model.subState = 'trialing';
-        model.amountCents = Number(p.cents ?? 0);
+        next.subState = 'trialing';
+        next.amountCents = Number(p.cents ?? 0);
+        unchanged('dunningAttempts', 'hasPaymentMethod', 'currency');
       },
-      PAYMENT_SUCCEEDED: (model) => (p, { reject }) => {
+      PAYMENT_SUCCEEDED: (model) => (p, { reject, next, unchanged }) => {
         if (!LIVE.includes(model.subState)) return reject('not-collectable');
         // Payment on a trialing subscription is the trial converting early.
-        model.subState = 'active';
-        model.dunningAttempts = 0;
-        model.hasPaymentMethod = true;
-        model.amountCents = Number(p.cents ?? model.amountCents);
+        next.subState = 'active';
+        next.dunningAttempts = 0;
+        next.hasPaymentMethod = true;
+        next.amountCents = Number(p.cents ?? model.amountCents);
+        unchanged('currency');
       },
-      PAYMENT_FAILED: (model) => (p, { reject }) => {
+      PAYMENT_FAILED: (model) => (p, { reject, next, unchanged }) => {
         if (!LIVE.includes(model.subState)) return reject('not-collectable');
         if (model.subState === 'incomplete') return reject('first-invoice-still-open');
         if (model.subState === 'unpaid') return reject('already-unpaid');
@@ -83,32 +85,38 @@ const control = instance({
         // exhausting it moves the subscription to unpaid, not to canceled —
         // Stripe keeps the record so the customer can recover it.
         const attempts = model.dunningAttempts + 1;
-        model.dunningAttempts = attempts;
-        model.subState = attempts >= MAX_DUNNING ? 'unpaid' : 'pastDue';
+        next.dunningAttempts = attempts;
+        next.subState = attempts >= MAX_DUNNING ? 'unpaid' : 'pastDue';
+        unchanged('hasPaymentMethod', 'amountCents', 'currency');
       },
-      TRIAL_ENDED: (model) => (p, { reject }) => {
+      TRIAL_ENDED: (model) => (p, { reject, next, unchanged }) => {
         if (model.subState !== 'trialing') return reject('not-trialing');
         // No card on file when the trial lapses: Stripe cannot collect, so the
         // subscription lands in dunning rather than going active.
         if (!model.hasPaymentMethod) {
-          model.dunningAttempts = 1;
-          model.subState = 'pastDue';
+          next.dunningAttempts = 1;
+          next.subState = 'pastDue';
+          unchanged('hasPaymentMethod', 'amountCents', 'currency');
           return;
         }
-        model.subState = 'active';
+        next.subState = 'active';
+        unchanged('dunningAttempts', 'hasPaymentMethod', 'amountCents', 'currency');
       },
-      ATTACH_PAYMENT_METHOD: (model) => (p, { reject }) => {
+      ATTACH_PAYMENT_METHOD: (model) => (p, { reject, next, unchanged }) => {
         if (!LIVE.includes(model.subState)) return reject('not-live');
         if (model.hasPaymentMethod) return reject('already-attached');
-        model.hasPaymentMethod = true;
+        next.hasPaymentMethod = true;
+        unchanged('subState', 'dunningAttempts', 'amountCents', 'currency');
       },
-      CANCEL: (model) => (p, { reject }) => {
+      CANCEL: (model) => (p, { reject, next, unchanged }) => {
         if (!LIVE.includes(model.subState)) return reject('already-terminal');
-        model.subState = 'canceled';
+        next.subState = 'canceled';
+        unchanged('dunningAttempts', 'hasPaymentMethod', 'amountCents', 'currency');
       },
-      INCOMPLETE_EXPIRED: (model) => (p, { reject }) => {
+      INCOMPLETE_EXPIRED: (model) => (p, { reject, next, unchanged }) => {
         if (model.subState !== 'incomplete') return reject('not-incomplete');
-        model.subState = 'incompleteExpired';
+        next.subState = 'incompleteExpired';
+        unchanged('dunningAttempts', 'hasPaymentMethod', 'amountCents', 'currency');
       },
     },
     reactors: [],

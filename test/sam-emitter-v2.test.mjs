@@ -65,16 +65,16 @@ const control = instance({
       },
     },
     acceptors: {
-      Inc: (model) => (p) => {
+      Inc: (model) => (p, { next, unchanged }) => {
         const c = model.counts[p.id];
-        if (!c) return;
-        model.counts = { ...model.counts, [p.id]: { value: c.value + 1 } };
+        if (!c) return unchanged('counts'); // accepted no-op needs an explicit frame (2.1)
+        next.counts = { ...model.counts, [p.id]: { value: c.value + 1 } };
       },
-      Dec: (model) => (p, { reject }) => {
+      Dec: (model) => (p, { reject, next, unchanged }) => {
         const c = model.counts[p.id];
-        if (!c) return;
+        if (!c) return unchanged('counts');
         if (c.value === 0) return reject('cannot decrement below zero');
-        model.counts = { ...model.counts, [p.id]: { value: c.value - 1 } };
+        next.counts = { ...model.counts, [p.id]: { value: c.value - 1 } };
       },
     },
     reactors: [],

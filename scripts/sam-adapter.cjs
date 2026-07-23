@@ -131,13 +131,18 @@ function makeSamAdapter(spec) {
       // no-op would explore an identity transition the replayer (which reads
       // getState() and sees the mutation) would fail: the two halves of the
       // pipeline would contradict each other on the same spec. A rejection
-      // that OBSERVABLY mutated is therefore a spec defect — but mutations of
-      // `internal` keys (e.g. logging a rejection reason before reject()) are
-      // invisible to getState() and to the replayer alike, so the test is a
-      // snapshot comparison, not the raw step.mutations list.
-      if (Array.isArray(step.mutations) && step.mutations.length > 0
-          && JSON.stringify(snapshot()) !== JSON.stringify(entry)) {
-        throw new Error(`acceptor for '${action}' mutated the observable model (${step.mutations.join(', ')}) and then rejected — a rejection must be an observable no-op`);
+      // that OBSERVABLY mutated is therefore a spec defect. The snapshot
+      // comparison ALONE is the authoritative test: under sam-pattern 2.1
+      // primes the remaining mutate-then-reject path is a deep/nested write
+      // through the shallow-frozen pre-state, which the library reports with
+      // step.mutations EMPTY — gating on the mutations list would wave the
+      // defect through. (`internal`-key writes stay invisible to snapshot()
+      // and to the replayer alike, so they still pass here, as they should.)
+      if (JSON.stringify(snapshot()) !== JSON.stringify(entry)) {
+        const what = Array.isArray(step.mutations) && step.mutations.length > 0
+          ? step.mutations.join(', ')
+          : 'deep/nested write through the frozen pre-state';
+        throw new Error(`acceptor for '${action}' mutated the observable model (${what}) and then rejected — a rejection must be an observable no-op`);
       }
       return state; // legal, observable no-op
     }

@@ -62,20 +62,21 @@ const control = instance({
       REFUND_ISSUED: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      START_TRIAL: (model) => (p, { reject }) => {
+      START_TRIAL: (model) => (p, { reject, next, unchanged }) => {
         if (model.subState !== 'incomplete') return reject('trial-only-at-creation');
-        model.subState = 'trialing';
-        model.cents = Number(p.cents ?? 0);
+        next.subState = 'trialing';
+        next.cents = Number(p.cents ?? 0);
+        unchanged('dunningAttempts', 'hasPaymentMethod');
       },
-      PAYMENT_SUCCEEDED: (model) => (p, { reject }) => {
+      PAYMENT_SUCCEEDED: (model) => (p, { reject, next }) => {
         if (!LIVE.includes(model.subState)) return reject('not-collectable');
         // Payment on a trialing subscription is the trial converting early.
-        model.subState = 'active';
-        model.dunningAttempts = 0;
-        model.hasPaymentMethod = true;
-        model.cents = Number(p.cents ?? model.cents);
+        next.subState = 'active';
+        next.dunningAttempts = 0;
+        next.hasPaymentMethod = true;
+        next.cents = Number(p.cents ?? model.cents);
       },
-      PAYMENT_FAILED: (model) => (p, { reject }) => {
+      PAYMENT_FAILED: (model) => (p, { reject, next, unchanged }) => {
         if (!LIVE.includes(model.subState)) return reject('not-collectable');
         if (model.subState === 'incomplete') return reject('first-invoice-still-open');
         if (model.subState === 'unpaid') return reject('already-unpaid');
@@ -83,36 +84,43 @@ const control = instance({
         // exhausting it moves the subscription to unpaid, not to canceled —
         // Stripe keeps the record so the customer can recover it.
         const attempts = model.dunningAttempts + 1;
-        model.dunningAttempts = attempts;
-        model.subState = attempts >= MAX_DUNNING ? 'unpaid' : 'pastDue';
+        next.dunningAttempts = attempts;
+        next.subState = attempts >= MAX_DUNNING ? 'unpaid' : 'pastDue';
+        unchanged('hasPaymentMethod', 'cents');
       },
-      TRIAL_ENDED: (model) => (p, { reject }) => {
+      TRIAL_ENDED: (model) => (p, { reject, next, unchanged }) => {
         if (model.subState !== 'trialing') return reject('not-trialing');
         // No card on file when the trial lapses: Stripe cannot collect, so the
         // subscription lands in dunning rather than going active.
         if (!model.hasPaymentMethod) {
-          model.dunningAttempts = 1;
-          model.subState = 'pastDue';
+          next.dunningAttempts = 1;
+          next.subState = 'pastDue';
+          unchanged('hasPaymentMethod', 'cents');
           return;
         }
-        model.subState = 'active';
+        next.subState = 'active';
+        unchanged('dunningAttempts', 'hasPaymentMethod', 'cents');
       },
-      ATTACH_PAYMENT_METHOD: (model) => (p, { reject }) => {
+      ATTACH_PAYMENT_METHOD: (model) => (p, { reject, next, unchanged }) => {
         if (!LIVE.includes(model.subState)) return reject('not-live');
         if (model.hasPaymentMethod) return reject('already-attached');
-        model.hasPaymentMethod = true;
+        next.hasPaymentMethod = true;
+        unchanged('subState', 'dunningAttempts', 'cents');
       },
-      CANCEL: (model) => (p, { reject }) => {
+      CANCEL: (model) => (p, { reject, next, unchanged }) => {
         if (!LIVE.includes(model.subState)) return reject('already-terminal');
-        model.subState = 'canceled';
+        next.subState = 'canceled';
+        unchanged('dunningAttempts', 'hasPaymentMethod', 'cents');
       },
-      REFUND_ISSUED: (model) => (p, { reject }) => {
+      REFUND_ISSUED: (model) => (p, { reject, next, unchanged }) => {
         if (!['active', 'pastDue', 'unpaid'].includes(model.subState)) return reject('nothing-to-refund');
-        model.cents = 0;
+        next.cents = 0;
+        unchanged('subState', 'dunningAttempts', 'hasPaymentMethod');
       },
-      INCOMPLETE_EXPIRED: (model) => (p, { reject }) => {
+      INCOMPLETE_EXPIRED: (model) => (p, { reject, next, unchanged }) => {
         if (model.subState !== 'incomplete') return reject('not-incomplete');
-        model.subState = 'incompleteExpired';
+        next.subState = 'incompleteExpired';
+        unchanged('dunningAttempts', 'hasPaymentMethod', 'cents');
       },
     },
     reactors: [],

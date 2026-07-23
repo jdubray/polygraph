@@ -65,13 +65,14 @@ const control = instance({
       PUSH: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      COIN: (model) => () => {
-        model.state = model.coins >= 2 ? 'JACKPOT' : 'UNLOCKED'; // seeded bug
-        model.coins = model.coins + 1;
+      COIN: (model) => (p, { next }) => {
+        next.state = model.coins >= 2 ? 'JACKPOT' : 'UNLOCKED'; // seeded bug
+        next.coins = model.coins + 1;
       },
-      PUSH: (model) => (p, { reject }) => {
+      PUSH: (model) => (p, { reject, next, unchanged }) => {
         if (model.state === 'LOCKED') return reject('push-while-locked-is-noop');
-        model.state = 'LOCKED';
+        next.state = 'LOCKED';
+        unchanged('coins');
       },
     },
     reactors: [],
@@ -89,7 +90,7 @@ const control = instance({
   component: {
     modelShape: { state: { type: 'string' }, coins: { type: 'number' } },
     actions: { COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
-    acceptors: { COIN: (model) => () => { model.coins = Math.random(); } },
+    acceptors: { COIN: (model) => (p, { next, unchanged }) => { next.coins = Math.random(); unchanged('state'); } },
     reactors: [],
   },
 });
@@ -112,7 +113,7 @@ const control = instance({
       },
     },
     acceptors: {
-      CHARGE: (model) => (p) => { model.txState = p.result === 'ok' ? 'paid' : 'failed'; },
+      CHARGE: (model) => (p, { next }) => { next.txState = p.result === 'ok' ? 'paid' : 'failed'; },
     },
     reactors: [],
   },
@@ -253,7 +254,7 @@ const control = instance({
   component: {
     modelShape: { state: { type: 'string' }, hits: { type: 'number', internal: true } },
     actions: { BUMP: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
-    acceptors: { BUMP: (model) => () => { model.hits = model.hits + 1; model.state = model.hits >= 2 ? 'HOT' : 'WARM'; } },
+    acceptors: { BUMP: (model) => (p, { next }) => { next.hits = model.hits + 1; next.state = model.hits + 1 >= 2 ? 'HOT' : 'WARM'; } },
     reactors: [],
   },
 });
@@ -282,15 +283,20 @@ ${V2_FOOTER}`, 'utf-8');
 // Mutate-then-reject: a rejection that changed the model is a spec DEFECT —
 // the checker must record it, not explore it as a legal identity no-op (which
 // would contradict the replayer, which sees the mutation in getState()).
+// Under 2.1 primes the top-level path is closed by construction (the frozen
+// pre-state throws, and a next-draft write is discarded on reject), so the
+// remaining defect path is a DEEP write through the shallow freeze — which
+// the library reports with step.mutations EMPTY. This fixture keeps that
+// loophole covered.
 const mutateRejectSpec = join(TMP, 'mutate-reject-v2.js');
 writeFileSync(mutateRejectSpec, `${V2_HEADER}
-const INITIAL_STATE = { state: 'LOCKED', coins: 0 };
+const INITIAL_STATE = { state: 'LOCKED', box: { coins: 0 } };
 const control = instance({
   initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
   component: {
-    modelShape: { state: { type: 'string' }, coins: { type: 'number' } },
+    modelShape: { state: { type: 'string' }, box: { type: 'object' } },
     actions: { COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
-    acceptors: { COIN: (model) => (p, { reject }) => { model.coins = model.coins + 1; return reject('nope'); } },
+    acceptors: { COIN: (model) => (p, { reject }) => { model.box.coins = model.box.coins + 1; return reject('nope'); } },
     reactors: [],
   },
 });
@@ -300,9 +306,10 @@ ok('mutate-then-reject is a recorded violation, never a silent identity no-op',
   mutateReject.ok === false
   && mutateReject.violations.some((v) => v.kind === 'throw' && /mutated the observable model .* and then rejected/.test(v.detail)));
 
-// ...but mutating only an INTERNAL key before rejecting (reason-logging, a
-// legit v1 idiom) is observably a pure no-op — the replayer passes it, so the
-// checker must too.
+// ...but a next-draft write before rejecting (reason-logging, the 2.1 heir of
+// the v1 internal-key idiom — the frozen pre-state now throws on ANY in-place
+// write, internal keys included) is discarded with the rejection: observably a
+// pure no-op — the replayer passes it, so the checker must too.
 const internalRejectSpec = join(TMP, 'internal-reject-v2.js');
 writeFileSync(internalRejectSpec, `${V2_HEADER}
 const INITIAL_STATE = { state: 'LOCKED', coins: 0, lastReason: '' };
@@ -311,7 +318,7 @@ const control = instance({
   component: {
     modelShape: { state: { type: 'string' }, coins: { type: 'number' }, lastReason: { type: 'string', internal: true } },
     actions: { COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
-    acceptors: { COIN: (model) => (p, { reject }) => { model.lastReason = 'not-now'; return reject('not-now'); } },
+    acceptors: { COIN: (model) => (p, { reject, next }) => { next.lastReason = 'not-now'; return reject('not-now'); } },
     reactors: [],
   },
 });

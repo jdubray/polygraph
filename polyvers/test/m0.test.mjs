@@ -419,8 +419,8 @@ test('m1: a nondeterministic new machine fails with the real finding, not a fabr
   try {
     const src = readFileSync(join(dir, 'next.cjs'), 'utf-8');
     writeFileSync(join(dir, 'next.cjs'), src.replace(
-      "model.txId = String(p.txId || '');",
-      'model.txId = String(Math.random());'));
+      "next.txId = String(p.txId || '');",
+      'next.txId = String(Math.random());'));
     const oldA = await load('order-v1');
     const newA = await loadArtifacts(dir);
     const corpus = synthesizeCorpus(oldA.module).entries;
@@ -685,7 +685,7 @@ test('m2-review: stimuli gate catches mutate-then-reject (production poison clas
     const src = readFileSync(join(dir, 'next.cjs'), 'utf-8');
     writeFileSync(join(dir, 'next.cjs'), src.replace(
       "if (model.orderState !== 'pending') return reject('not-cancellable');",
-      "if (model.orderState !== 'pending') { model.totalCents = 1; return reject('not-cancellable'); }"));
+      "if (model.orderState !== 'pending') { setState({ totalCents: 1 }); return reject('not-cancellable'); }"));
     const oldA = await load('order-v1');
     const newA = await loadArtifacts(dir);
     const corpus = synthesizeCorpus(oldA.module).entries;
@@ -785,8 +785,8 @@ test('m3-review: spawns emitted on identity-accepted steps are discovered (kerne
       "START: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },",
       "START: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },\n      PING: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },");
     mod = mod.replace(
-      "START: (model) => (p, { reject }) => {",
-      "PING: (model) => (p, { reject }) => { model.poState = model.poState; },\n      START: (model) => (p, { reject }) => {");
+      "START: (model) => (p, { reject, next }) => {",
+      "PING: (model) => (p, { reject, next }) => { next.poState = model.poState; },\n      START: (model) => (p, { reject, next }) => {");
     writeFileSync(join(dir, 'next.cjs'), mod);
     let fx = readFileSync(join(dir, 'effects.cjs'), 'utf-8');
     fx = fx.replace(

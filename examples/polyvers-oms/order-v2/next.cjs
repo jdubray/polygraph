@@ -101,82 +101,90 @@ const SHIP_STATE_DELIVERED = 'delivered';
 const SHIP_STATE_CANCELLED_SHIPMENT = 'cancelledShipment';
 
 const acceptors = {
-  SUBMIT: (model) => (proposal, { reject }) => {
+  SUBMIT: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'pending') {
       return reject('amend-resets-rollup');
     }
-    model.fulfillments = proposal.fulfillments;
-    model.totalCents = proposal.totalCents;
-    model.shipmentsDelivered = 0;
-    model.shipmentsFailed = 0;
-    model.orderState = 'fraudCheck';
+    next.fulfillments = proposal.fulfillments;
+    next.totalCents = proposal.totalCents;
+    next.shipmentsDelivered = 0;
+    next.shipmentsFailed = 0;
+    next.orderState = 'fraudCheck';
+    unchanged('txId', 'cancelReason', 'amendCount');
   },
 
-  FRAUD_PASSED: (model) => (proposal, { reject }) => {
+  FRAUD_PASSED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'fraudCheck') {
       return reject('stale-completions-reject');
     }
     if (proposal.itemsAvailable === true) {
-      model.orderState = 'charging';
+      next.orderState = 'charging';
     } else {
-      model.orderState = 'awaitingAmend';
+      next.orderState = 'awaitingAmend';
     }
+    unchanged('fulfillments', 'shipmentsDelivered', 'shipmentsFailed', 'totalCents', 'txId', 'cancelReason', 'amendCount');
   },
 
-  FRAUD_FAILED: (model) => (proposal, { reject }) => {
+  FRAUD_FAILED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'fraudCheck') {
       return reject('stale-completions-reject');
     }
-    model.orderState = 'rejected';
-    model.cancelReason = proposal.reason;
+    next.orderState = 'rejected';
+    next.cancelReason = proposal.reason;
+    unchanged('fulfillments', 'shipmentsDelivered', 'shipmentsFailed', 'totalCents', 'txId', 'amendCount');
   },
 
-  AMEND: (model) => (proposal, { reject }) => {
+  AMEND: (model) => (proposal, { reject, next, unchanged }) => {
     // v2: count amendments (shape + rule change, gated by polyvers)
     if (model.orderState !== 'awaitingAmend') {
       return reject('amend-resets-rollup');
     }
-    model.fulfillments = proposal.fulfillments;
-    model.totalCents = proposal.totalCents;
-    model.shipmentsDelivered = 0;
-    model.shipmentsFailed = 0;
-    model.orderState = 'charging';
-    model.amendCount += 1;
+    next.fulfillments = proposal.fulfillments;
+    next.totalCents = proposal.totalCents;
+    next.shipmentsDelivered = 0;
+    next.shipmentsFailed = 0;
+    next.orderState = 'charging';
+    next.amendCount = model.amendCount + 1;
+    unchanged('txId', 'cancelReason');
   },
 
-  AMEND_WINDOW_EXPIRED: (model) => (proposal, { reject }) => {
+  AMEND_WINDOW_EXPIRED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'awaitingAmend') {
       return reject('stale-completions-reject');
     }
-    model.orderState = 'cancelled';
-    model.cancelReason = 'amend-window-expired';
+    next.orderState = 'cancelled';
+    next.cancelReason = 'amend-window-expired';
+    unchanged('fulfillments', 'shipmentsDelivered', 'shipmentsFailed', 'totalCents', 'txId', 'amendCount');
   },
 
-  CHARGE_SUCCEEDED: (model) => (proposal, { reject }) => {
+  CHARGE_SUCCEEDED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'charging') {
       return reject('stale-completions-reject');
     }
-    model.txId = proposal.txId;
-    model.orderState = 'fulfilling';
+    next.txId = proposal.txId;
+    next.orderState = 'fulfilling';
+    unchanged('fulfillments', 'shipmentsDelivered', 'shipmentsFailed', 'totalCents', 'cancelReason', 'amendCount');
   },
 
-  CHARGE_FAILED: (model) => (proposal, { reject }) => {
+  CHARGE_FAILED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'charging') {
       return reject('stale-completions-reject');
     }
-    model.orderState = 'paymentFailed';
-    model.cancelReason = proposal.reason;
+    next.orderState = 'paymentFailed';
+    next.cancelReason = proposal.reason;
+    unchanged('fulfillments', 'shipmentsDelivered', 'shipmentsFailed', 'totalCents', 'txId', 'amendCount');
   },
 
-  CHARGE_TIMED_OUT: (model) => (proposal, { reject }) => {
+  CHARGE_TIMED_OUT: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'charging') {
       return reject('stale-completions-reject');
     }
-    model.orderState = 'paymentFailed';
-    model.cancelReason = 'charge-timed-out';
+    next.orderState = 'paymentFailed';
+    next.cancelReason = 'charge-timed-out';
+    unchanged('fulfillments', 'shipmentsDelivered', 'shipmentsFailed', 'totalCents', 'txId', 'amendCount');
   },
 
-  SHIPMENT_COMPLETED: (model) => (proposal, { reject }) => {
+  SHIPMENT_COMPLETED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'fulfilling') {
       return reject('stale-completions-reject');
     }
@@ -187,25 +195,34 @@ const acceptors = {
       return reject('rollup');
     }
     const shipState = proposal.childState.shipState;
+    let delivered = model.shipmentsDelivered;
+    let failed = model.shipmentsFailed;
     if (shipState === SHIP_STATE_DELIVERED) {
       // childState = { shipState: 'delivered' } — count as delivered
-      model.shipmentsDelivered = model.shipmentsDelivered + 1;
+      delivered = delivered + 1;
+      next.shipmentsDelivered = delivered;
+      unchanged('shipmentsFailed');
     } else if (shipState === SHIP_STATE_CANCELLED_SHIPMENT) {
       // childState = { shipState: 'cancelledShipment' } — count as failed
-      model.shipmentsFailed = model.shipmentsFailed + 1;
+      failed = failed + 1;
+      next.shipmentsFailed = failed;
+      unchanged('shipmentsDelivered');
     } else {
       return reject('rollup');
     }
-    if (model.shipmentsDelivered + model.shipmentsFailed === model.fulfillments) {
-      if (model.shipmentsFailed === 0) {
-        model.orderState = 'completed';
+    if (delivered + failed === model.fulfillments) {
+      if (failed === 0) {
+        next.orderState = 'completed';
       } else {
-        model.orderState = 'partiallyDelivered';
+        next.orderState = 'partiallyDelivered';
       }
+    } else {
+      unchanged('orderState');
     }
+    unchanged('fulfillments', 'totalCents', 'txId', 'cancelReason', 'amendCount');
   },
 
-  CANCEL: (model) => (proposal, { reject }) => {
+  CANCEL: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState === 'charging') {
       return reject('cancel-blocked-while-charging');
     }
@@ -219,8 +236,9 @@ const acceptors = {
     ) {
       return reject('cancel-not-applicable');
     }
-    model.orderState = 'cancelled';
-    model.cancelReason = proposal.reason;
+    next.orderState = 'cancelled';
+    next.cancelReason = proposal.reason;
+    unchanged('fulfillments', 'shipmentsDelivered', 'shipmentsFailed', 'totalCents', 'txId', 'amendCount');
   },
 };
 

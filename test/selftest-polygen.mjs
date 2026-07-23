@@ -56,9 +56,10 @@ const control = instance({
     modelShape: { state: { type: 'string' }, hits: { type: 'number', internal: true } },
     actions: { BUMP: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
     acceptors: {
-      BUMP: (model) => () => {
-        model.hits = model.hits + 1;
-        model.state = model.hits >= 2 ? 'HOT' : 'WARM';
+      BUMP: (model) => (p, { next }) => {
+        const hits = model.hits + 1;   // pre-state read, threaded locally
+        next.hits = hits;
+        next.state = hits >= 2 ? 'HOT' : 'WARM';
       },
     },
     reactors: [],
@@ -77,7 +78,7 @@ const control = instance({
     modelShape: { state: { type: 'string' } },
     actions: { BUMP: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
     acceptors: {
-      BUMP: (model) => () => { model.state = model.state === 'COLD' ? 'WARM' : 'BROKEN'; },
+      BUMP: (model) => (p, { next }) => { next.state = model.state === 'COLD' ? 'WARM' : 'BROKEN'; },
     },
     reactors: [],
   },
@@ -156,7 +157,7 @@ const control = instance({
   component: {
     modelShape: { state: { type: 'string' } },
     actions: { BUMP: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
-    acceptors: { BUMP: (model) => () => { model.state = 'WARM'; } },
+    acceptors: { BUMP: (model) => (p, { next }) => { next.state = 'WARM'; } },
     reactors: [],
   },
 });
@@ -255,7 +256,7 @@ const { intents } = instance({
     ${nameLine}
     modelShape: { st: { type: 'string' } },
     actions: { GO: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] } },
-    acceptors: { GO: (m) => (p, { reject }) => { if (m.st !== 'a') return reject('done'); m.st = 'b'; } },
+    acceptors: { GO: (m) => (p, { reject, next }) => { if (m.st !== 'a') return reject('done'); next.st = 'b'; } },
   },
 });
 const getState = () => instance({}).getState();

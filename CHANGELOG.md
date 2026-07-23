@@ -3,6 +3,47 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 6.0.0 — 2026-07-22
+
+**The strict-profile artifact moves to sam-pattern 2.1.2 — explicit
+next-state (prime) semantics.** sam-lib 2.1 (#25) makes strict acceptors
+TLA+-style next-state relations: `model` is the frozen pre-state, writes go
+to the `next` draft, and every declared variable is assigned or named
+`unchanged(...)` per accepted step — statement order can no longer change a
+transition's meaning, and `manifest().acceptors.frames` exposes each
+acceptor's prime/frame sets. This is **breaking for strict-profile modules
+that declare a `modelShape`** (the toolset's flagship artifact class):
+2.0-form acceptors that write `model.x` now throw `SamShapeError`.
+
+Coordinated upgrade across the toolset:
+
+- **Vendored engine** (`scripts/vendor/sam-pattern.cjs`) bumped 2.0.0 →
+  2.1.2; npm deps to `sam-pattern ^2.1.2` / `sam-fsm ^2.1.0`. Every engine
+  loads target modules through `scripts/load-spec.mjs`, which pins to the
+  vendored bundle — engine semantics and a user's installed library now
+  agree again.
+- **All tracked strict+shape machines migrated** to the `next`/`unchanged`
+  form (~40 modules: polyvers/polyrun fixtures and demos, the OMS example
+  family, fleet-study-stripe, oms-go references *and* their deliberately
+  broken control mutants — defects preserved bit-for-bit — etcd-raft-v2,
+  tier-3 pairs, embedded test mocks). LLM-generated archival outputs
+  (results-generated specs, sysmobench gens) are historical run records and
+  were left in 2.0 form.
+- **Prompts** (verify's spec template, polygen's author/repair prompts) now
+  teach the next-state form: writes to `next`, pre-state reads, the frame
+  rule, and the exact `instance({ initialState, component })` wiring idiom.
+- **SAM→TLA transpiler** (`--tla`) accepts the 2.1 acceptor signature,
+  treats `next.x =` as the primed assignment, and fails loud on 2.0-form
+  writes.
+- Validated end-to-end with real generation runs (opus-4.8): spec
+  derivation replays 12/12 windows clean over 2.1-form specs; polygen
+  authors, self-checks, and converges a 2.1-form module.
+
+Known nuance: under 2.1 an intent no acceptor constrains **throws**
+(`SamFrameError`, `unhandledIntent`) instead of warning, and async acceptors
+on a non-synchronized instance throw (2.1.2) instead of silently losing
+post-`await` writes.
+
 ## 5.0.0 — 2026-07-19
 
 No new engine: **polyvers gains an evidence base**. The compatibility

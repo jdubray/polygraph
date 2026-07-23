@@ -1,5 +1,6 @@
-// check-product fixture — shipment child whose cancel handler MUTATES the
-// model and then rejects (the kernel FR-2.5 poison class) when the kernel's
+// check-product fixture — shipment child whose cancel handler writes the
+// frozen pre-state (throwing mid-step — the kernel FR-2.5/FR-1.3 poison
+// class, the 2.1 face of 2.0's mutate-then-reject) when the kernel's
 // FR-8.4 payload arrives while inTransit. The domain walk (payload {}) never
 // sees it; only cancelFor's concrete probe with { reason: 'parent-terminal' }
 // does — the case an abstraction must surface as a reachable poison, never
@@ -22,21 +23,26 @@ const control = instance({
       CANCEL_SHIPMENT: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      SHIP: (model) => (p, { reject }) => {
+      SHIP: (model) => (p, { reject, next }) => {
         if (model.shipState !== 'preparing') return reject('already-shipped');
-        model.shipState = 'inTransit';
+        next.shipState = 'inTransit';
       },
-      DELIVER: (model) => (p, { reject }) => {
+      DELIVER: (model) => (p, { reject, next }) => {
         if (model.shipState !== 'inTransit') return reject('not-in-transit');
-        model.shipState = 'delivered';
+        next.shipState = 'delivered';
       },
-      CANCEL_SHIPMENT: (model) => (p, { reject }) => {
+      CANCEL_SHIPMENT: (model) => (p, { reject, next }) => {
         if (p.reason === 'parent-terminal' && model.shipState === 'inTransit') {
-          model.shipState = 'recallRequested'; // mutate…
-          return reject('carrier-recall-crashed'); // …then reject: FR-2.5 poison
+          // DELIBERATE defect: write the frozen pre-state. Under sam-lib 2.1
+          // next-state semantics this throws SamShapeError mid-step — the
+          // same kernel FR-1.3/FR-2.5 poison class the 2.0 mutate-then-reject
+          // exercised (a 2.1 `next` write before reject is discarded cleanly,
+          // so the frozen-model write is how this defect stays reachable).
+          model.shipState = 'recallRequested';
+          return reject('carrier-recall-crashed'); // unreachable: the write above throws
         }
         if (!['preparing', 'inTransit'].includes(model.shipState)) return reject('cancel-too-late');
-        model.shipState = 'cancelledShipment';
+        next.shipState = 'cancelledShipment';
       },
     },
     reactors: [],

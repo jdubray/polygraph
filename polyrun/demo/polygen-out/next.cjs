@@ -72,7 +72,7 @@ const actionDefs = {
 };
 
 const acceptors = {
-  SUBMIT: (model) => (proposal, { reject }) => {
+  SUBMIT: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'pending') {
       return reject('submit-not-applicable');
     }
@@ -81,11 +81,12 @@ const acceptors = {
         proposal.totalCents < 0) {
       return reject('invalid-total');
     }
-    model.orderState = 'fraudCheck';
-    model.totalCents = proposal.totalCents;
+    next.orderState = 'fraudCheck';
+    next.totalCents = proposal.totalCents;
+    unchanged('txId', 'cancelReason');
   },
 
-  FRAUD_PASSED: (model) => (proposal, { reject }) => {
+  FRAUD_PASSED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'fraudCheck') {
       return reject('fraud-result-not-applicable');
     }
@@ -93,24 +94,26 @@ const acceptors = {
       return reject('invalid-items-available');
     }
     if (proposal.itemsAvailable) {
-      model.orderState = 'charging';
+      next.orderState = 'charging';
     } else {
-      model.orderState = 'awaitingAmend';
+      next.orderState = 'awaitingAmend';
     }
+    unchanged('totalCents', 'txId', 'cancelReason');
   },
 
-  FRAUD_FAILED: (model) => (proposal, { reject }) => {
+  FRAUD_FAILED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'fraudCheck') {
       return reject('fraud-result-not-applicable');
     }
     if (typeof proposal.reason !== 'string' || proposal.reason === '') {
       return reject('invalid-reason');
     }
-    model.orderState = 'rejected';
-    model.cancelReason = proposal.reason;
+    next.orderState = 'rejected';
+    next.cancelReason = proposal.reason;
+    unchanged('totalCents', 'txId');
   },
 
-  AMEND: (model) => (proposal, { reject }) => {
+  AMEND: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'awaitingAmend') {
       return reject('amend-not-applicable');
     }
@@ -119,49 +122,54 @@ const acceptors = {
         proposal.totalCents < 0) {
       return reject('invalid-total');
     }
-    model.orderState = 'charging';
-    model.totalCents = proposal.totalCents;
+    next.orderState = 'charging';
+    next.totalCents = proposal.totalCents;
+    unchanged('txId', 'cancelReason');
   },
 
-  AMEND_WINDOW_EXPIRED: (model) => (proposal, { reject }) => {
+  AMEND_WINDOW_EXPIRED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'awaitingAmend') {
       return reject('stale-completions-reject');
     }
-    model.orderState = 'cancelled';
-    model.cancelReason = 'amend-window-expired';
+    next.orderState = 'cancelled';
+    next.cancelReason = 'amend-window-expired';
+    unchanged('totalCents', 'txId');
   },
 
-  CHARGE_SUCCEEDED: (model) => (proposal, { reject }) => {
+  CHARGE_SUCCEEDED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'charging') {
       return reject('stale-completions-reject');
     }
     if (typeof proposal.txId !== 'string' || proposal.txId === '') {
       return reject('invalid-tx-id');
     }
-    model.orderState = 'shipping';
-    model.txId = proposal.txId;
+    next.orderState = 'shipping';
+    next.txId = proposal.txId;
+    unchanged('totalCents', 'cancelReason');
   },
 
-  CHARGE_FAILED: (model) => (proposal, { reject }) => {
+  CHARGE_FAILED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'charging') {
       return reject('stale-completions-reject');
     }
     if (typeof proposal.reason !== 'string' || proposal.reason === '') {
       return reject('invalid-reason');
     }
-    model.orderState = 'paymentFailed';
-    model.cancelReason = proposal.reason;
+    next.orderState = 'paymentFailed';
+    next.cancelReason = proposal.reason;
+    unchanged('totalCents', 'txId');
   },
 
-  CHARGE_TIMED_OUT: (model) => (proposal, { reject }) => {
+  CHARGE_TIMED_OUT: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'charging') {
       return reject('stale-completions-reject');
     }
-    model.orderState = 'paymentFailed';
-    model.cancelReason = 'charge-timed-out';
+    next.orderState = 'paymentFailed';
+    next.cancelReason = 'charge-timed-out';
+    unchanged('totalCents', 'txId');
   },
 
-  CANCEL: (model) => (proposal, { reject }) => {
+  CANCEL: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState === 'charging') {
       return reject('cancel-blocked-while-charging');
     }
@@ -173,15 +181,17 @@ const acceptors = {
     if (typeof proposal.reason !== 'string' || proposal.reason === '') {
       return reject('invalid-reason');
     }
-    model.orderState = 'cancelled';
-    model.cancelReason = proposal.reason;
+    next.orderState = 'cancelled';
+    next.cancelReason = proposal.reason;
+    unchanged('totalCents', 'txId');
   },
 
-  SHIPMENT_DELIVERED: (model) => (proposal, { reject }) => {
+  SHIPMENT_DELIVERED: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.orderState !== 'shipping') {
       return reject('stale-completions-reject');
     }
-    model.orderState = 'completed';
+    next.orderState = 'completed';
+    unchanged('totalCents', 'txId', 'cancelReason');
   },
 };
 

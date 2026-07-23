@@ -51,10 +51,10 @@ const control = instance({
       REGISTER: { action: (d = {}) => ({ ...d }), schema: { id: { type: 'string', required: true } }, domain: [{ id: 'n1' }, { id: 'n2' }] },
     },
     acceptors: {
-      REGISTER: (model) => (p, { reject }) => {
+      REGISTER: (model) => (p, { reject, next, unchanged }) => {
         const n = model.nodes[p.id];
         if (n) return reject('already-registered');
-        model.nodes = { ...model.nodes, [p.id]: { seen: 1 } };
+        next.nodes = { ...model.nodes, [p.id]: { seen: 1 } };
       },
     },
     reactors: [],
@@ -90,12 +90,12 @@ const control = instance({
       COUNT: { action: (d = {}) => ({ ...d }), schema: { id: { type: 'string', required: true }, v: { type: 'number', required: true } }, domain: [{ id: 'n1', v: 0 }, { id: 'n1', v: 1 }] },
     },
     acceptors: {
-      COUNT: (model) => (p, { reject }) => {
+      COUNT: (model) => (p, { reject, next }) => {
         const n = model.nodes[p.id];
         let seen;
         if (p.v === n.count) seen = 1;
         if (seen !== undefined) return reject('already-seen');
-        model.nodes = { ...model.nodes, [p.id]: { count: p.v } };
+        next.nodes = { ...model.nodes, [p.id]: { count: p.v } };
       },
     },
     reactors: [],

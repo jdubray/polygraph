@@ -1,6 +1,6 @@
 ---
 name: polygen
-description: Write NEW stateful code that is verifiable from the moment it's written, instead of auditing code that already exists (that's the "polygraph" skill). Draft a contract from a feature description, author a SAM v2 strict-profile module against it (named intents/schemas/domains, keyed acceptors, reject(reason), sealed model; --legacy-bare-next authors the legacy init()/next(state, action, data) artifact), self-repair against reachable invariant violations before anything ships, and synthesize a demo/regression trace corpus. Use when the user wants to write a new state machine, workflow, or reducer and have it come out pre-verified; when they say "build a verifiable X"; or as the first half of a lifecycle that ends with wiring the result into a real app and auditing the integration with polygraph. Trigger phrases: "polygen", "write a verifiable state machine", "author verifiable code", "build me a X flow that's already checked", "generate a reducer/workflow and verify it".
+description: Write NEW stateful code that is verifiable from the moment it's written, instead of auditing code that already exists (that's the "polygraph" skill). Draft a contract from a feature description, author a SAM v2 strict-profile module against it (named intents/schemas/domains, keyed acceptors, reject(reason), sealed model, next-state (prime) acceptors; --legacy-bare-next authors the legacy init()/next(state, action, data) artifact), self-repair against reachable invariant violations before anything ships, and synthesize a demo/regression trace corpus. Use when the user wants to write a new state machine, workflow, or reducer and have it come out pre-verified; when they say "build a verifiable X"; or as the first half of a lifecycle that ends with wiring the result into a real app and auditing the integration with polygraph. Trigger phrases: "polygen", "write a verifiable state machine", "author verifiable code", "build me a X flow that's already checked", "generate a reducer/workflow and verify it".
 ---
 
 # polygen — author verifiable code, out of the box
@@ -13,11 +13,13 @@ verified model to another language is a real, separate problem — the port
 itself would need its own differential check against the JS original — and is
 out of scope here).
 
-**The authored artifact (v0.6):** by default a **SAM v2 strict-profile
+**The authored artifact (v0.7):** by default a **SAM v2 strict-profile
 module** (`module.exports = { instance, init, actions, getState, setState }`,
-sam-lib 2.0.0-alpha vendored in the plugin): named intents with schemas and
+sam-lib 2.1.2 vendored in the plugin): named intents with schemas and
 finite domains, acceptors keyed by intent name, every not-applicable action
-an observable `reject(reason)` (never a throw), sealed model. Generated code
+an observable `reject(reason)` (never a throw), sealed model, and explicit
+next-state (prime) semantics — acceptors write the `next` draft and frame
+untouched variables with `unchanged(...)` (sam-lib 2.1, #25). Generated code
 must load **strict-clean** — `instance({}).validate()` is a hard gate at
 every stage boundary, so schema/shape errors block instead of becoming report
 lines, and dead wiring cannot ship silently. The self-repair loop feeds back

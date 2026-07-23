@@ -1,6 +1,6 @@
 ---
 name: polygraph
-description: A polygraph for your state machine. Audit a stateful piece of code end-to-end: YOU (the agent) instrument a copy, build any test doubles needed to run it, and capture real execution traces, then derive a transition-function spec from its source with an LLM (default artifact: a SAM v2 strict-profile module — named intents/schemas/domains, keyed acceptors, observable reject(reason), sealed model; --legacy-bare-next keeps the original bare next(state, action, data) contract), replay the traces against it, model-check it against invariants, and surface every disagreement as a spec-error, a code-finding, or a contract-error. Optional --tla tier escalates the winning spec to TLC. Use when the user wants to verify a state machine, workflow, reducer, or protocol implementation against its own behavior; check whether code does what it is believed to do; or reproduce/triage suspected state-handling defects. Trigger phrases: "polygraph", "verify this state machine", "check my reducer/workflow", "does this code do what I think", "audit the payment/order/session flow", "bare next / trace validation", "SAM spec verification".
+description: A polygraph for your state machine. Audit a stateful piece of code end-to-end: YOU (the agent) instrument a copy, build any test doubles needed to run it, and capture real execution traces, then derive a transition-function spec from its source with an LLM (default artifact: a SAM v2 strict-profile module — named intents/schemas/domains, keyed acceptors, observable reject(reason), sealed model, next-state (prime) acceptors; --legacy-bare-next keeps the original bare next(state, action, data) contract), replay the traces against it, model-check it against invariants, and surface every disagreement as a spec-error, a code-finding, or a contract-error. Optional --tla tier escalates the winning spec to TLC. Use when the user wants to verify a state machine, workflow, reducer, or protocol implementation against its own behavior; check whether code does what it is believed to do; or reproduce/triage suspected state-handling defects. Trigger phrases: "polygraph", "verify this state machine", "check my reducer/workflow", "does this code do what I think", "audit the payment/order/session flow", "bare next / trace validation", "SAM spec verification".
 ---
 
 # Polygraph — a polygraph for your state machine
@@ -26,19 +26,26 @@ All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Node ≥ 20 is required
 Generation needs `ANTHROPIC_API_KEY` and an explicit model (recommend
 `opus-4.8` or `fable-5`; there is no default). Replay and controls need no key.
 
-**The artifact (v0.6):** by default the derived spec is a **SAM v2
-strict-profile module** (`@cognitive-fab/sam-pattern` 2.0.0-alpha, vendored at
+**The artifact (v0.7):** by default the derived spec is a **SAM v2
+strict-profile module** (`@cognitive-fab/sam-pattern` 2.1.2, vendored at
 `scripts/vendor/sam-pattern.cjs`): named intents with per-intent schemas and
 finite payload **domains** declared in a manifest, acceptors keyed by intent
-name, every ignored action an observable `reject(reason)`, and a sealed model
-(no hidden state). This buys evidence bare-next could not produce: a failing
-no-op window now says *why* the spec did nothing (`rejected(reason)` /
-`identity-by-mutation` / `unhandled`), dead wiring is a load-time error
-instead of a silent zero, the checker's exploration domains come from the
-module's own manifest, every check runs a determinism double-pass, and the
-spec is mechanically transpilable to TLA+ (`--tla`). The original bare
+name, every ignored action an observable `reject(reason)`, a sealed model
+(no hidden state), and **explicit next-state (prime) semantics** (sam-lib
+2.1, #25) — each acceptor is a TLA+-style next-state relation: `model` is the
+frozen pre-state, writes go to the `next` draft
+(`next.x = model.x + 1`), and every declared variable is either assigned or
+named `unchanged(...)` per accepted step. This buys evidence bare-next could
+not produce: a failing no-op window now says *why* the spec did nothing
+(`rejected(reason)` / `identity-by-mutation` / `unhandled`), dead wiring is a
+load-time error instead of a silent zero, statement order can no longer
+change a transition's meaning, the checker's exploration domains come from
+the module's own manifest, every check runs a determinism double-pass, and
+the spec is mechanically transpilable to TLA+ (`--tla`). The original bare
 `next(state, action, data)` artifact remains available end-to-end behind
-`--legacy-bare-next` for one release.
+`--legacy-bare-next` for one release. (2.0-form strict modules — acceptors
+that write `model.x` directly — throw `SamShapeError` under 2.1: migrate
+them, see sam-pattern's docs/MIGRATION.md.)
 
 House rule (from sam-lib #29, fixed structurally in 2.0.0-alpha.2): never
 rely on `instance({}).state()` — on machines whose primary control key is
