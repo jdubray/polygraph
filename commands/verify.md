@@ -39,9 +39,19 @@ Useful flags:
   written. Optional: `--tla-bound N`, `--tla-timeout <seconds>`.
 - `--invariants <inv.mjs>` / `--max-states N` — the model-checking half
   (Part 2); runs automatically when `invariants.mjs` sits beside the contract.
+- `--initial-states <states.json>` — a JSON array of state objects seeded into
+  every per-spec model check alongside `init()`. This is the remedy for a
+  `FROZEN STATE KEY` warning in `findings.md` (a key no action changes leaves
+  Part 2 structurally blind to behavior it gates — seed non-default values to
+  unfreeze it).
 
 Recommended models: `opus-4.8`, `fable-5` (configurable; no default — pass the
 exact Anthropic model id if you are not using a known alias).
+
+Prerequisite: a REAL captured trace corpus. The corpus is the verification —
+if the code cannot be run and instrumented to capture traces, this tool does
+not apply (recommend hand-written modeling instead); never substitute
+synthetic traces derived from reading the source.
 
 Steps to perform:
 1. If no `contract.json` exists yet, help the user build one from

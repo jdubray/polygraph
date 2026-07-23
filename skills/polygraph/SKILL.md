@@ -22,6 +22,17 @@ replaying, and classifying.
 > hand, not an established result. Do not present it as a guarantee, and do not
 > let it be the only safeguard for correctness- or safety-critical code.
 
+> **Prerequisite — real traces, or this is the wrong tool.** The trace corpus
+> is not an input among others; it IS the verification. Part 1 (replay) checks
+> the code's *captured behavior* against an independent reading of its source —
+> with no real traces there is nothing to check, and hand-modeling both sides
+> is grading your own homework (the model-check half then only tests whether
+> your own model agrees with your own invariants). If the code cannot be run
+> and instrumented — no way to execute it, no test doubles buildable, capture
+> forbidden — say so and stop: recommend hand-written modeling (e.g. TLA+ from
+> the spec) instead of Polygraph. Do not substitute synthetic traces derived
+> from reading the source; they inherit every misreading the specs will make.
+
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Node ≥ 20 is required.
 Generation needs `ANTHROPIC_API_KEY` and an explicit model (recommend
 `opus-4.8` or `fable-5`; there is no default). Replay and controls need no key.
@@ -103,9 +114,22 @@ settles.
   (`@cognitive-fab/sam-pattern`, optionally with `sam-fsm`) — it wraps the
   `component` config so every dispatch emits a window, no-ops included. For other
   languages, write a small emitter by hand following the same shape.
+- **Capture by event subscription, never by polling.** Hook the target's own
+  event/observer/callback surface (a dispatch wrapper, a reducer tap, the
+  library's Observer mechanism) so every transition emits a window. Treat
+  "sleep and poll the state" as a red flag for ANY transition that can resolve
+  faster than the poll interval: in the hashicorp/raft field study
+  (`eval/FINDING-raft-field-study.md`), polling every ~2 ms silently missed
+  *every* Candidate occupancy because elections resolved faster than the poll
+  — the corpus looked healthy and was structurally blind to a whole state.
 - Drive scenarios, one trace file per scenario: the normal path, each failure
   class, races, and deliberate glitches (an action into a terminal state → a
   no-op window). Use existing test doubles or emulators.
+- **Sanity-check coverage against the contract**: a state or special rule the
+  contract declares but the corpus never visits is a capture bug until proven
+  otherwise (too-coarse polling, a scenario you didn't drive) — not evidence
+  the state is rare. Step 3's `mutate.mjs --all` makes this check mechanical:
+  a zero-flip mutation names a rule no trace exercises.
 - Then validate the corpus:
   `node ${CLAUDE_PLUGIN_ROOT}/scripts/validate_corpus.mjs contract.json traces/`
   Fix any chaining or terminal-state problem before continuing (traces are
@@ -116,12 +140,30 @@ settles.
 Before involving the model, establish that the replay discriminates:
 
 - **Positive control**: write a reference `next()` yourself by reading the code;
-  it must score 100%.
-- **Negative control**: break one rule in the reference; confirm it fails
-  exactly the expected windows.
+  it must score 100%. Replay it with:
+  `node ${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs --contract contract.json --traces traces/ --specs <dir-of-your-reference-specs>`
+- **Negative control — scripted, one command** (this is the only step that
+  proves the harness CAN fail; do not hand-edit spec copies):
 
-Replay a spec directly with:
-`node ${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs --contract contract.json --traces traces/ --specs <dir-of-your-reference-specs>`
+  ```
+  node ${CLAUDE_PLUGIN_ROOT}/scripts/mutate.mjs \
+    --spec reference.js --contract contract.json --traces traces/ --all
+  ```
+
+  This enumerates targeted mutations of the reference (guard negation,
+  transition retarget, acceptor widening, field freeze — the same operators
+  polynv's adequacy grade uses), applies each, and reports the windows that
+  flip. Read the three outcomes:
+  - *windows flipped* — the corpus discriminates that rule ✓;
+  - *behaviorally EQUIVALENT* — no corpus could distinguish this mutant;
+    discarded, not a problem;
+  - *ZERO windows flipped* (exit 1) — a **corpus blind spot**: no captured
+    trace exercises that rule, so a real regression there would replay clean.
+    Capture a trace that drives it before trusting a clean run. This is the
+    trace-side twin of the checker's FROZEN STATE KEY warning.
+
+  `--list` shows the mutation ids; `--apply <id>` runs one. Add
+  `--legacy-bare-next` for a bare-next reference.
 
 ## Step 4 — Generate and replay
 
@@ -173,6 +215,13 @@ The half that actually finds bugs is iterating the spec against invariants.
 - Honest limits: exploration is bounded (report cap hits); and a hazard that
   depends on an EXTERNAL service (not in the observable state) is invisible to
   reachability — it needs a real sandbox probe, not a bigger search.
+- Read the checker's structural warnings, they are findings about the CHECK
+  itself: a **FROZEN STATE KEY** (a key no action changes — Part 2 is blind to
+  behavior it gates; seed `--initial-states` with non-default values, or
+  capture traces that vary it) and a **drift warning** (a key minting fresh
+  states forever — the state space is likely unbounded in that key; abstract
+  it in the contract or lower `--max-states`, and treat any clean verdict as
+  covering an arbitrary prefix).
 
 ## Step 4c — TLC escalation (optional, `--tla`)
 
@@ -199,8 +248,14 @@ construct: transpilability is a checkable property of the spec.
   pre-state and action) or the observable-state contract omits a field that
   drives the transition (widen it and return to Step 2).
 - **spec-error** (some specs pass, some fail): usually one generation missed a
-  rule; check the majority. Note *which* rule — it is typically a special case
-  outside the main state table, and worth a code comment for the next reader.
+  rule — but check the report's **spec agreement** line and the **split**
+  column first. A lopsided split (4-vs-1) cuts both ways: several specs making
+  the IDENTICAL mistake looks the same as one spec missing a rule, and in the
+  raft field study the majority was wrong (4 of 5 collapsed two independently
+  gated updates into one; the lone dissenter matched the hand control). Judge
+  the minority against the source, not the vote count. Note *which* rule — it
+  is typically a special case outside the main state table, and worth a code
+  comment for the next reader.
 - **unscoreable in all specs**: the generated modules did not load or lack the
   expected surface. Fix generation, not the code.
 
