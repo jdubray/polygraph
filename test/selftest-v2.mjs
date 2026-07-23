@@ -203,6 +203,19 @@ ok('manifest supplies every domain (no skip notes)', (good.domainNotes || []).le
 ok('frozen-field scan runs on the v2 engine (turnstile keys all vary — none frozen)',
   Array.isArray(good.frozenKeys) && good.frozenKeys.length === 0);
 
+// mutate.mjs (M4) drives a v2 module through the same adapter + manifest
+// alphabet: enumeration works, and the control classifies every mutation
+// without crashing (adapter rejections replay as no-ops under projection).
+{
+  const { enumerateMutations: mutEnum, applyMutations: mutApply } = await import('../scripts/mutate.mjs');
+  const v2Mut = mutEnum({ specModule: loadSpec(V2_SPEC), contract });
+  ok('mutate: v2 spec enumerates operators over the manifest alphabet', v2Mut.mutants.length > 0);
+  const v2Applied = mutApply({ specModule: loadSpec(V2_SPEC), contract, windows });
+  ok('mutate: v2 control classifies every mutation (discriminated/equivalent/blind-spot)',
+    v2Applied.reports.length === v2Mut.mutants.length
+    && v2Applied.reports.every((r) => ['discriminated', 'equivalent', 'equivalent-bounded', 'blind-spot'].includes(r.status)));
+}
+
 const buggy = check({ specModule: loadSpec(buggySpec), contract, invariants, maxStates: 40 });
 ok('seeded bug FOUND via manifest-domain exploration', buggy.ok === false
   && buggy.violations.some((v) => v.invariant === 'control-state-is-declared'));

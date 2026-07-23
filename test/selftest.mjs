@@ -540,5 +540,143 @@ console.log('10) runaway-exploration guardrails — drift detection + heartbeat'
     /likely unbounded in this key/.test(readFileSync(join(rwDir, 'out', 'findings.md'), 'utf-8')));
 }
 
+console.log('11) spec-vs-spec agreement — the vote structure is a first-class signal');
+// A lopsided split among generated specs (raft: 4 of 5 made the IDENTICAL
+// mistake, the dissenter was right) must surface without hand-diffing specs.
+{
+  const agDir = join(TMP, 'agreement');
+  mkdirSync(join(agDir, 'specs'), { recursive: true });
+  mkdirSync(join(agDir, 'traces'), { recursive: true });
+  const goodSpec = `module.exports = { init: () => ({ mode: 'a' }), next: (s, a) => (a === 'FLIP' ? { mode: s.mode === 'a' ? 'b' : 'a' } : { mode: s.mode }) };`;
+  writeFileSync(join(agDir, 'specs', 'spec_0.js'), goodSpec, 'utf-8');
+  writeFileSync(join(agDir, 'specs', 'spec_1.js'), goodSpec, 'utf-8');
+  writeFileSync(join(agDir, 'specs', 'spec_2.js'),
+    `module.exports = { init: () => ({ mode: 'a' }), next: (s) => ({ mode: s.mode }) };`, 'utf-8'); // FLIP is a no-op: fails every window
+  writeFileSync(join(agDir, 'contract.json'),
+    JSON.stringify({ stateKeys: ['mode'], actions: { FLIP: { dataFields: {} } } }), 'utf-8');
+  writeFileSync(join(agDir, 'traces', 's1.ndjson'), [
+    JSON.stringify({ pre: { mode: 'a' }, action: 'FLIP', data: {}, post: { mode: 'b' } }),
+    JSON.stringify({ pre: { mode: 'b' }, action: 'FLIP', data: {}, post: { mode: 'a' } }),
+    JSON.stringify({ pre: { mode: 'a' }, action: 'FLIP', data: {}, post: { mode: 'b' } }),
+  ].join('\n') + '\n', 'utf-8');
+  const agRun = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out') });
+  // pairs: (0,1) agree 3/3, (0,2) 0/3, (1,2) 0/3 -> 3/9 = 33%
+  ok('pairwise agreement computed over live specs', agRun.summary.agreement.pairwisePct === 33);
+  ok('the outlier is named with its deviation count',
+    agRun.summary.agreement.outliers.length === 1 && agRun.summary.agreement.outliers[0].spec === 'spec_2.js' && agRun.summary.agreement.outliers[0].deviations === 3);
+  ok('per-window split names majority-vs-minority',
+    agRun.findings.every((f) => f.split === '2-vs-1 (minority: spec_2.js)'));
+  const agMd = readFileSync(join(agDir, 'out', 'findings.md'), 'utf-8');
+  ok('consensus line rendered with the outlier warning',
+    /spec agreement: pairwise \*\*33%\*\*/.test(agMd) && /3\/3 majority-bearing windows/.test(agMd) && /NOT automatically right/.test(agMd));
+  ok('split column rendered in the findings table', /2-vs-1 \(minority: spec_2\.js\)/.test(agMd));
+
+  // All-agree: a quiet consensus line, no outlier noise.
+  rmSync(join(agDir, 'specs', 'spec_2.js'));
+  const agClean = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-clean') });
+  ok('all-agree run: pairwise 100%, no outliers', agClean.summary.agreement.pairwisePct === 100 && agClean.summary.agreement.outliers.length === 0);
+  ok('all-agree consensus line is quiet',
+    /all 2 live specs agree on every measured window/.test(readFileSync(join(agDir, 'out-clean', 'findings.md'), 'utf-8')));
+
+  // EVEN SPLIT (1-vs-1): no strict majority exists, so there is no nameable
+  // outlier — but 0% agreement must NEVER render as consensus (the quiet line
+  // is gated on full agreement, not on "no outlier").
+  writeFileSync(join(agDir, 'specs', 'spec_1.js'),
+    `module.exports = { init: () => ({ mode: 'a' }), next: (s) => ({ mode: s.mode }) };`, 'utf-8');
+  const agEven = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-even') });
+  ok('even split: 0% pairwise, no-majority windows counted, no fake outlier',
+    agEven.summary.agreement.pairwisePct === 0 && agEven.summary.agreement.noMajority === 3 && agEven.summary.agreement.outliers.length === 0);
+  const evenMd = readFileSync(join(agDir, 'out-even', 'findings.md'), 'utf-8');
+  ok('even split never renders as consensus',
+    !/agree on every measured window/.test(evenMd) && /split with NO majority/.test(evenMd));
+
+  // Windows unscoreable in EVERY live spec measured nothing — excluded from
+  // the agreement denominator instead of inflating consensus.
+  writeFileSync(join(agDir, 'specs', 'spec_1.js'), goodSpec, 'utf-8');
+  writeFileSync(join(agDir, 'traces', 's2.ndjson'),
+    JSON.stringify({ pre: { mode: 'a' }, action: 'FLIP', data: {}, post: {} }) + '\n', 'utf-8'); // empty post: unscoreable everywhere
+  const agUnsc = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-unsc') });
+  ok('unscoreable-everywhere window excluded from the agreement measure',
+    agUnsc.summary.agreement.measuredWindows === 3 && agUnsc.summary.agreement.pairwisePct === 100
+    && /unscoreable-everywhere window\(s\) excluded/.test(readFileSync(join(agDir, 'out-unsc', 'findings.md'), 'utf-8')));
+  rmSync(join(agDir, 'traces', 's2.ndjson'));
+
+  // A single live spec has no cross-spec signal — no agreement block, no crash.
+  rmSync(join(agDir, 'specs', 'spec_1.js'));
+  const agOne = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-one') });
+  ok('single live spec: agreement is null (no fake 100%)', agOne.summary.agreement === null);
+}
+
+console.log('12) scripted negative control (scripts/mutate.mjs) — the control that proves the harness can fail');
+{
+  const { enumerateMutations, applyMutations, renderReports } = await import('../scripts/mutate.mjs');
+  const { loadSpec: loadSpecFile } = await import('../scripts/check.mjs');
+  const refSpec = loadSpecFile(join(EX, 'specs', 'reference.js'));
+  const tsContract = JSON.parse(readFileSync(join(EX, 'contract.json'), 'utf-8'));
+  const tsWindows = loadWindows(join(EX, 'traces'));
+  const { mutants } = enumerateMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows, legacyBareNext: true });
+  ok('polynv operators enumerated with stable ids (guard-drop, retarget, widen, freeze)',
+    ['drop:COIN@"LOCKED"', 'drop:PUSH@"UNLOCKED"', 'retarget:COIN@"UNLOCKED"->"LOCKED"', 'freeze:coins'].every((id) => mutants.some((m) => m.id === id)));
+
+  // A targeted mutation reproduces the hand-made negative control: known
+  // flipped windows, everything else untouched.
+  const one = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows, legacyBareNext: true, id: 'drop:COIN@"LOCKED"' });
+  ok('applied mutation reports the exact flipped windows',
+    one.reports.length === 1 && one.reports[0].status === 'discriminated'
+    && one.reports[0].originalPassed === 12 && one.reports[0].mutantPassed === 8 && one.reports[0].flipped.length === 4);
+  ok('render names the discriminated rule', /the corpus discriminates this rule ✓/.test(renderReports(one)));
+
+  // Equivalent-mutant discard: widening PUSH@LOCKED yields the same no-op the
+  // original already performs — no corpus can distinguish it, so it must NOT
+  // be reported as a corpus blind spot (that would demand an impossible
+  // trace). Turnstile coins are unbounded, so the graphs are CAP-TRUNCATED —
+  // the claim must therefore be the bounded one, not full equivalence
+  // (digest equality over truncated prefixes proves nothing beyond the bound).
+  const all = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows, legacyBareNext: true });
+  const widen = all.reports.find((r) => r.id.startsWith('widen:PUSH'));
+  ok('indistinguishable mutant over a truncated graph claims BOUNDED equivalence only',
+    widen && widen.status === 'equivalent-bounded' && /NOT proof of equivalence/.test(renderReports(all)));
+  ok('full corpus discriminates every distinguishable mutation (no blind spots)',
+    all.reports.every((r) => r.status !== 'blind-spot'));
+
+  // Scoring parity with the pipeline replayers: PROJECTION — a trace post
+  // carrying only a subset of keys still passes a spec that returns more.
+  const projWindows = [{ scenario: 'p', index: 0, action: 'COIN', data: {}, pre: { state: 'LOCKED', coins: 0 }, post: { state: 'UNLOCKED' } }];
+  const proj = applyMutations({ specModule: refSpec, contract: tsContract, windows: projWindows, legacyBareNext: true, id: 'drop:COIN@"LOCKED"' });
+  ok('projection rule: subset-key post scores pass on the original (parity with tv.mjs)',
+    proj.reports[0].originalPassed === 1 && proj.reports[0].flipped.length === 1);
+
+  // Step-3 doctrine enforced: an imperfect reference refuses the control
+  // instead of laundering the mismatch into "blind spot" verdicts.
+  const brokenRef = { init: refSpec.init, next: (s) => ({ state: s.state, coins: s.coins }) };
+  let refused = false;
+  try { applyMutations({ specModule: brokenRef, contract: tsContract, windows: tsWindows, legacyBareNext: true }); }
+  catch (e) { refused = /positive control must be 100%/.test(e.message); }
+  ok('imperfect reference refuses the negative control loudly', refused);
+
+  // A thin corpus that never exercises a rule is a BLIND SPOT — the trace-side
+  // twin of the M1 frozen-key warning, and the tool's headline result.
+  const thin = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows.slice(0, 1), legacyBareNext: true, id: 'drop:PUSH@"UNLOCKED"' });
+  ok('unexercised rule reports a corpus blind spot',
+    thin.reports[0].status === 'blind-spot' && /ZERO windows flipped/.test(renderReports(thin)));
+
+  // CLI exit contract: blind spot -> 1, all-discriminated-or-equivalent -> 0,
+  // usage error -> 2.
+  const { spawnSync } = await import('node:child_process');
+  const MUT = join(HERE, '..', 'scripts', 'mutate.mjs');
+  const cliOk = spawnSync('node', [MUT, '--spec', join(EX, 'specs', 'reference.js'), '--contract', join(EX, 'contract.json'), '--traces', join(EX, 'traces'), '--legacy-bare-next', '--all'], { encoding: 'utf-8' });
+  ok('CLI --all exits 0 when the corpus discriminates every distinguishable rule', cliOk.status === 0);
+  const thinDir = join(TMP, 'thin-traces');
+  mkdirSync(thinDir, { recursive: true });
+  writeFileSync(join(thinDir, 's1.ndjson'), JSON.stringify({ pre: { state: 'LOCKED', coins: 0 }, action: 'COIN', data: {}, post: { state: 'UNLOCKED', coins: 1 } }) + '\n', 'utf-8');
+  const cliBlind = spawnSync('node', [MUT, '--spec', join(EX, 'specs', 'reference.js'), '--contract', join(EX, 'contract.json'), '--traces', thinDir, '--legacy-bare-next', '--all'], { encoding: 'utf-8' });
+  ok('CLI --all exits 1 on a corpus blind spot (a control that cannot fail is a failed control)', cliBlind.status === 1);
+  const cliUsage = spawnSync('node', [MUT, '--spec', 'x.js'], { encoding: 'utf-8' });
+  ok('CLI usage error exits 2', cliUsage.status === 2 && /usage: mutate\.mjs/.test(cliUsage.stderr));
+  const cliNaN = spawnSync('node', [MUT, '--spec', join(EX, 'specs', 'reference.js'), '--contract', join(EX, 'contract.json'), '--list', '--max-states', 'abc'], { encoding: 'utf-8' });
+  ok('CLI non-numeric --max-states exits 2 (never a silent empty exploration)',
+    cliNaN.status === 2 && /positive integer/.test(cliNaN.stderr));
+}
+
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);
