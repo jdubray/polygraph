@@ -1,6 +1,6 @@
 {
   "name": "polygraph",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "description": "A polygraph for your state machine: an LLM derives a transition-function spec from your code (default: SAM v2 strict-profile module; --legacy-bare-next for the bare next(state, action, data) artifact), then Polygraph replays real traces against it (conformance) AND model-checks it against invariants (finds bugs by exhaustive iteration), with an optional TLC escalation tier (--tla). Also includes polygen: author NEW verifiable code from a feature description.",
   "type": "module",
   "license": "Apache-2.0",
@@ -26,7 +26,7 @@
     "test:polyrun": "node --no-warnings --test polyrun/test/kernel.test.mjs polyrun/test/m1.test.mjs polyrun/test/m2.test.mjs polyrun/test/m3.test.mjs polyrun/test/check-product.test.mjs polyrun/test/simulate.test.mjs polyrun/test/soak.test.mjs",
     "test:polyvers": "node --no-warnings --test polyvers/test/m0.test.mjs polyvers/test/product.test.mjs",
     "test:polynv": "node --no-warnings --test polynv/test/m0.test.mjs polynv/test/m1.test.mjs polynv/test/m2.test.mjs polynv/test/review-fixes.test.mjs polynv/test/completion.test.mjs",
-    "test:polyviz": "node --no-warnings --test polyviz/test/determinism.test.mjs polyviz/test/counterexample.test.mjs polyviz/test/state-machine.test.mjs polyviz/test/compat.test.mjs polyviz/test/adapter.test.mjs polyviz/test/adapter-machine.test.mjs polyviz/test/adapter-ce.test.mjs polyviz/test/golden.test.mjs polyviz/test/schema.test.mjs polyviz/test/overflow.test.mjs polyviz/test/theme.test.mjs polyviz/test/png.test.mjs polyviz/test/report.test.mjs polyviz/test/no-hex.test.mjs",
+    "test:polyviz": "node --no-warnings --test polyviz/test/determinism.test.mjs polyviz/test/counterexample.test.mjs polyviz/test/state-machine.test.mjs polyviz/test/compat.test.mjs polyviz/test/adapter.test.mjs polyviz/test/adapter-machine.test.mjs polyviz/test/adapter-ce.test.mjs polyviz/test/example.test.mjs polyviz/test/golden.test.mjs polyviz/test/schema.test.mjs polyviz/test/overflow.test.mjs polyviz/test/theme.test.mjs polyviz/test/png.test.mjs polyviz/test/report.test.mjs polyviz/test/no-hex.test.mjs",
     "polyvers": "node polyvers/bin/polyvers.mjs",
     "polynv": "node polynv/bin/polynv.mjs",
     "polyviz": "node polyviz/bin/polyviz.mjs",
@@ -54,10 +54,10 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@cognitive-fab/sam-fsm": "^2.0.0"
+    "@cognitive-fab/sam-fsm": "^2.1.0"
   },
   "dependencies": {
-    "@cognitive-fab/sam-pattern": "^2.0.0",
+    "@cognitive-fab/sam-pattern": "^2.1.2",
     "acorn": "^8.17.0",
     "pg": "^8.22.0"
   },

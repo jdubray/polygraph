@@ -18,8 +18,12 @@ return the same completed/captured state without charging again. Retrying
 with a DIFFERENT (new) idempotency key is only allowed to proceed to a fresh
 capture attempt if the PRIOR key's capture attempt failed (was declined or
 errored) -- not if it already succeeded." \
-  --model opus-4.8 --out examples/polygen-cart-checkout --repair-max 3
+  --model sonnet-5 --out examples/polygen-cart-checkout --repair-max 3
 ```
+
+> Historical record — this is the exact command that produced the committed
+> artifacts; do not rewrite the model. The *current* recommendation for new
+> runs is `opus-4.8` or better (see the Models section of the root README).
 
 ## What happened (short version)
 

@@ -35,6 +35,18 @@ Polygraph is developed by Cognitive Fab LLC (<https://cognitivefab.com>). For
 questions, commercial support, or collaboration, reach us at
 <hello@cognitivefab.com>.
 
+## Demos & write-ups
+
+The **DAAO demo** — a Dual-Authorization Action Order machine taken end to end
+through the method (author it, break it, catch it, version-gate it) — lives in
+its own repo: [`jdubray/polygraph-demo-daao`](https://github.com/jdubray/polygraph-demo-daao).
+
+Three articles walk the demos:
+
+1. [DeepSeek wrote the code. A two-line prompt checked every reachable state.](https://www.linkedin.com/pulse/deepseek-wrote-code-two-line-prompt-checked-every-reachable-d--k0zvf/) — auditing existing code with `/polygraph:verify`.
+2. [polygen wrote the dual-authorization code](https://www.linkedin.com/pulse/polygen-wrote-dual-authorization-code-jean-jacques-d--mckuc/) — authoring verified-from-birth code with polygen.
+3. [You just changed the code of your state machine. Now what?](https://www.linkedin.com/pulse/you-just-changed-code-your-state-machine-now-what-jean-jacques-d--suh3c/) — version-gating a change against the live fleet with polyvers.
+
 ## Why Polygraph
 
 Unit tests execute the scenarios you wrote. A state machine of even modest

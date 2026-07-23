@@ -6,9 +6,8 @@
   },
   "invariants": {
     "S1-no-delivery-without-charge": { "id": "S1", "text": "Never deliver an order that was never charged" },
-    "S2-no-double-charge": { "id": "S2", "text": "Never charge an order twice — exactly once" },
-    "S3-no-ship-without-charge": { "id": "S3", "text": "Never ship an order that was never charged" },
-    "L1-cancellable-until-charged": { "id": "L1", "text": "An order stays cancellable until it is charged" }
+    "S2-charged-implies-post-charge": { "id": "S2", "text": "Never mark an order charged before the charge step" },
+    "L1-cancellable-until-charged": { "id": "L1", "text": "An order stays cancellable until it is charged (reachability — checked separately)", "status": "unchecked" }
   },
   "counterexample": {
     "kicker": "THE BUG IT CAUGHT",

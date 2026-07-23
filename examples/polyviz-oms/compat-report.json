@@ -23,7 +23,7 @@
       "migratedCorpus": [
         { "id": "live#o1", "state": { "state": "DELIVERED", "charged": true, "shipped": true }, "source": "live" },
         { "id": "live#o2", "state": { "state": "CHARGED", "charged": true, "shipped": false }, "source": "live" },
-        { "id": "live#o3", "state": { "state": "SHIPPED", "charged": true, "shipped": false }, "source": "live" }
+        { "id": "live#o3", "state": { "state": "SHIPPED", "charged": true, "shipped": true }, "source": "live" }
       ]
     },
     {
