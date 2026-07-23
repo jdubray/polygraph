@@ -200,6 +200,8 @@ ok('v2 engine selected (adapter + manifest domains)', good.engine === 'sam-v2');
 ok('exploration is real (multiple states from manifest domains)', good.statesExplored > 1);
 ok('good v2 spec: no violations, deterministic', good.violations.length === 0 && good.nondeterministic === false);
 ok('manifest supplies every domain (no skip notes)', (good.domainNotes || []).length === 0);
+ok('frozen-field scan runs on the v2 engine (turnstile keys all vary — none frozen)',
+  Array.isArray(good.frozenKeys) && good.frozenKeys.length === 0);
 
 const buggy = check({ specModule: loadSpec(buggySpec), contract, invariants, maxStates: 40 });
 ok('seeded bug FOUND via manifest-domain exploration', buggy.ok === false

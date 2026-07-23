@@ -386,5 +386,96 @@ ok('validateCorpus flags an all-blank corpus (zero windows)', blankRep.problems.
     zeroOk.status === 1 && /no specs were written/.test(zeroOk.stderr));
 }
 
+console.log('9) frozen-field warning — the checker announces its structural blind spot');
+// A state key no action ever changes fixes exploration to its init() value:
+// behavior gated on other values is structurally unreachable and the check
+// passes vacuously over it (eval/FINDING-raft-field-study.md, startIndex).
+{
+  const gated = {
+    init: () => ({ mode: 'a', cfg: 3, n: 0 }),
+    next: (s, a) => (a === 'TICK' && s.n < s.cfg
+      ? { mode: s.mode === 'a' ? 'b' : 'a', cfg: s.cfg, n: s.n + 1 }
+      : { mode: s.mode, cfg: s.cfg, n: s.n }),
+  };
+  const gatedContract = { stateKeys: ['mode', 'cfg', 'n'], actions: { TICK: { dataFields: {} } } };
+  const frozenRes = check({ specModule: gated, contract: gatedContract, invariants: {} });
+  ok('frozen key detected (cfg never changes across the reachable graph)',
+    (frozenRes.frozenKeys || []).some((f) => f.key === 'cfg' && f.value === 3));
+  ok('varying keys are NOT reported frozen',
+    !frozenRes.frozenKeys.some((f) => f.key === 'n' || f.key === 'mode'));
+  ok('frozen key surfaces as a WARNING in check render',
+    /WARNING: state key 'cfg' is frozen at 3/.test(renderCheck(frozenRes)));
+  ok('machine where every key varies reports no frozen keys (no new noise)',
+    check({ specModule: fixed, contract: counterContract, invariants: inv }).frozenKeys.length === 0);
+  // The documented remedy clears the warning by construction: a seeded state
+  // with a non-default value joins the reachable graph, so the key varies.
+  const seededRes = check({ specModule: gated, contract: gatedContract, invariants: {}, initialStates: [{ mode: 'a', cfg: 5, n: 0 }] });
+  ok('an --initial-states seed with a non-default value un-freezes the key',
+    !(seededRes.frozenKeys || []).some((f) => f.key === 'cfg'));
+
+  // End-to-end: the warning reaches findings.md through verify's invariant phase.
+  const fzDir = join(TMP, 'frozen');
+  mkdirSync(join(fzDir, 'specs'), { recursive: true });
+  mkdirSync(join(fzDir, 'traces'), { recursive: true });
+  writeFileSync(join(fzDir, 'specs', 'spec_0.js'),
+    `module.exports = { init: () => ({ mode: 'a', cfg: 3 }), next: (s, a) => (a === 'FLIP' ? { mode: s.mode === 'a' ? 'b' : 'a', cfg: s.cfg } : { mode: s.mode, cfg: s.cfg }) };`, 'utf-8');
+  writeFileSync(join(fzDir, 'contract.json'),
+    JSON.stringify({ stateKeys: ['mode', 'cfg'], actions: { FLIP: { dataFields: {} } } }), 'utf-8');
+  writeFileSync(join(fzDir, 'traces', 's1.ndjson'),
+    JSON.stringify({ pre: { mode: 'a', cfg: 3 }, action: 'FLIP', data: {}, post: { mode: 'b', cfg: 3 } }) + '\n', 'utf-8');
+  writeFileSync(join(fzDir, 'inv.mjs'), `export const stateInvariants = [{ name: 'mode-declared', pred: (s) => s.mode === 'a' || s.mode === 'b' }];\n`, 'utf-8');
+  const fzRun = await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), out: join(fzDir, 'out') });
+  ok('invReport aggregates the frozen key at all-specs strength',
+    fzRun.invReport.frozenKeys.length === 1 && fzRun.invReport.frozenKeys[0].key === 'cfg'
+    && fzRun.invReport.frozenKeys[0].values.length === 1 && fzRun.invReport.frozenKeys[0].values[0] === 3
+    && fzRun.invReport.frozenKeys[0].strength === 'all-specs');
+  const fzMd = readFileSync(join(fzDir, 'out', 'findings.md'), 'utf-8');
+  ok('FROZEN STATE KEY warning is rendered in findings.md', /FROZEN STATE KEY: `cfg` stays 3/.test(fzMd));
+  ok('the clean invariant line is qualified by the frozen key', /frozen state key\(s\)/.test(fzMd));
+
+  // The remedy findings.md prescribes must work in the SAME tool: --initial-states
+  // threads into every per-spec check, and an unfreezing seed clears the warning.
+  writeFileSync(join(fzDir, 'seeds.json'), JSON.stringify([{ mode: 'a', cfg: 5 }]), 'utf-8');
+  const fzSeeded = await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), 'initial-states': join(fzDir, 'seeds.json'), out: join(fzDir, 'out-seeded') });
+  ok('verify --initial-states un-freezes the key (warning clears end-to-end)',
+    fzSeeded.invReport.frozenKeys.length === 0);
+  let seedThrew = false;
+  try { await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), 'initial-states': join(fzDir, 'seeds.json'), out: join(fzDir, 'out-noinv') }); }
+  catch (e) { seedThrew = /only affects the invariant model check/.test(e.message); }
+  ok('--initial-states without an invariants module is a loud error, never silently ignored', seedThrew);
+
+  // Specs that freeze the same key at DIFFERENT constants disagree on the
+  // machine's configuration — the aggregate must not assert the first spec's
+  // value for all of them.
+  writeFileSync(join(fzDir, 'specs', 'spec_1.js'),
+    `module.exports = { init: () => ({ mode: 'a', cfg: 7 }), next: (s, a) => (a === 'FLIP' ? { mode: s.mode === 'a' ? 'b' : 'a', cfg: s.cfg } : { mode: s.mode, cfg: s.cfg }) };`, 'utf-8');
+  const fzSplit = await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), out: join(fzDir, 'out-split') });
+  const splitEntry = fzSplit.invReport.frozenKeys.find((f) => f.key === 'cfg');
+  ok('differing frozen values are BOTH reported (no first-spec-wins)',
+    splitEntry && splitEntry.values.length === 2 && splitEntry.values.includes(3) && splitEntry.values.includes(7));
+  ok('the value disagreement is rendered as such in findings.md',
+    /DIFFERING constants \(3, 7\)/.test(readFileSync(join(fzDir, 'out-split', 'findings.md'), 'utf-8')));
+
+  // A spec that varies the key makes it a some-specs claim, not all-specs.
+  writeFileSync(join(fzDir, 'specs', 'spec_1.js'),
+    `module.exports = { init: () => ({ mode: 'a', cfg: 3 }), next: (s, a) => (a === 'FLIP' ? { mode: s.mode === 'a' ? 'b' : 'a', cfg: s.cfg + 1 } : { mode: s.mode, cfg: s.cfg }) };`, 'utf-8');
+  const fzSome = await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), 'max-states': 10, out: join(fzDir, 'out-some') });
+  const someEntry = fzSome.invReport.frozenKeys.find((f) => f.key === 'cfg');
+  ok('a key only some specs freeze reports some-specs strength',
+    someEntry && someEntry.strength === 'some-specs' && someEntry.specs === 1);
+  ok('the some-specs render names the spec disagreement',
+    /the others vary it, a spec disagreement/.test(readFileSync(join(fzDir, 'out-some', 'findings.md'), 'utf-8')));
+  ok('under CAP HIT the frozen claim is scoped to EXPLORED states, remedy is --max-states first',
+    /every EXPLORED state \(exploration was bounded/.test(readFileSync(join(fzDir, 'out-some', 'findings.md'), 'utf-8')));
+
+  // A next() that returns undefined (routine in LLM-generated legacy specs for
+  // an unhandled action) must not crash the frozen scan — the spec's REAL
+  // violations still report; the scan just declines the degenerate graph.
+  const undefSpec = { init: () => ({ x: 0 }), next: (s, a) => (a === 'TICK' && s && s.x === 0 ? { x: 1 } : undefined) };
+  const undefRes = check({ specModule: undefSpec, contract: { stateKeys: ['x'], actions: { TICK: { dataFields: {} } } }, invariants: { stateInvariants: [{ name: 'x-defined', pred: (s) => s && typeof s.x === 'number' }] } });
+  ok('non-object states in the graph do not crash the frozen scan; violations still report',
+    undefRes.ok === false && undefRes.violations.length > 0 && Array.isArray(undefRes.frozenKeys) && undefRes.frozenKeys.length === 0);
+}
+
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

@@ -23,6 +23,7 @@ import { loadWindows, replaySpecResults } from './replay.mjs';
 import { buildPrompt } from './build_prompt.mjs';
 import { generateSpecs } from './generate.mjs';
 import { check, loadSpec } from './check.mjs';
+import { stable } from './load-spec.mjs';
 
 /** Resolve an invariants module path from --invariants, contract.invariants, or a sibling file. */
 function resolveInvariantsPath(opts, contract) {
@@ -189,6 +190,22 @@ export async function verify(opts) {
   // faithful spec still contains. Runs only when invariants are provided.
   let invReport = null;
   const invPath = resolveInvariantsPath(opts, contract);
+  // --initial-states: a JSON array of state objects seeded into every per-spec
+  // model check alongside init() — the remedy findings.md prescribes for a
+  // FROZEN STATE KEY must be actionable in the SAME tool that prints the
+  // warning. Malformed input is a usage error, never 'machine bug' findings;
+  // silently ignoring the flag when the model check does not run would let a
+  // user believe they unfroze the key.
+  let initialStates = [];
+  const initialStatesArg = opts['initial-states'] || opts.initialStates;
+  if (initialStatesArg) {
+    try { initialStates = JSON.parse(readFileSync(initialStatesArg, 'utf-8')); }
+    catch (e) { throw new Error(`--initial-states '${initialStatesArg}': ${e && e.message}`); }
+    if (!Array.isArray(initialStates)) throw new Error(`--initial-states '${initialStatesArg}' must be a JSON array of states`);
+    const bad = initialStates.findIndex((s) => !s || typeof s !== 'object' || Array.isArray(s));
+    if (bad >= 0) throw new Error(`--initial-states '${initialStatesArg}': element ${bad} is not a state object`);
+    if (!invPath) throw new Error('--initial-states only affects the invariant model check, which needs an invariants module (add --invariants, a contract.invariants entry, or a sibling invariants.mjs)');
+  }
   if (invPath) {
     const invMod = await import(pathToFileURL(invPath).href);
     const invariants = { stateInvariants: invMod.stateInvariants || (invMod.default || {}).stateInvariants || [], transitionInvariants: invMod.transitionInvariants || (invMod.default || {}).transitionInvariants || [] };
@@ -203,7 +220,7 @@ export async function verify(opts) {
         // mode threads through: 'legacy' forces the bare-next engine +
         // buildDomain(); 'sam' lets check() auto-detect a v2 module and drive
         // it through the adapter with manifest() domains.
-        const r = check({ specModule: loadSpec(p), contract, invariants, windows, legacyBareNext: mode === 'legacy', ...(maxStates ? { maxStates } : {}) });
+        const r = check({ specModule: loadSpec(p), contract, invariants, windows, legacyBareNext: mode === 'legacy', initialStates, ...(maxStates ? { maxStates } : {}) });
         return r.error ? { name, error: r.error } : { name, ...r };
       } catch (e) { return { name, error: String(e && e.message) }; }
     });
@@ -217,6 +234,22 @@ export async function verify(opts) {
     }));
     const violations = [...byName.values()].map((e) => ({ ...e, strength: ran.length > 0 && e.specs === ran.length ? 'all-specs' : 'some-specs' }));
     const domainNotes = [...new Set(ran.flatMap((r) => r.domainNotes || []))];
+    // Frozen-key aggregation mirrors the violation strength rule: the claim
+    // "the check is structurally blind behind this key" is strongest when
+    // EVERY checked spec froze it; a key only some specs freeze is itself a
+    // spec disagreement worth a look, so it is reported too, with its count.
+    const frozenByKey = new Map();
+    ran.forEach((r) => (r.frozenKeys || []).forEach((f) => {
+      const e = frozenByKey.get(f.key) || { key: f.key, values: [], valueSet: new Set(), specs: 0 };
+      // Distinct frozen VALUES are tracked, not just presence: two specs
+      // freezing the same key at different constants disagree on the machine's
+      // configuration — asserting the first spec's value for all of them would
+      // paper over exactly the disagreement worth surfacing.
+      const vk = stable(f.value);
+      if (!e.valueSet.has(vk)) { e.valueSet.add(vk); e.values.push(f.value); }
+      e.specs++; frozenByKey.set(f.key, e);
+    }));
+    const frozenKeys = [...frozenByKey.values()].map(({ valueSet, ...e }) => ({ ...e, strength: ran.length > 0 && e.specs === ran.length ? 'all-specs' : 'some-specs' }));
     invReport = {
       specs: specPaths.length,
       checkedSpecs: ran.length,
@@ -224,6 +257,7 @@ export async function verify(opts) {
       capHit: ran.some((r) => r.capHit),
       errors,
       domainNotes,
+      frozenKeys,
       violations,
     };
   }
@@ -387,11 +421,28 @@ function renderInvSection(L, invReport) {
   }
   L.push(`- states explored: **${invReport.statesExplored}** · specs checked: **${invReport.checkedSpecs}/${invReport.specs}**${invReport.capHit ? ' · ⚠️ **CAP HIT — exploration bounded, not exhaustive**' : ''}`);
   for (const n of invReport.domainNotes || []) L.push(`- ⚠️ WARNING: ${n}`);
+  for (const f of invReport.frozenKeys || []) {
+    const who = f.strength === 'all-specs' ? `every checked spec (${f.specs}/${invReport.checkedSpecs})` : `${f.specs}/${invReport.checkedSpecs} checked spec(s) — the others vary it, a spec disagreement worth a look`;
+    // Two honesty qualifiers: (a) specs that froze the key at DIFFERENT
+    // constants disagree on the machine's configuration — say so instead of
+    // asserting the first spec's value for all of them; (b) under CAP HIT
+    // "frozen" is only established over the truncated graph, and the right
+    // first remedy is a bigger exploration, not seeding.
+    const at = f.values.length === 1
+      ? `stays ${JSON.stringify(f.values[0])}`
+      : `is frozen at DIFFERING constants (${f.values.map((v) => JSON.stringify(v)).join(', ')}) — the specs disagree on this configuration value; review that split first`;
+    const scope = invReport.capHit
+      ? 'in every EXPLORED state (exploration was bounded — raise `--max-states` before concluding it is frozen)'
+      : 'in every state reachable';
+    L.push(`- ⚠️ FROZEN STATE KEY: \`${f.key}\` ${at} ${scope} by ${who}. If it gates behavior, this model check is structurally blind to that behavior — seed \`--initial-states\` (or capture traces) with a non-default value.`);
+  }
   if (!invReport.violations.length) {
     const qualified = (invReport.domainNotes || []).length
       ? `\nNo invariant violations reachable over the EXPLORED alphabet (${invReport.domainNotes.length} action/field(s) skipped — see warnings). (Bounded exploration; not a proof.)`
       : '\nNo invariant violations reachable. (Bounded exploration; not a proof.)';
-    L.push(qualified);
+    L.push((invReport.frozenKeys || []).length
+      ? `${qualified} ${invReport.frozenKeys.length} frozen state key(s) — see warnings above — bound what "reachable" covers.`
+      : qualified);
     return;
   }
   L.push(`\n**${invReport.violations.length} invariant violation(s) reachable — these are bugs, with counterexamples:**\n`);
@@ -481,7 +532,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try { a = parseArgs(process.argv.slice(2)); }
   catch (e) { console.error('[verify] ' + e.message); process.exit(2); }
   if (!a.contract || !a.traces) {
-    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] | --specs <dir>) [--invariants <inv.mjs>] [--max-states N] [--out <dir>] [--legacy-bare-next] [--tla [--tla-bound N] [--tla-timeout <s>]]');
+    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] | --specs <dir>) [--invariants <inv.mjs>] [--initial-states <states.json>] [--max-states N] [--out <dir>] [--legacy-bare-next] [--tla [--tla-bound N] [--tla-timeout <s>]]');
     process.exit(2);
   }
   verify(a).then((r) => {

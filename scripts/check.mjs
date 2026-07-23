@@ -263,6 +263,43 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
 
   const { parent, violations, capHit, error, seededStates } = pass1;
   if (error) return { ok: false, error, statesExplored: 0, capHit: false, violations: [], engine, seededStates: 0 };
+
+  // ── Frozen-field scan ─────────────────────────────────────────────────────
+  // A state key whose value is identical across EVERY reachable state (init,
+  // seeds, and everything BFS discovered) is invisible to this check: any
+  // behavior gated on a non-default value of that key is structurally
+  // unreachable from init, and the invariants pass vacuously over it. This is
+  // not hypothetical — deleting a safety gate guarded by such a key still
+  // model-checks clean (eval/FINDING-raft-field-study.md, `startIndex`). The
+  // remedy is --initial-states seeding (or traces) with a non-default value;
+  // seeded states join `parent`, so an unfreezing seed clears the warning by
+  // construction. Reported as its own field, NOT in domainNotes: downstream
+  // consumers (polynv precheck, polygen coverage) read domainNotes as
+  // "alphabet was pruned", which this is not.
+  const frozenKeys = [];
+  {
+    const states = [...parent.values()].map((n) => n.state);
+    // A spec whose next() returns undefined/null/a primitive puts non-object
+    // states in the graph (LLM-generated legacy specs routinely return
+    // undefined for an unhandled action). Object.keys/`in` would throw and
+    // turn that spec's REAL violations into a checker crash — skip the scan
+    // for such degenerate graphs; the violations themselves still report.
+    if (states.every((s) => s && typeof s === 'object' && !Array.isArray(s))) {
+      const keys = new Set(states.flatMap((s) => Object.keys(s)));
+      for (const key of keys) {
+        let frozen = true;
+        let first;
+        for (let i = 0; i < states.length; i++) {
+          if (!(key in states[i])) { frozen = false; break; }
+          const v = stable(states[i][key]);
+          if (i === 0) first = v;
+          else if (v !== first) { frozen = false; break; }
+        }
+        if (frozen) frozenKeys.push({ key, value: states[0][key] });
+      }
+      frozenKeys.sort((a, b) => (a.key < b.key ? -1 : 1));
+    }
+  }
   if (nondeterministic) {
     violations.push({
       invariant: 'deterministic-exploration',
@@ -274,7 +311,7 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   // statesExplored counts what exploration DISCOVERED (init + BFS finds);
   // seeded roots are reported separately so a seeded run cannot overstate
   // its coverage by counting states it was merely handed.
-  return { ok: violations.length === 0, statesExplored: parent.size - seededStates, seededStates, capHit, violations, domainNotes: notes, engine, nondeterministic };
+  return { ok: violations.length === 0, statesExplored: parent.size - seededStates, seededStates, capHit, violations, domainNotes: notes, frozenKeys, engine, nondeterministic };
 }
 
 // ── Readable render ─────────────────────────────────────────────────────────
@@ -286,6 +323,11 @@ export function render(result) {
   // data domain means the clean verdict below only covers the explored subset.
   const notes = result.domainNotes || [];
   for (const n of notes) L.push(`WARNING: ${n}`);
+  // A frozen key means part of the machine's behavior space was structurally
+  // out of reach — the clean verdict below is silent about anything it gates.
+  for (const f of result.frozenKeys || []) {
+    L.push(`WARNING: state key '${f.key}' is frozen at ${JSON.stringify(f.value)} — no explored action or seed ever changes it; if it gates behavior, this check cannot verify that behavior (seed --initial-states or capture traces with a non-default value)`);
+  }
   if (result.ok) {
     L.push(notes.length
       ? `no invariant violations reachable over the EXPLORED alphabet ✓ (${notes.length} action/field(s) skipped — see warnings above)`

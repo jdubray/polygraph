@@ -1,6 +1,14 @@
 # verify enhancements — plan from the raft field study
 
-**Status: PLAN v1.0 — not started.**
+**Status: PLAN v1.0 — M1 implemented** (frozen-field scan in `check.mjs`
+reported as `frozenKeys`, aggregated per-spec in `verify.mjs` with
+all-specs/some-specs strength and distinct-value tracking, rendered in both
+reports; `--initial-states` plumbed through `verify.mjs` so the prescribed
+remedy works in the tool that prints the warning; capHit scopes the claim to
+EXPLORED states. Adversarially reviewed; all four confirmed findings fixed
+— non-object-state crash, first-spec-wins value aggregation, unactionable
+remedy flag, unqualified capHit claim. Deliberately NOT folded into
+`domainNotes`: polynv/polygen read those as "alphabet pruned".) M2–M5 open.
 
 **Thesis:** the first external field study
 ([eval/FINDING-raft-field-study.md](../eval/FINDING-raft-field-study.md),
