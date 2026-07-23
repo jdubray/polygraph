@@ -3,7 +3,8 @@
 // scripts/tla-check.mjs), copied from SysMoBench's
 // scripts/harness/etcd/reference_sam_v2_spec.js.
 //
-// Requires @cognitive-fab/sam-pattern 2.0.0-alpha (strict profile).
+// Requires @cognitive-fab/sam-pattern 2.1 (strict profile, next-state
+// acceptor semantics).
 // Resolution: env POLYGRAPH_SAM (path to a v2 dist bundle, e.g.
 // <sam-lib>/dist/SAM.js) -> the plugin's vendored bundle
 // (scripts/vendor/sam-pattern.cjs) -> the package name (which must then
@@ -85,18 +86,19 @@ const control = instance({
       },
     },
     acceptors: {
-      // Each acceptor computes the updated node record and commits it with a
-      // TOP-LEVEL write (model.nodes = ...), so the strict profile's write
-      // tracker sees the mutation (nested writes bypass it in 2.0.0-alpha).
-      ElectionTimeout: (model) => (p) => {
+      // Each acceptor computes the updated node record from the frozen
+      // pre-state and commits it with a TOP-LEVEL primed write
+      // (next.nodes = ...), per the 2.1 next-state contract. An unknown node
+      // is an observable no-op: frame `nodes` unchanged rather than reject.
+      ElectionTimeout: (model) => (p, { next, unchanged }) => {
         const n = model.nodes[p.node];
-        if (!n) return;
+        if (!n) return unchanged('nodes');
         const up = { ...n, term: n.term + 1, role: 'candidate', vote: String(p.node) };
-        model.nodes = { ...model.nodes, [p.node]: up };
+        next.nodes = { ...model.nodes, [p.node]: up };
       },
-      HandleVoteRequest: (model) => (p, { reject }) => {
+      HandleVoteRequest: (model) => (p, { reject, next, unchanged }) => {
         const n = model.nodes[p.node];
-        if (!n) return;
+        if (!n) return unchanged('nodes');
         if (p.term < n.term) return reject('stale campaign: lower term');
         const up = { ...n };
         if (p.term > n.term) {
@@ -107,17 +109,17 @@ const control = instance({
         const canVote = up.vote === String(p.from) || up.vote === '0';
         const isUpToDate = p.index >= up.log;
         if (canVote && isUpToDate) up.vote = String(p.from);
-        model.nodes = { ...model.nodes, [p.node]: up };
+        next.nodes = { ...model.nodes, [p.node]: up };
       },
-      ClientProposal: (model) => (p, { reject }) => {
+      ClientProposal: (model) => (p, { reject, next, unchanged }) => {
         const n = model.nodes[p.node];
-        if (!n) return;
+        if (!n) return unchanged('nodes');
         if (n.role !== 'leader') return reject('only a leader appends');
-        model.nodes = { ...model.nodes, [p.node]: { ...n, log: n.log + 1 } };
+        next.nodes = { ...model.nodes, [p.node]: { ...n, log: n.log + 1 } };
       },
-      HandleAppendEntries: (model) => (p, { reject }) => {
+      HandleAppendEntries: (model) => (p, { reject, next, unchanged }) => {
         const n = model.nodes[p.node];
-        if (!n) return;
+        if (!n) return unchanged('nodes');
         if (p.term < n.term) return reject('stale append: lower term');
         const up = { ...n };
         if (p.term > n.term) {
@@ -130,11 +132,11 @@ const control = instance({
           up.log = Math.max(up.log, lastNew);
           up.commit = Math.max(up.commit, Math.min(p.commit, lastNew));
         }
-        model.nodes = { ...model.nodes, [p.node]: up };
+        next.nodes = { ...model.nodes, [p.node]: up };
       },
-      HandleHeartbeat: (model) => (p, { reject }) => {
+      HandleHeartbeat: (model) => (p, { reject, next, unchanged }) => {
         const n = model.nodes[p.node];
-        if (!n) return;
+        if (!n) return unchanged('nodes');
         if (p.term < n.term) return reject('stale heartbeat: lower term');
         const up = { ...n };
         if (p.term > n.term) {
@@ -143,7 +145,7 @@ const control = instance({
         }
         up.role = 'follower';
         up.commit = Math.max(up.commit, Math.min(p.commit, up.log));
-        model.nodes = { ...model.nodes, [p.node]: up };
+        next.nodes = { ...model.nodes, [p.node]: up };
       },
     },
     reactors: [],

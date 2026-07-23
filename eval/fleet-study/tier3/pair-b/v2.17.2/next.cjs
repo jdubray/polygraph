@@ -103,20 +103,22 @@ const control = instance({
     acceptors: {
       // createPaymentSession: `status: providerPaymentSession.status ?? PENDING`.
       // Unguarded — there is no current status to guard against, the row is new.
-      PROVIDER_INITIATE: (model) => (p) => {
-        model.status = p.providerStatus;
+      PROVIDER_INITIATE: (model) => (p, { next, unchanged }) => {
+        next.status = p.providerStatus;
+        unchanged('authorizedAt', 'hasPayment');
       },
 
       // updatePaymentSession. The upstream comment states the intent outright:
       // "Allow the caller to explicitly set the status (eg. due to a webhook),
       // fallback to the update response, and finally to the existing status."
       // No guard on the current status.
-      PROVIDER_UPDATE: (model) => (p) => {
-        model.status = p.providerStatus;
+      PROVIDER_UPDATE: (model) => (p, { next, unchanged }) => {
+        next.status = p.providerStatus;
+        unchanged('authorizedAt', 'hasPayment');
       },
 
       // authorizePaymentSession.
-      PROVIDER_AUTHORIZE: (model) => (p, { reject }) => {
+      PROVIDER_AUTHORIZE: (model) => (p, { reject, next, unchanged }) => {
         // The ONLY guard in this machine, and note what it keys on: the
         // presence of `authorized_at` and a linked Payment — NOT the status
         // value. `if (session.payment && session.authorized_at) return ...`
@@ -125,14 +127,15 @@ const control = instance({
         if (p.providerStatus === 'authorized' || p.providerStatus === 'captured') {
           // authorizePaymentSession_ collapses CAPTURED into AUTHORIZED before
           // persisting; captured-ness is tracked on the Payment entity.
-          model.status = 'authorized';
-          model.authorizedAt = true;
-          model.hasPayment = true;
+          next.status = 'authorized';
+          next.authorizedAt = true;
+          next.hasPayment = true;
           return;
         }
         // Mutate-then-throw: the provider's status IS written, then a
         // MedusaError is raised. The persisted state is the written one.
-        model.status = p.providerStatus;
+        next.status = p.providerStatus;
+        unchanged('authorizedAt', 'hasPayment');
       },
     },
     reactors: [],

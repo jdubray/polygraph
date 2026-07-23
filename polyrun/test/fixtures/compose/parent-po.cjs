@@ -20,17 +20,17 @@ const control = instance({
       CANCEL: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      START: (model) => (p, { reject }) => {
+      START: (model) => (p, { reject, next }) => {
         if (model.poState !== 'pending') return reject('already-started');
-        model.poState = 'fulfilling';
+        next.poState = 'fulfilling';
       },
-      CHILD_DONE: (model) => (p, { reject }) => {
+      CHILD_DONE: (model) => (p, { reject, next }) => {
         if (model.poState !== 'fulfilling') return reject('stale-completion');
-        model.poState = 'completed';
+        next.poState = 'completed';
       },
-      CANCEL: (model) => (p, { reject }) => {
+      CANCEL: (model) => (p, { reject, next }) => {
         if (!['pending', 'fulfilling'].includes(model.poState)) return reject('not-cancellable');
-        model.poState = 'cancelled';
+        next.poState = 'cancelled';
       },
     },
     reactors: [],

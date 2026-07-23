@@ -1,11 +1,12 @@
 {
-  "summary": { "specs": 3, "consistent": 40, "codeFinding": 1 },
+  "summary": { "specs": 3, "windows": 3, "consistent": 2, "specError": 0, "codeFinding": 1 },
   "findings": [
     {
       "scenario": "bug.ndjson",
       "index": 2,
       "action": "deliver",
-      "verdict": "code-finding",
+      "statuses": ["pass", "pass", "fail"],
+      "verdict": "code-finding-or-contract",
       "classifications": ["mutated", "mutated", "rejected(not-charged)"]
     }
   ]

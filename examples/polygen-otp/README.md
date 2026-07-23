@@ -14,8 +14,12 @@ a correct-looking or incorrect code -- an expired code should never verify,
 and checking an expired code should not count against the attempt limit the
 same way a live wrong-code guess does, since expiry is not evidence of user
 error." \
-  --model opus-4.8 --out examples/polygen-otp --repair-max 3
+  --model sonnet-5 --out examples/polygen-otp --repair-max 3
 ```
+
+> Historical record — this is the exact command that produced the committed
+> artifacts; do not rewrite the model. The *current* recommendation for new
+> runs is `opus-4.8` or better (see the Models section of the root README).
 
 Full run details, the drafted contract, the authored code, the proposed
 invariants, and the self-repair history are in **`polygen-report.md`** — read

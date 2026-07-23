@@ -40,58 +40,68 @@ const control = instance({
       SHIPMENT_DELIVERED: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      SUBMIT: (model) => (proposal, { reject }) => {
+      SUBMIT: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'pending') return reject('already-submitted');
         if (!(Number.isInteger(proposal.totalCents) && proposal.totalCents > 0)) return reject('invalid-total');
-        model.orderState = 'fraudCheck';
-        model.totalCents = proposal.totalCents;
+        next.orderState = 'fraudCheck';
+        next.totalCents = proposal.totalCents;
+        unchanged('txId', 'cancelReason');
       },
-      FRAUD_PASSED: (model) => (proposal, { reject }) => {
+      FRAUD_PASSED: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'fraudCheck') return reject('stale-fraud-result');
-        model.orderState = proposal.itemsAvailable === false ? 'awaitingAmend' : 'charging';
+        next.orderState = proposal.itemsAvailable === false ? 'awaitingAmend' : 'charging';
+        unchanged('totalCents', 'txId', 'cancelReason');
       },
-      FRAUD_FAILED: (model) => (proposal, { reject }) => {
+      FRAUD_FAILED: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'fraudCheck') return reject('stale-fraud-result');
-        model.orderState = 'rejected';
-        model.cancelReason = String(proposal.reason || 'fraud');
+        next.orderState = 'rejected';
+        next.cancelReason = String(proposal.reason || 'fraud');
+        unchanged('totalCents', 'txId');
       },
-      AMEND: (model) => (proposal, { reject }) => {
+      AMEND: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'awaitingAmend') return reject('nothing-to-amend');
         if (!(Number.isInteger(proposal.totalCents) && proposal.totalCents > 0)) return reject('invalid-total');
-        model.orderState = 'charging';
-        model.totalCents = proposal.totalCents;
+        next.orderState = 'charging';
+        next.totalCents = proposal.totalCents;
+        unchanged('txId', 'cancelReason');
       },
-      AMEND_WINDOW_EXPIRED: (model) => (proposal, { reject }) => {
+      AMEND_WINDOW_EXPIRED: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'awaitingAmend') return reject('stale-timer');
-        model.orderState = 'cancelled';
-        model.cancelReason = 'amend-window-expired';
+        next.orderState = 'cancelled';
+        next.cancelReason = 'amend-window-expired';
+        unchanged('totalCents', 'txId');
       },
-      CHARGE_SUCCEEDED: (model) => (proposal, { reject }) => {
+      CHARGE_SUCCEEDED: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'charging') return reject('stale-completion');
-        model.orderState = 'shipping';
-        model.txId = String(proposal.txId || '');
+        next.orderState = 'shipping';
+        next.txId = String(proposal.txId || '');
+        unchanged('totalCents', 'cancelReason');
       },
-      CHARGE_FAILED: (model) => (proposal, { reject }) => {
+      CHARGE_FAILED: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'charging') return reject('stale-completion');
-        model.orderState = 'paymentFailed';
-        model.cancelReason = String(proposal.reason || 'charge-failed');
+        next.orderState = 'paymentFailed';
+        next.cancelReason = String(proposal.reason || 'charge-failed');
+        unchanged('totalCents', 'txId');
       },
-      CHARGE_TIMED_OUT: (model) => (proposal, { reject }) => {
+      CHARGE_TIMED_OUT: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'charging') return reject('stale-timer');
-        model.orderState = 'paymentFailed';
-        model.cancelReason = 'charge-timed-out';
+        next.orderState = 'paymentFailed';
+        next.cancelReason = 'charge-timed-out';
+        unchanged('totalCents', 'txId');
       },
-      CANCEL: (model) => (proposal, { reject }) => {
+      CANCEL: (model) => (proposal, { reject, next, unchanged }) => {
         // Contract-anchored reason: the specialRule's name, per the polygraph
         // convention (cf. turnstile's 'push-while-locked-is-noop').
         if (model.orderState === 'charging') return reject('cancel-blocked-while-charging');
         if (!['pending', 'fraudCheck', 'awaitingAmend'].includes(model.orderState)) return reject('not-cancellable');
-        model.orderState = 'cancelled';
-        model.cancelReason = String(proposal.reason || 'cancelled');
+        next.orderState = 'cancelled';
+        next.cancelReason = String(proposal.reason || 'cancelled');
+        unchanged('totalCents', 'txId');
       },
-      SHIPMENT_DELIVERED: (model) => (proposal, { reject }) => {
+      SHIPMENT_DELIVERED: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.orderState !== 'shipping') return reject('not-shipping');
-        model.orderState = 'completed';
+        next.orderState = 'completed';
+        unchanged('totalCents', 'txId', 'cancelReason');
       },
     },
     reactors: [],

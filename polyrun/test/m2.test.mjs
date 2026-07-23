@@ -103,9 +103,9 @@ const { intents } = instance({
       PING: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      GO: (m) => (p, { reject }) => { if (m.st !== 'a') return reject('done'); m.st = 'b'; },
+      GO: (m) => (p, { reject, next }) => { if (m.st !== 'a') return reject('done'); next.st = 'b'; },
       // identity-by-mutation: accepts and re-assigns the same value
-      PING: (m) => () => { m.st = m.st; },
+      PING: (m) => (p, { next }) => { next.st = m.st; },
     },
     reactors: [],
   },

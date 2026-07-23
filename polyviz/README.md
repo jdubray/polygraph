@@ -8,6 +8,8 @@ render time.
 
 Full spec: [`docs/polyviz-spec.md`](../docs/polyviz-spec.md). Worked example (real
 artifacts → the full catalog): [`examples/polyviz-oms/`](../examples/polyviz-oms/).
+The reference figures in [`reference/`](reference/) come from the
+[DAAO demo](https://github.com/jdubray/polygraph-demo-daao).
 
 ## Status
 
@@ -132,13 +134,14 @@ state highlights).
 
 PNG export (`--format png`, default `--scale 2`) rasterizes each SVG with
 `@resvg/resvg-js` — no headless browser. Deterministic per-platform (byte-
-identical across runs); cross-OS parity is best-effort (depends on system
-fonts). Report injection and two-OS CI are the last M5 items.
+identical across runs); cross-OS parity is best-effort by design (it depends on
+system fonts). Report integration ships as `polyviz report` (see the CLI above);
+the two-OS determinism CI workflow is the one remaining spec item.
 
 ## Architecture (pure, staged — spec §4.1)
 
 ```
-viz-model ──validate──▶ layout ──render──▶ SVG   (M5: ──raster──▶ PNG)
+viz-model ──validate──▶ layout ──render──▶ SVG ──raster──▶ PNG (optional)
    ▲ JSON Schema                    ▲ tokens/theme
 ```
 
@@ -150,8 +153,12 @@ viz-model ──validate──▶ layout ──render──▶ SVG   (M5: ──
   (`theme.mjs`), and component library (`components.mjs`). Renderers reference
   tokens only — a test greps them for hex literals.
 - `src/adapters/` — Polygraph/polyvers artifacts → viz-model (the only
-  Polygraph-coupled stage). `compat.mjs` (polyvers `compat-report.json`) ships;
-  `index.mjs` dispatches over an artifacts directory.
+  Polygraph-coupled stage): `machine.mjs` (BFS over the module), `invariants.mjs`,
+  `counterexample.mjs`, `compat.mjs`; `index.mjs` dispatches over an artifacts
+  directory.
+- `src/raster/png.mjs` — optional PNG rasterizer (lazy `@resvg/resvg-js`).
+- `src/report.mjs` — figure manifest + idempotent `<!-- polyviz:<id> -->` marker
+  injection for `polyviz report`.
 - `src/layout/graph.mjs` — elkjs wrapper for the state-machine graph.
 - `src/diagrams/` — one module per diagram; registered in `diagrams/index.mjs`.
   Renderers may be sync or async (elk-backed `state-machine`/`model-card` return
@@ -162,8 +169,9 @@ viz-model ──validate──▶ layout ──render──▶ SVG   (M5: ──
 The flagship property (§4.7). Won at the text-measurement boundary: no
 wall-clock, no random, sorted keys, fixed number formatting, and a pinned
 metrics table instead of a system font. `npm run test:polyviz` renders each
-fixture twice and asserts byte-identical SVG. PNG byte-parity across OSes is
-best-effort until the M5 rasterizer/font bundle is proven.
+fixture twice and asserts byte-identical SVG. PNG byte-parity is guaranteed
+per-platform (asserted in tests); across OSes it is best-effort by design,
+since the rasterizer draws with system fonts.
 
 ## Tests
 
@@ -171,6 +179,8 @@ best-effort until the M5 rasterizer/font bundle is proven.
 npm run test:polyviz
 ```
 
-Covers determinism, golden snapshots (dark+light), schema valid/invalid,
-overflow (long labels / many invariants wrap and grow, never clip), and the
-no-hex-literals guard.
+Covers determinism, golden snapshots (dark+light, plus the worked example in
+`examples/polyviz-oms/`), schema valid/invalid, overflow (long labels / many
+invariants wrap and grow, never clip), the no-hex-literals guard, every adapter
+(machine BFS, invariants, counterexample, compat — hermetic fixtures + a real
+polyvers report), PNG export, and report-marker injection.

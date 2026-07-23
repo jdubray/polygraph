@@ -40,8 +40,11 @@ function ok(name, cond) {
 
 // The tested discipline sentence, tolerant of line-wrap/indentation only.
 const DISCIPLINE_RE = /Acceptors must guard against invalid proposals \(an action that the\s+implementation does not act on in the current state must be a no-op via\s+`reject\(reason\)`, NOT a throw\)/;
-// The top-level-write commit idiom for nested map states.
-const COMMIT_RE = /model\.<key> = \{ \.\.\.model\.<key>, \[k\]: updated \}/;
+// The whole-key commit idiom for nested map states (2.1 next-state form: the
+// write goes to the `next` draft, the RHS spreads the PRE-state).
+const COMMIT_RE = /next\.<key> = \{ \.\.\.model\.<key>, \[k\]: updated \}/;
+// The 2.1 frame rule: every accepted step assigns or names every shape key.
+const FRAME_RE = /unchanged\('keyA', 'keyB'\)/;
 
 console.log('1) P3 — v2 audit prompt (prompt_template_v2.txt via build_prompt.mjs)');
 // A hostile source: contains placeholder-lookalike text and a $-pattern; both
@@ -64,8 +67,10 @@ ok('intent domains rendered (no-payload actions get [{}])', /COIN: \[\{\}\],/.te
 ok('specialRules render as REQUIRED reject(reason) cases',
   v2Prompt.includes("reject('push-while-locked-is-noop')"));
 ok('discipline sentence present verbatim', DISCIPLINE_RE.test(v2Prompt));
-ok('top-level-write commit guidance present (nested maps) + flat direct writes',
+ok('whole-key next-draft commit guidance present (nested maps) + flat next writes',
   COMMIT_RE.test(v2Prompt) && /FLAT state key/.test(v2Prompt));
+ok('2.1 frame rule taught (unchanged(...) on accepted paths, none on reject)',
+  FRAME_RE.test(v2Prompt) && /rejected step[\s\S]{0,40}NO framing/i.test(v2Prompt));
 ok('init() is setState(INITIAL_STATE) only — the clearError idiom never appears as code',
   /setState\(INITIAL_STATE\)/.test(v2Prompt) && !/\.clearError\(\)/.test(v2Prompt)
   && /const init = \(\) => \{ setState\(INITIAL_STATE\); \};/.test(v2Prompt));
@@ -112,7 +117,8 @@ ok('author (v2): discipline sentence present', DISCIPLINE_RE.test(author));
 ok('author (v2): special rules as REQUIRED reject(reason) cases', author.includes("reject('push-while-locked-is-noop')"));
 ok('author (v2): init is setState(INITIAL_STATE) only, safe accessor named',
   /setState\(INITIAL_STATE\)/.test(author) && /sam-lib #29/.test(author) && !/clearError idiom is required/.test(author));
-ok('author (v2): top-level-write guidance present', COMMIT_RE.test(author));
+ok('author (v2): whole-key next-draft commit guidance present', COMMIT_RE.test(author));
+ok('author (v2): 2.1 frame rule taught', FRAME_RE.test(author));
 const authorLegacy = buildAuthorPrompt(contract, 'a turnstile', { mode: 'legacy' });
 ok('author (legacy): still the bare-next contract',
   authorLegacy.includes('module.exports = { init, next };') && !authorLegacy.includes('modelShape'));

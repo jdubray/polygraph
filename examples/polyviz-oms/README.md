@@ -31,11 +31,16 @@ That one command produces all five figures in `img/`:
   so polyviz derives the transitions by **executing `next.cjs`** over the
   declared `(action, data)` domain (bounded reachability) and reads the
   `charged` / `shipped` effect labels from the one-shot flag flips.
-- **`invariants.svg`** — the must-nevers, safety in green and liveness in violet.
+- **`invariants.svg`** — the must-nevers. The two safety predicates render green;
+  L1 (cancellability) is a *reachability* property a state predicate cannot
+  express, so it is declared with an honest `unchecked` status and renders muted
+  — the figure claims exactly what was checked, nothing more.
 - **`counterexample.svg`** — the bug: `submit → ship → deliver()` reaching
   **S1 VIOLATED — delivered without payment**, with the "the gate generated this"
-  callout. (Remove `bug.ndjson` + `findings.json` and this diagram simply isn't
-  produced — there's no bug to show.)
+  callout. The trace was captured from a guard-deleted variant of `next.cjs`
+  (the committed machine rejects `ship` before `charge` — that variant is
+  illustrative, not committed). Remove `bug.ndjson` + `findings.json` and this
+  diagram simply isn't produced — there's no bug to show.
 - **`compat-gate.svg`** — the versioning bug: a live `SHIPPED` order (`#o3`) that
   v2's new risk-hold rule would have blocked → **DEPLOY BLOCKED**.
 - **`model-card.svg`** — the state-machine and the invariants in one frame.

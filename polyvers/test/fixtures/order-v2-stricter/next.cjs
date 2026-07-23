@@ -24,24 +24,28 @@ const control = instance({
       CANCEL: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
     },
     acceptors: {
-      SUBMIT: (model) => (p, { reject }) => {
+      SUBMIT: (model) => (p, { reject, next, unchanged }) => {
         if (model.orderState !== 'pending') return reject('already-submitted');
         if (!(Number.isInteger(p.totalCents) && p.totalCents > 0)) return reject('invalid-total');
-        model.orderState = 'charging';
-        model.totalCents = p.totalCents;
+        next.orderState = 'charging';
+        next.totalCents = p.totalCents;
+        unchanged('txId');
       },
-      CHARGE_OK: (model) => (p, { reject }) => {
+      CHARGE_OK: (model) => (p, { reject, next, unchanged }) => {
         if (model.orderState !== 'charging') return reject('stale-completion-rejects');
-        model.orderState = 'fulfilling';
-        model.txId = String(p.txId || '');
+        next.orderState = 'fulfilling';
+        next.txId = String(p.txId || '');
+        unchanged('totalCents');
       },
-      SHIP: (model) => (p, { reject }) => {
+      SHIP: (model) => (p, { reject, next, unchanged }) => {
         if (model.orderState !== 'fulfilling') return reject('not-fulfilling');
-        model.orderState = 'completed';
+        next.orderState = 'completed';
+        unchanged('totalCents', 'txId');
       },
-      CANCEL: (model) => (p, { reject }) => {
+      CANCEL: (model) => (p, { reject, next, unchanged }) => {
         if (!['pending', 'charging'].includes(model.orderState)) return reject('not-cancellable');
-        model.orderState = 'cancelled';
+        next.orderState = 'cancelled';
+        unchanged('totalCents', 'txId');
       },
     },
     reactors: [],

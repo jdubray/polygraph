@@ -31,26 +31,26 @@ const actionDefs = {
 };
 
 const acceptors = {
-  SHIP: (model) => (proposal, { reject }) => {
+  SHIP: (model) => (proposal, { reject, next }) => {
     if (model.shipState !== 'preparing') {
       reject('already-shipped');
       return;
     }
-    model.shipState = 'inTransit';
+    next.shipState = 'inTransit';
   },
-  DELIVER: (model) => (proposal, { reject }) => {
+  DELIVER: (model) => (proposal, { reject, next }) => {
     if (model.shipState !== 'inTransit') {
       reject('not-in-transit');
       return;
     }
-    model.shipState = 'delivered';
+    next.shipState = 'delivered';
   },
-  CANCEL_SHIPMENT: (model) => (proposal, { reject }) => {
+  CANCEL_SHIPMENT: (model) => (proposal, { reject, next }) => {
     if (model.shipState !== 'preparing') {
       reject('cancel-too-late');
       return;
     }
-    model.shipState = 'cancelledShipment';
+    next.shipState = 'cancelledShipment';
   },
 };
 

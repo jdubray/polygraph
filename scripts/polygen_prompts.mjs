@@ -66,13 +66,33 @@ ${indent(renderIntentDomains(contract))}
 
   - \`acceptors\` — an OBJECT keyed by the same action names (the framework
     binds proposals to acceptors; do NOT write flag guards or a dispatch
-    switch). Each acceptor is \`(model) => (proposal, { reject }) => { ... }\`.
-  - COMMIT RULE: for a FLAT state key, assign it directly
-    (\`model.someKey = value\`). For a state key holding a NESTED map/object,
-    commit every mutation with a TOP-LEVEL write so the strict profile's write
-    tracker sees it: compute the updated record, then
-    \`model.<key> = { ...model.<key>, [k]: updated };\` — do NOT mutate
-    \`model.<key>[k].field\` in place.
+    switch). Each acceptor is
+    \`(model) => (proposal, { reject, next, unchanged }) => { ... }\` — a
+    NEXT-STATE relation (sam-pattern 2.1 prime semantics): \`model\` is the
+    FROZEN pre-state (read-only; writing \`model.x\` throws \`SamShapeError\`),
+    and every write goes to the \`next\` draft.
+  - COMMIT RULE (next-state form): for a FLAT state key, assign
+    \`next.someKey = value\` — the right-hand side reads the PRE-state
+    (\`next.count = model.count + 1\`). For a state key holding a NESTED
+    map/object, assign the key WHOLE:
+    \`next.<key> = { ...model.<key>, [k]: updated };\` — do NOT mutate
+    \`model.<key>[k].field\` or \`next.<key>[k].field\` in place.
+  - FRAME RULE: on every ACCEPTED path, every declared modelShape key must be
+    either assigned via \`next.<key> = …\` or explicitly named unchanged:
+    \`unchanged('keyA', 'keyB')\` — otherwise the step throws \`SamFrameError\`.
+    A rejected step (\`return reject(reason)\`) needs NO framing. Never assign
+    the same key twice in one step, and never read a value back from \`next\` —
+    thread computed values through local consts.
+  - WIRING — register everything with EXACTLY this idiom (the component
+    members MUST be nested under the \`component\` key of a SINGLE
+    \`instance({...})\` call; \`instance(component)\` or top-level members
+    register NOTHING and the module fails validate()):
+
+        const control = instance({
+          initialState: { ...INITIAL_STATE },
+          component: { modelShape, actions, acceptors, reactors: [] },
+        });
+        const { intents } = control;
 - \`init()\` — resets to the initial state: EXACTLY \`setState(INITIAL_STATE)\`
   and nothing else. Do NOT call \`instance({}).state()\` anywhere —
   \`getState()\` is the safe snapshot accessor (a model data key like 'state'

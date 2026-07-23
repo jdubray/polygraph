@@ -20,7 +20,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs \
 
 Always needs `ANTHROPIC_API_KEY` and an explicit `--model` (no default — pass
 the exact Anthropic model id if not using a known alias; recommend `opus-4.8`
-or `opus-4.8`). v1 is JS/TS only.
+or better). v1 is JS/TS only.
 
 What it does, in order:
 1. Drafts a `contract.json` from the feature description (or uses one you

@@ -32,15 +32,16 @@ const control = instance({
     },
     acceptors: {
       // COIN always unlocks and counts the coin (even when already UNLOCKED).
-      COIN: (model) => () => {
-        model.state = 'UNLOCKED';
-        model.coins = model.coins + 1;
+      COIN: (model) => (proposal, { next }) => {
+        next.state = 'UNLOCKED';
+        next.coins = model.coins + 1;
       },
       // PUSH locks when UNLOCKED; PUSH while LOCKED is the contract's named
       // special rule — an observable rejection, not a silent fall-through.
-      PUSH: (model) => (proposal, { reject }) => {
+      PUSH: (model) => (proposal, { reject, next, unchanged }) => {
         if (model.state === 'LOCKED') return reject('push-while-locked-is-noop');
-        model.state = 'LOCKED';
+        next.state = 'LOCKED';
+        unchanged('coins');
       },
     },
     reactors: [],

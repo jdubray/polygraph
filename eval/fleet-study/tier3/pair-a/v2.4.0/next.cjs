@@ -93,48 +93,55 @@ const control = instance({
     acceptors: {
       // createPaymentSession. No check against the collection's own status —
       // nothing in createPaymentSession/authorizePaymentSession reads it.
-      ADD_SESSION: (model) => (p, { reject }) => {
+      // (2.1 next-state: `derive` recomputes from the values being written
+      // this step, so the post-write inputs are threaded explicitly.)
+      ADD_SESSION: (model) => (p, { reject, next, unchanged }) => {
         if (model.hasSessions) return reject('session-already-present');
-        model.hasSessions = true;
-        model.status = derive(model);
+        next.hasSessions = true;
+        next.status = derive({ hasSessions: true, authorized: model.authorized, captured: model.captured });
+        unchanged('authorized', 'captured', 'refunded');
       },
 
       // authorizePaymentSession → maybeUpdatePaymentCollection_.
       // The precondition is on the SESSION (you cannot authorize one that does
       // not exist), NOT on PaymentCollection.status. That distinction is the
       // whole point: sibling entities carry guards, the collection does not.
-      AUTHORIZE_SESSION: (model) => (p, { reject }) => {
+      AUTHORIZE_SESSION: (model) => (p, { reject, next, unchanged }) => {
         if (!model.hasSessions) return reject('no-session-to-authorize');
         if (model.authorized !== 'none') return reject('session-already-authorized');
-        model.authorized = p.level;
-        model.status = derive(model);
+        next.authorized = p.level;
+        next.status = derive({ hasSessions: model.hasSessions, authorized: p.level, captured: model.captured });
+        unchanged('hasSessions', 'captured', 'refunded');
       },
 
       // capturePayment → maybeUpdatePaymentCollection_. `capturePayment_`
       // throws when payment.canceled_at is set and short-circuits when
       // captured_at already is — both are Payment-entity guards. Capture does
       // not move authorizedAmount, so the derived status is UNCHANGED by it.
-      CAPTURE_PAYMENT: (model) => (p, { reject }) => {
+      CAPTURE_PAYMENT: (model) => (p, { reject, next, unchanged }) => {
         if (model.authorized === 'none') return reject('nothing-authorized-to-capture');
         if (model.captured !== 'none') return reject('already-captured');
-        model.captured = p.level;
-        model.status = derive(model);
+        next.captured = p.level;
+        next.status = derive({ hasSessions: model.hasSessions, authorized: model.authorized, captured: p.level });
+        unchanged('hasSessions', 'authorized', 'refunded');
       },
 
       // refundPayment → maybeUpdatePaymentCollection_. Also status-neutral.
-      REFUND_PAYMENT: (model) => (p, { reject }) => {
+      REFUND_PAYMENT: (model) => (p, { reject, next, unchanged }) => {
         if (model.captured === 'none') return reject('nothing-captured-to-refund');
         if (model.refunded !== 'none') return reject('already-refunded');
-        model.refunded = p.level;
-        model.status = derive(model);
+        next.refunded = p.level;
+        next.status = derive({ hasSessions: model.hasSessions, authorized: model.authorized, captured: model.captured });
+        unchanged('hasSessions', 'authorized', 'captured');
       },
 
       // cancelOrderWorkflow stamps every linked collection unconditionally.
       // There is NO guard, and no reject path: cancelling twice is not
       // refused by anything in the payment module at v2.4.0. Modelling a
       // guard here would be modelling a machine Medusa does not ship.
-      CANCEL_ORDER: (model) => () => {
-        model.status = 'canceled';
+      CANCEL_ORDER: (model) => (p, { next, unchanged }) => {
+        next.status = 'canceled';
+        unchanged('hasSessions', 'authorized', 'captured', 'refunded');
       },
     },
     reactors: [],
