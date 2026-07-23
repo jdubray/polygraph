@@ -123,7 +123,11 @@ export async function verify(opts) {
     // hard-requires a dataDomain entry for every declared data field
     // (buildPrompt throws otherwise — the domain is also the exploration and
     // transpilation domain, so a gap must block generation loudly).
-    const prompt = buildPrompt(contract, source, { filePath: opts.source, lang, mode });
+    // windows threads the real corpus into the v2 renderers: union-typed
+    // state keys (observed as more than one runtime type across pre/post)
+    // render as untyped `{}` instead of trapping every generation with a
+    // single-type declaration the strict checker throws on.
+    const prompt = buildPrompt(contract, source, { filePath: opts.source, lang, mode, windows });
     const maxTokens = posInt(opts['max-tokens'], 'max-tokens', undefined);
     const gens = await generateSpecs({ prompt, model: opts.model, n: posInt(opts.n, 'n', 5), apiKey, maxTokens });
     const specDir = join(outDir, 'specs');
@@ -151,6 +155,62 @@ export async function verify(opts) {
   const deadIdx = matrix.map((row, i) => (row.every((s) => s === 'unscoreable') ? i : -1)).filter((i) => i >= 0);
   const liveIdx = specPaths.map((_, i) => i).filter((i) => !deadIdx.includes(i));
   const deadSpecs = deadIdx.map((i) => specPaths[i].replace(/^.*[\\/]/, ''));
+  // ── Spec-vs-spec agreement (M3) ───────────────────────────────────────────
+  // The spec-vs-TRACE verdict below is blind to the structure of a
+  // disagreement among the specs themselves. The raft field study's key
+  // signal — 4 of 5 independent generations making the IDENTICAL mistake,
+  // with the lone dissenter agreeing with the hand control — was only found
+  // by reading the generated code (eval/FINDING-raft-field-study.md,
+  // lesson 3). Computed over LIVE specs only; a lopsided split is evidence
+  // of a legibility trap in the source, NOT evidence the majority is right —
+  // in the raft case the majority was wrong.
+  const liveNames = liveIdx.map((si) => specPaths[si].replace(/^.*[\\/]/, ''));
+  let agreement = null;
+  const windowSplits = windows.map(() => null); // per window: '4-vs-1 (minority: …)' when a strict majority exists
+  if (liveIdx.length >= 2) {
+    // A window unscoreable in EVERY live spec measured nothing — the statuses
+    // are identical by construction and would inflate consensus. Excluded
+    // from the agreement denominator (they already classify unscoreable-all).
+    const measured = windows.map((_, wi) => !liveIdx.every((si) => matrix[si][wi] === 'unscoreable'));
+    let agree = 0, total = 0;
+    for (let a = 0; a < liveIdx.length; a++) {
+      for (let b = a + 1; b < liveIdx.length; b++) {
+        for (let wi = 0; wi < windows.length; wi++) {
+          if (!measured[wi]) continue;
+          total++;
+          if (matrix[liveIdx[a]][wi] === matrix[liveIdx[b]][wi]) agree++;
+        }
+      }
+    }
+    const deviations = liveIdx.map(() => 0);
+    let majorityWindows = 0; // windows where a strict majority exists (the deviation denominator)
+    let noMajority = 0;      // disagreement windows with NO strict majority (even splits — nobody is "the outlier")
+    windows.forEach((_, wi) => {
+      if (!measured[wi]) return;
+      const counts = new Map();
+      liveIdx.forEach((si) => { const s = matrix[si][wi]; counts.set(s, (counts.get(s) || 0) + 1); });
+      let top = null, topN = 0;
+      for (const [s, c] of counts) if (c > topN) { top = s; topN = c; }
+      if (topN * 2 <= liveIdx.length) { if (counts.size > 1) noMajority++; return; }
+      majorityWindows++;
+      const minority = [];
+      liveIdx.forEach((si, li) => { if (matrix[si][wi] !== top) { deviations[li]++; minority.push(liveNames[li]); } });
+      if (minority.length) windowSplits[wi] = `${topN}-vs-${minority.length} (minority: ${minority.join(', ')})`;
+    });
+    const outliers = liveNames
+      .map((name, li) => ({ spec: name, deviations: deviations[li] }))
+      .filter((o) => o.deviations > 0)
+      .sort((a, b) => b.deviations - a.deviations);
+    agreement = {
+      liveSpecs: liveIdx.length,
+      measuredWindows: measured.filter(Boolean).length,
+      pairwisePct: total ? Math.round((agree / total) * 100) : null,
+      majorityWindows,
+      noMajority,
+      outliers,
+    };
+  }
+
   const perWindow = windows.map((w, wi) => {
     const statuses = liveIdx.map((si) => matrix[si][wi]);
     // Per-live-spec step classifications ('sam' mode; legacy tv.mjs has none).
@@ -164,6 +224,7 @@ export async function verify(opts) {
     });
     const entry = { scenario: w.scenario, index: w.index, action: w.action, statuses, verdict: classify(statuses) };
     if (classifications.some((c) => c !== null)) entry.classifications = classifications;
+    if (windowSplits[wi]) entry.split = windowSplits[wi];
     return entry;
   });
 
@@ -171,6 +232,7 @@ export async function verify(opts) {
     specs: specPaths.length,
     liveSpecs: liveIdx.length,
     deadSpecs,
+    agreement,
     windows: windows.length,
     consistent: perWindow.filter((w) => w.verdict === 'consistent').length,
     specError: perWindow.filter((w) => w.verdict === 'spec-error').length,
@@ -367,6 +429,24 @@ function renderMarkdown(summary, findings, invReport, tlaReport) {
     L.push(`- ⚠️ **${summary.deadSpecs.length} spec(s) failed to load/replay and were EXCLUDED from window verdicts: ${summary.deadSpecs.join(', ')}** — fix generation for these; the verdicts below cover the live specs only.`);
   }
   L.push(`- windows: **${summary.windows}**`);
+  if (summary.agreement) {
+    const a = summary.agreement;
+    const excluded = summary.windows - a.measuredWindows;
+    const suffix = excluded ? ` (${excluded} unscoreable-everywhere window(s) excluded from the measure)` : '';
+    if (a.pairwisePct === null) {
+      L.push(`- spec agreement: NOTHING MEASURED — every window was unscoreable in every live spec.`);
+    } else if (a.pairwisePct === 100 && !a.outliers.length && !a.noMajority) {
+      // The quiet line requires FULL agreement — not merely "no nameable
+      // outlier": an even split (1-vs-1, 2-vs-2) has no strict majority and
+      // must never render as consensus.
+      L.push(`- spec agreement: pairwise **100%** — all ${a.liveSpecs} live specs agree on every measured window${suffix}`);
+    } else {
+      const parts = [];
+      if (a.outliers.length) parts.push(a.outliers.map((o) => `**${o.spec}** deviates from the majority on ${o.deviations}/${a.majorityWindows} majority-bearing windows`).join('; '));
+      if (a.noMajority) parts.push(`**${a.noMajority} window(s) split with NO majority** (even disagreement — nobody is "the outlier"; read those windows spec by spec)`);
+      L.push(`- spec agreement: pairwise **${a.pairwisePct}%**; ${parts.join('; ')} — review before trusting the vote: a lopsided split marks a spot where the source is easy to misread, and the majority is NOT automatically right (the minority may be the one that read it correctly — check it against the source, not the vote count). Shared failures are counted as agreement WITHOUT comparing outputs — the matrix cannot distinguish an identical mistake from different ones.${suffix}`);
+    }
+  }
   L.push(`- consistent (pass in all live specs): **${summary.consistent}**`);
   L.push(`- likely spec-error (some specs miss it): **${summary.specError}**`);
   L.push(`- likely code-finding / contract-error (all specs disagree): **${summary.codeFinding}**`);
@@ -384,15 +464,15 @@ function renderMarkdown(summary, findings, invReport, tlaReport) {
     return L.join('\n');
   }
   L.push('## Windows to review\n');
-  L.push('| scenario | # | action | verdict | per-spec | step classification (per live spec) |');
-  L.push('|---|---|---|---|---|---|');
+  L.push('| scenario | # | action | verdict | per-spec | split | step classification (per live spec) |');
+  L.push('|---|---|---|---|---|---|---|');
   for (const f of findings) {
     const cls = (f.classifications || []).map((c) => c ?? '—').join(', ') || '—';
-    L.push(`| ${f.scenario} | ${f.index} | ${f.action} | ${f.verdict} | ${f.statuses.join(', ')} | ${cls} |`);
+    L.push(`| ${f.scenario} | ${f.index} | ${f.action} | ${f.verdict} | ${f.statuses.join(', ')} | ${f.split || '—'} | ${cls} |`);
   }
   L.push('\n**Reading the verdicts**');
   L.push('- *code-finding / contract-error*: every spec disagrees with the trace here. Either the code does something you did not expect (a defect) or your observable-state contract omits a field that drives this transition. Investigate the source at this (pre-state, action).');
-  L.push('- *spec-error*: some generations pass, some fail. Usually one generation missed a rule; check the majority. The missed rules are typically special cases living outside the main state table.');
+  L.push('- *spec-error*: some generations pass, some fail. Usually one generation missed a rule — but a LOPSIDED split (see the split column) cuts both ways: several specs sharing a failure looks the same as one spec missing a rule, and the status matrix does not compare their outputs (a shared failure may or may not be the same mistake). Check the minority against the source before siding with the vote count; the missed rules are typically special cases living outside the main state table.');
   L.push('- *unscoreable in all specs*: the generated modules did not load or export next(). Fix generation, not the code.');
   L.push('\n**Reading the step classifications** (v2 SAM artifact only)');
   L.push('- *rejected(reason)* and *identity-by-mutation* are the two GOOD no-op classes: the spec explicitly declined or explicitly re-committed the same state.');
