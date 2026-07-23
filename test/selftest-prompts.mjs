@@ -228,8 +228,8 @@ ok('the v2 reference spec passes the gate',
     ],
     initState: { value: 'green', state: 'LOCKED', cycles: 0 },
   });
-  ok('mixed-runtime union note renders untyped {} with the union comment',
-    /value: \{\},\s+\/\/ union — takes object \| string at runtime/.test(unionShape));
+  ok('mixed-runtime union note renders a type ARRAY with the union comment (sam-pattern #35)',
+    /value: \{ type: \['object', 'string'\] \},\s+\/\/ union — takes object \| string at runtime/.test(unionShape));
   ok('string-LITERAL union stays a single string type (one runtime type)',
     /state: \{ type: 'string' \}/.test(unionShape));
   ok('single-type keys are unaffected', /cycles: \{ type: 'number' \}/.test(unionShape));
@@ -239,8 +239,8 @@ ok('the v2 reference spec passes the gate',
     { stateKeys: ['value'], initState: { value: 'green' } },
     [{ pre: { value: 'green' }, action: 'GO', data: {}, post: { value: { red: 'walk' } } }],
   );
-  ok('a union observed across trace pre/post renders {} even with no type note',
-    /value: \{\},\s+\/\/ union/.test(observedShape));
+  ok('a union observed across trace pre/post renders the array even with no type note',
+    /value: \{ type: \['object', 'string'\] \},\s+\/\/ union/.test(observedShape));
 
   // End-to-end: verify's prompt path threads windows in, and the template
   // carries the do-not-tighten guidance for every generation.
@@ -252,12 +252,12 @@ ok('the v2 reference spec passes the gate',
   const unionPrompt = buildPrompt(unionContract, 'module.exports = {};', {
     windows: [{ pre: { value: 'green' }, action: 'GO', data: {}, post: { value: { red: 'walk' } } }],
   });
-  ok('buildPrompt(windows) renders the observed union untyped in the v2 prompt',
-    /value: \{\},\s+\/\/ union/.test(unionPrompt));
-  ok('the template forbids tightening {} back to a single type',
-    /do NOT tighten `\{\}` to `\{ type:/.test(unionPrompt));
-  ok('the template forbids loosening typed keys to {} (over-omission guard)',
-    /never loosen a typed key to `\{\}`/.test(unionPrompt));
+  ok('buildPrompt(windows) renders the observed union as a type array in the v2 prompt',
+    /value: \{ type: \['object', 'string'\] \},\s+\/\/ union/.test(unionPrompt));
+  ok('the template forbids collapsing a union array to a single type',
+    /Do NOT collapse the\s+array to a single\s+type/.test(unionPrompt));
+  ok('the template forbids widening single-typed keys (over-omission guard)',
+    /never widen a single-typed key/.test(unionPrompt));
 
   // PROSE NOTES MUST NOT CREATE UNIONS (review findings, M6): a note-derived
   // union is believed only when every arm is a pure type token. A false
@@ -283,8 +283,8 @@ ok('the v2 reference spec passes the gate',
     { stateKeys: ['k'], initState: { k: null } },
     [{ pre: { k: 'x' }, action: 'GO', data: {}, post: { k: { a: 1 } } }],
   );
-  ok('null-at-init union renders { nullable: true } with the union comment',
-    /k: \{ nullable: true \},\s+\/\/ union — takes object \| string \| null at runtime/.test(nullUnion));
+  ok('null-at-init union renders the array plus nullable with the union comment',
+    /k: \{ type: \['object', 'string'\], nullable: true \},\s+\/\/ union — takes object \| string \| null at runtime/.test(nullUnion));
 
   // OBSERVED SINGLE TYPE (review finding): real window evidence beats the
   // note/init even when the type is NOT a union.

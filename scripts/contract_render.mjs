@@ -201,8 +201,11 @@ export function renderModelShape(contract, windows = []) {
     const nullable = sawNull ? ', nullable: true' : '';
     if (isUnion) {
       for (const t of noteTypes.types) seen.add(t);
-      const union = [...seen].sort().join(' | ');
-      return `  ${name}: {${sawNull ? ' nullable: true ' : ''}},  // union — takes ${union}${sawNull ? ' | null' : ''} at runtime; MUST stay untyped (a 'type' key would make the strict checker throw on the other arm)`;
+      // sam-pattern ≥2.2 (#35): a type ARRAY declares the union outright —
+      // shape checking stays live on every arm (the pre-2.2 escape was an
+      // untyped `{}`, which gave up checking entirely).
+      const arms = [...seen].sort();
+      return `  ${name}: { type: [${arms.map((t) => `'${t}'`).join(', ')}]${nullable} },  // union — takes ${arms.join(' | ')}${sawNull ? ' | null' : ''} at runtime; keep the ARRAY exactly (collapsing it to one type makes the strict checker throw on the other arm)`;
     }
     // Single runtime type: real evidence (windows/init) beats the note; a
     // union-shaped note that classified to ONE pure type (an enum of string

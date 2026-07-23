@@ -47,14 +47,13 @@ MUST export exactly this shape:
 
 {model_shape}
 
-    Copy this modelShape EXACTLY, including any key declared as `{}` with no
-    `type`. A `{}` key is a UNION: its real values span more than one runtime
-    type (e.g. a string in some states and an object in others, like a nested
-    statechart's state value). The strict profile's shape checker validates
-    single runtime types only and THROWS the moment the other union arm is
-    assigned — do NOT tighten `{}` to `{ type: '...' }`, even if the initial
-    state suggests one. The converse holds too: keys NOT rendered `{}` keep
-    their declared single type — never loosen a typed key to `{}`.
+    Copy this modelShape EXACTLY, including any key declared with a type
+    ARRAY (`{ type: ['string', 'object'] }`). An array type is a UNION: the
+    key's real values span more than one runtime type (e.g. a string in some
+    states and an object in others, like a nested statechart's state value),
+    and every listed arm is legal. Do NOT collapse the array to a single
+    type — the strict checker THROWS the moment the other union arm is
+    assigned — and never widen a single-typed key to an array or to `{}`.
 
   - `actions` — an OBJECT keyed by the action names. Each entry is the full
     form `{ action, schema, domain }` with `action: (data = {}) => ({ ...data })`

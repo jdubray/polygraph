@@ -225,6 +225,12 @@ export async function verify(opts) {
     const entry = { scenario: w.scenario, index: w.index, action: w.action, statuses, verdict: classify(statuses) };
     if (classifications.some((c) => c !== null)) entry.classifications = classifications;
     if (windowSplits[wi]) entry.split = windowSplits[wi];
+    // Per-spec runtime errors (an acceptor throw carries the library's own
+    // message — e.g. 2.2's SamFrameError naming a write-then-reject misuse).
+    // Without this the message dies in the replay detail and a hard library
+    // error reads as an anonymous 'fail'.
+    const errors = liveIdx.map((si) => (detail[si].ok ? detail[si].results[wi].error ?? null : null));
+    if (errors.some(Boolean)) entry.errors = errors;
     // Reject-as-annotation signature (hatchet field study,
     // eval/FINDING-hatchet-reject-annotation.md): a spec REJECTED a window
     // whose trace shows the code ACTED. One such window is an ordinary
@@ -489,6 +495,15 @@ function renderMarkdown(summary, findings, invReport, tlaReport) {
   for (const f of findings) {
     const cls = (f.classifications || []).map((c) => c ?? '—').join(', ') || '—';
     L.push(`| ${f.scenario} | ${f.index} | ${f.action} | ${f.verdict} | ${f.statuses.join(', ')} | ${f.split || '—'} | ${cls} |`);
+  }
+  // Distinct spec runtime errors across the failing windows: a library-level
+  // hard error (SamFrameError / SamSchemaError) carries its own diagnosis and
+  // must not read as an anonymous 'fail'.
+  const errCounts = new Map();
+  for (const f of findings) for (const e of f.errors || []) if (e) errCounts.set(e, (errCounts.get(e) || 0) + 1);
+  if (errCounts.size) {
+    L.push('\n**Spec runtime errors on failing windows** (distinct, with window counts):');
+    for (const [e, n] of [...errCounts.entries()].sort((a, b) => b[1] - a[1])) L.push(`- \`${e}\` — ${n} window(s)`);
   }
   L.push('\n**Reading the verdicts**');
   L.push('- *code-finding / contract-error*: every spec disagrees with the trace here. Either the code does something you did not expect (a defect) or your observable-state contract omits a field that drives this transition. Investigate the source at this (pre-state, action).');

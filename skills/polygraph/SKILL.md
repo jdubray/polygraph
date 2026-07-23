@@ -38,7 +38,7 @@ Generation needs `ANTHROPIC_API_KEY` and an explicit model (recommend
 `opus-4.8` or `fable-5`; there is no default). Replay and controls need no key.
 
 **The artifact (v0.7):** by default the derived spec is a **SAM v2
-strict-profile module** (`@cognitive-fab/sam-pattern` 2.1.2, vendored at
+strict-profile module** (`@cognitive-fab/sam-pattern` 2.2.0, vendored at
 `scripts/vendor/sam-pattern.cjs`): named intents with per-intent schemas and
 finite payload **domains** declared in a manifest, acceptors keyed by intent
 name, every ignored action an observable `reject(reason)`, a sealed model

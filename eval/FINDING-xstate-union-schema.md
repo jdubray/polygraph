@@ -53,10 +53,11 @@ regardless of the target's language; `lang` describes the source being read,
 and the fence choice follows it. Recorded here; the skill's contract step
 should make that explicit if it recurs.
 
-## Upstream
+## Upstream — RESOLVED
 
-Real union support (`type: ['string', 'object']`) belongs in sam-pattern
-itself — drafted in `docs/draft-upstream-issue-union-types.md`. Until then
-the untyped-`{}` rendering is the correct contract-level behavior (it is
-what the hand-written reference needed too), at the cost of no shape
-checking at all on union keys.
+Filed as **sam-lib #35**, shipped in **sam-pattern 2.2.0**: `type` accepts
+an array (`{ type: ['string', 'object'] }`) in modelShape and payload
+schemas, and `{}` is documented as the explicit "any". Polygraph 6.1.0
+vendors 2.2.0 and `renderModelShape` now emits the real arm list for
+detected union keys — shape checking stays live on every arm; the interim
+untyped-`{}` rendering is retired.

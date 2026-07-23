@@ -51,10 +51,10 @@ function v2ModuleContract(contract) {
 
 ${indent(renderModelShape(contract))}
 
-    Copy this modelShape EXACTLY. A key rendered \`{}\` is a UNION (more than
-    one runtime type) and MUST stay untyped — the strict checker validates
-    single types and would throw on the other arm; conversely never loosen a
-    typed key to \`{}\`.
+    Copy this modelShape EXACTLY. A key rendered with a type ARRAY
+    (\`{ type: ['string', 'object'] }\`) is a UNION — every listed arm is
+    legal; do NOT collapse the array to a single type (the strict checker
+    throws on the other arm), and never widen a single-typed key.
 
   - \`actions\` — an OBJECT keyed by the action names. Each entry is the full
     form \`{ action, schema, domain }\` with \`action: (data = {}) => ({ ...data })\`

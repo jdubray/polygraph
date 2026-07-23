@@ -3,6 +3,40 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 6.1.0 — 2026-07-23
+
+**sam-pattern 2.2.0 — both field-study traps fixed at the library layer.**
+The two upstream issues drafted from the July 2026 field studies
+(`eval/FINDING-xstate-union-schema.md`,
+`eval/FINDING-hatchet-reject-annotation.md`) landed as sam-lib #35 and #36
+and shipped in 2.2.0; the vendored engine and npm dep move up together.
+
+- **Union types (#35):** `type` accepts an array
+  (`{ type: ['string', 'object'] }`) in modelShape and payload schemas.
+  `renderModelShape` now emits the real arm list for detected union keys —
+  shape checking stays live on every arm — replacing the interim untyped
+  `{}` escape; the v2 and polygen prompts forbid collapsing the array.
+- **Reject-after-write hard-fail (#36):** a same-acceptor `next.*` write
+  followed by `reject()` throws `SamFrameError` naming the discarded keys
+  (a different acceptor's veto stays legal). The reject-as-annotation trap
+  now fails loudly at step time; verify's trace-signature detection
+  (`rejectedActedWindows`) remains as the fallback for pure-reject variants
+  and specs run against older libraries. Breaking only for modules that
+  were already silently losing writes.
+- findings.md gains a **"Spec runtime errors on failing windows"** section:
+  distinct per-window spec errors (e.g. the #36 SamFrameError) surface in
+  the report instead of dying in replay detail as anonymous fails.
+
+Also in this release (the verify-enhancements plan, M1–M7, all
+adversarially reviewed): frozen-state-key warnings with `--initial-states`
+plumbed through verify; runaway-exploration drift detection + progress
+heartbeat; spec-vs-spec agreement reporting (pairwise %, outliers, split
+column); the scripted negative control `scripts/mutate.mjs`; the skill's
+real-traces prerequisite and capture guidance; union-key rendering from
+trace evidence; and the reject-as-annotation detection above. Field-study
+reports: `eval/FINDING-raft-field-study.md` and the two above — no defects
+found in hashicorp/raft, xstate, or hatchet.
+
 ## 6.0.0 — 2026-07-22
 
 **The strict-profile artifact moves to sam-pattern 2.1.2 — explicit

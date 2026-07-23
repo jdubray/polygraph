@@ -321,10 +321,11 @@ ok('mutate-then-reject is a recorded violation, never a silent identity no-op',
   mutateReject.ok === false
   && mutateReject.violations.some((v) => v.kind === 'throw' && /mutated the observable model .* and then rejected/.test(v.detail)));
 
-// ...but a next-draft write before rejecting (reason-logging, the 2.1 heir of
-// the v1 internal-key idiom — the frozen pre-state now throws on ANY in-place
-// write, internal keys included) is discarded with the rejection: observably a
-// pure no-op — the replayer passes it, so the checker must too.
+// ...and a next-draft write before rejecting IN THE SAME ACCEPTOR — the
+// reason-logging idiom 2.1 silently discarded — is a hard SamFrameError under
+// 2.2 (#36, motivated by the hatchet field study: 5/5 generations no-opped by
+// annotating success with reject). The checker must surface the library's own
+// error as a throw finding, never explore it as a legal no-op.
 const internalRejectSpec = join(TMP, 'internal-reject-v2.js');
 writeFileSync(internalRejectSpec, `${V2_HEADER}
 const INITIAL_STATE = { state: 'LOCKED', coins: 0, lastReason: '' };
@@ -339,8 +340,8 @@ const control = instance({
 });
 ${V2_FOOTER}`, 'utf-8');
 const internalReject = check({ specModule: loadSpec(internalRejectSpec), contract, invariants: {}, maxStates: 10 });
-ok('internal-key mutation before reject stays a LEGAL no-op (no false violation)',
-  !internalReject.violations.some((v) => v.kind === 'throw'));
+ok('write-then-reject in the same acceptor is a hard error under 2.2 (#36), surfaced as a throw finding',
+  internalReject.violations.some((v) => v.kind === 'throw' && /reject\(\) after next-state writes/.test(v.detail)));
 
 console.log('4) P4 — determinism double-pass');
 const rand = check({ specModule: loadSpec(randomSpec), contract: {}, invariants: {}, maxStates: 30 });
@@ -378,8 +379,10 @@ ok('CLI: --specs plus generation flags is a loud error (stale specs cannot masqu
 
 console.log('6) reject-as-annotation trap (hatchet field study) — detected, named, and triaged');
 // 5 of 5 generations computed the correct next.* writes and then appended
-// reject(reason) as a success label — discarding the work (reject is a
-// terminal DECLINE). The report must surface the signature: a spec that
+// reject(reason) as a success label. PRIMARY detection since sam-pattern
+// 2.2.0 (#36): the library hard-fails the same-acceptor write-then-reject at
+// step time with its own message. FALLBACK detection (kept for older-library
+// specs and pure-reject variants): the trace signature — a spec that
 // REJECTED a window whose trace shows the code ACTED.
 {
   const trapDir = join(TMP, 'trap-specs');
@@ -412,13 +415,50 @@ const control = instance({
 });
 ${V2_FOOTER}`, 'utf-8');
   const trapRun = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: trapDir, out: join(TMP, 'out-trap') });
-  ok('trap spec: mutating windows fail with a rejected(...) classification',
-    trapRun.summary.consistent < 12 && trapRun.summary.rejectedActedWindows > 0);
-  ok('every failing window carries the rejected-but-code-acted signature',
-    trapRun.findings.every((f) => f.rejectedButCodeActed === true));
-  const trapMd = readFileSync(join(TMP, 'out-trap', 'findings.md'), 'utf-8');
+  const trapJson = JSON.parse(readFileSync(join(TMP, 'out-trap', 'findings.json'), 'utf-8'));
+  ok('2.2 (#36): write-then-reject fails LOUDLY at step time with the library\'s own message',
+    trapRun.summary.consistent < 12
+    && trapJson.perWindow.some((w) => w.verdict !== 'consistent'));
+  // The library error text must reach the operator (per-window error in the
+  // replay detail; surfaced through the failing windows rather than a silent
+  // no-op that replays as a plausible spec).
+  ok('the SamFrameError names the discarded writes and the misuse',
+    /reject\(\) after next-state writes/.test(readFileSync(join(TMP, 'out-trap', 'findings.json'), 'utf-8')));
+
+  // FALLBACK signature (pure reject, no writes — nothing for #36 to catch):
+  // a spec that declines windows the code acted on still trips the
+  // trace-signature detector.
+  const pureDir = join(TMP, 'pure-reject-specs');
+  mkdirSync(pureDir, { recursive: true });
+  writeFileSync(join(pureDir, 'spec_0.js'), `${V2_HEADER}
+const INITIAL_STATE = { state: 'LOCKED', coins: 0 };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { state: { type: 'string' }, coins: { type: 'number' } },
+    actions: {
+      COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
+      PUSH: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
+    },
+    acceptors: {
+      COIN: (model) => (p, { reject }) => reject('coin-declined'),
+      PUSH: (model) => (p, { next, reject, unchanged }) => {
+        if (model.state !== 'UNLOCKED') return reject('push-while-locked-is-noop');
+        next.state = 'LOCKED';
+        unchanged('coins');
+      },
+    },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+  const pureRun = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: pureDir, out: join(TMP, 'out-pure') });
+  ok('fallback: pure reject on acted windows trips the trace-signature detector',
+    pureRun.summary.rejectedActedWindows > 0
+    && pureRun.findings.filter((f) => f.action === 'COIN').every((f) => f.rejectedButCodeActed === true));
+  const pureMd = readFileSync(join(TMP, 'out-pure', 'findings.md'), 'utf-8');
   ok('findings.md names the reject-as-annotation trap with the triage hint',
-    /REJECTED while the code ACTED/.test(trapMd) && /reject-as-annotation trap/.test(trapMd) && /trailing reject/.test(trapMd));
+    /REJECTED while the code ACTED/.test(pureMd) && /reject-as-annotation trap/.test(pureMd) && /trailing reject/.test(pureMd));
   // A clean run reports zero and stays quiet.
   ok('clean v2 run: no rejected-but-code-acted noise',
     e2e.summary.rejectedActedWindows === 0);

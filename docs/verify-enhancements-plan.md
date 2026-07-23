@@ -102,6 +102,16 @@ write-then-reject belongs in the library — drafted upstream:
 
 All milestones done.
 
+**Upstream closure (2026-07-23):** both drafts filed and shipped —
+sam-lib **#35** (union types) and **#36** (reject-after-write hard-fail,
+per-acceptor: a different acceptor's veto after another wrote stays legal)
+landed in **sam-pattern 2.2.0**. Polygraph **6.1.0** vendors 2.2.0:
+`renderModelShape` emits real union arrays (the `{}` escape is retired,
+shape checking recovered on union keys; to-tla union limit unchanged);
+the reject-as-annotation library throw is the primary detection with
+verify's trace signature kept as the fallback; findings.md surfaces
+per-window spec runtime errors so library diagnoses reach the report.
+
 **Thesis:** the first external field study
 ([eval/FINDING-raft-field-study.md](../eval/FINDING-raft-field-study.md),
 hashicorp/raft, two machines, July 2026) validated the method — controls

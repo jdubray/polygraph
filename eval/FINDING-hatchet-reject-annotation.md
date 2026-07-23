@@ -47,10 +47,17 @@ name every branch of a total function rather than only its no-op cases.
    ACTED (post ≠ pre) — per finding (`rejectedButCodeActed`) and as a
    summary counter with a triage hint ("look for a trailing reject after
    `next.*` writes before reading these as code findings").
-3. **Upstream draft** (`docs/draft-upstream-issue-reject-after-write.md`):
-   the v2 strict profile should hard-fail a step that wrote to `next` and
-   then rejected, instead of silently discarding real work — the silent
-   discard is what let a wrong idiom replay as a plausible-looking spec.
+3. **Upstream — RESOLVED**: filed as **sam-lib #36**, shipped in
+   **sam-pattern 2.2.0** (vendored in polygraph 6.1.0): a same-acceptor
+   `next.*` write followed by `reject()` throws `SamFrameError` naming the
+   discarded keys and the misuse — with the per-acceptor refinement that a
+   DIFFERENT acceptor rejecting after another wrote remains legal (a
+   deliberate cross-cutting veto). The library throw is now the PRIMARY
+   detection; verify's trace-signature flag (`rejectedActedWindows`)
+   remains as the fallback for pure-reject variants (no writes — nothing
+   for #36 to catch) and for specs executed against older libraries, and
+   findings.md now surfaces the per-window spec errors so the
+   SamFrameError message reaches the operator.
 
 ## Pattern across the four targets
 
