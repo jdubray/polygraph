@@ -225,6 +225,20 @@ export async function verify(opts) {
     const entry = { scenario: w.scenario, index: w.index, action: w.action, statuses, verdict: classify(statuses) };
     if (classifications.some((c) => c !== null)) entry.classifications = classifications;
     if (windowSplits[wi]) entry.split = windowSplits[wi];
+    // Reject-as-annotation signature (hatchet field study,
+    // eval/FINDING-hatchet-reject-annotation.md): a spec REJECTED a window
+    // whose trace shows the code ACTED. One such window is an ordinary
+    // spec-error; a uniform pattern is the structural trap where a
+    // generation computes the correct next.* writes and then appends
+    // reject(reason) as a label, discarding the work. "ACTED" uses the SAME
+    // projection basis as the replayer's pass rule (only keys present in the
+    // trace post-state count): a delta-shaped corpus whose post is a key
+    // subset of pre would otherwise flag every correctly-rejected no-op.
+    if (entry.verdict !== 'consistent'
+        && Object.keys(w.post || {}).some((k) => stable(w.pre?.[k]) !== stable(w.post[k]))
+        && classifications.some((c) => typeof c === 'string' && c.startsWith('rejected'))) {
+      entry.rejectedButCodeActed = true;
+    }
     return entry;
   });
 
@@ -243,6 +257,9 @@ export async function verify(opts) {
     // only the v2 artifact can surface.
     unhandledWindows: perWindow.filter((w) =>
       w.verdict !== 'consistent' && (w.classifications || []).some((c) => c === 'unhandled')).length,
+    // Failing windows where a spec rejected while the trace shows the code
+    // acted — the reject-as-annotation trap's signature when uniform.
+    rejectedActedWindows: perWindow.filter((w) => w.rejectedButCodeActed).length,
   };
   const findings = perWindow.filter((w) => w.verdict !== 'consistent');
 
@@ -454,6 +471,9 @@ function renderMarkdown(summary, findings, invReport, tlaReport) {
   if (summary.unhandledWindows) {
     L.push(`- ⚠️ windows where a spec neither acted nor REJECTED (\`unhandled\`): **${summary.unhandledWindows}** — unexplained silence; a faithful spec should either transition or reject(reason).`);
   }
+  if (summary.rejectedActedWindows) {
+    L.push(`- ⚠️ windows where a spec REJECTED while the code ACTED (trace post ≠ pre): **${summary.rejectedActedWindows}** — if this is uniform across specs and windows, suspect the reject-as-annotation trap: \`reject(reason)\` is a terminal DECLINE that discards every \`next.*\` write in the branch; a generation that computes the right transition and then appends reject(reason) as a label throws its own work away. Look for a trailing \`reject(...)\` after \`next.*\` assignments in the specs before reading these as code findings.`);
+  }
   L.push('');
   if (!findings.length) {
     L.push('All windows consistent across all specs — the derived spec reproduces the code.');
@@ -477,6 +497,7 @@ function renderMarkdown(summary, findings, invReport, tlaReport) {
   L.push('\n**Reading the step classifications** (v2 SAM artifact only)');
   L.push('- *rejected(reason)* and *identity-by-mutation* are the two GOOD no-op classes: the spec explicitly declined or explicitly re-committed the same state.');
   L.push('- *unhandled* on a failing window is itself a finding: the spec neither acted nor rejected — usually a missing acceptor case (spec-error) or a rule the code has that the contract does not.');
+  L.push('- *rejected(reason)* on a window where the TRACE changed state (post ≠ pre) means the spec declined a transition the code performed. Uniform across specs and windows, this is the reject-as-annotation trap (reject discards the `next` draft; it never tags a success) — inspect the specs for a trailing reject after `next.*` writes.');
   renderInvSection(L, invReport);
   renderTlaSection(L, tlaReport);
   return L.join('\n');

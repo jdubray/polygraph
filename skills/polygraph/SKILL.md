@@ -267,6 +267,13 @@ finding (usually a missing acceptor case, or a rule the code has that the
 contract does not). A *uniform* rejection-reason on a code-finding window
 usually means the contract took a side (a specialRule rendered as a rejection
 requirement) that the code did not — triage it as a contract question first.
+And a `rejected(...)` classification on windows where the TRACE changed state
+(the report counts these as "REJECTED while the code ACTED") is the
+**reject-as-annotation trap** when uniform: a generation computes the correct
+`next.*` writes and then appends `reject(reason)` as a success label,
+discarding its own work (hatchet field study — 5 of 5 specs, 0/19 → 19/19 by
+deleting that one line). Inspect the specs for a trailing reject after
+`next.*` writes before reading any of it as a code finding.
 
 When every window is consistent across all specs, report it as exactly what it
 is: the code's observable behavior matches an independent reading of its source.

@@ -28,7 +28,12 @@ const LANG_FENCE = { javascript: 'javascript', typescript: 'typescript', js: 'ja
 /** Indent a multi-line renderer snippet so it sits inside the template's code block. */
 const indent = (snippet, pad = '    ') => snippet.split('\n').map((l) => pad + l).join('\n');
 
-export function buildPrompt(contract, sourceCode, { filePath = 'source', lang = 'javascript', mode = 'sam' } = {}) {
+// windows: the trace corpus, when the caller has it (verify.mjs does). The
+// v2 renderers use it to detect UNION-typed state keys from real captured
+// shapes (a key observed as both string and object must render `{}` — the
+// xstate field study, eval/FINDING-xstate-union-schema.md) and to infer
+// payload field types; prompts stay correct without it, just note-driven.
+export function buildPrompt(contract, sourceCode, { filePath = 'source', lang = 'javascript', mode = 'sam', windows = [] } = {}) {
   const tplName = mode === 'legacy' ? 'prompt_template.txt' : 'prompt_template_v2.txt';
   const tpl = readFileSync(join(HERE, tplName), 'utf-8');
   const fence = LANG_FENCE[lang] || 'javascript';
@@ -51,8 +56,8 @@ export function buildPrompt(contract, sourceCode, { filePath = 'source', lang = 
     // the exploration and transpilation domain, so a missing one must block
     // generation rather than silently exclude the action.
     out = out
-      .replaceAll('{model_shape}', () => indent(renderModelShape(contract)))
-      .replaceAll('{intent_schemas}', () => indent(renderIntentSchemas(contract)))
+      .replaceAll('{model_shape}', () => indent(renderModelShape(contract, windows)))
+      .replaceAll('{intent_schemas}', () => indent(renderIntentSchemas(contract, windows)))
       .replaceAll('{intent_domains}', () => indent(renderIntentDomains(contract)))
       .replaceAll('{special_rules_rejections}', () => renderSpecialRulesAsRejections(contract));
   }

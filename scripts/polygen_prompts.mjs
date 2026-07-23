@@ -51,6 +51,11 @@ function v2ModuleContract(contract) {
 
 ${indent(renderModelShape(contract))}
 
+    Copy this modelShape EXACTLY. A key rendered \`{}\` is a UNION (more than
+    one runtime type) and MUST stay untyped — the strict checker validates
+    single types and would throw on the other arm; conversely never loosen a
+    typed key to \`{}\`.
+
   - \`actions\` — an OBJECT keyed by the action names. Each entry is the full
     form \`{ action, schema, domain }\` with \`action: (data = {}) => ({ ...data })\`
     (the proposal is the data payload). Use EXACTLY these payload schemas:

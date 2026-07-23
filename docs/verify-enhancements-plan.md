@@ -23,7 +23,84 @@ single-key — a product-of-keys blowup is invisible to it (comment in code;
 absence of a warning is not evidence of boundedness); polynv/polyvers do
 not yet surface `driftWarnings` in their own verdict surfaces — follow-up.)
 
-M3–M5 open.
+**M3 implemented** (spec-vs-spec agreement over live specs in `verify.mjs`:
+pairwise %, strict-majority deviations, named outliers, per-finding split
+column, consensus line. Review findings fixed: the quiet consensus line is
+gated on FULL agreement — an even split (1-vs-1/2-vs-2) has no nameable
+outlier and previously rendered 0% as consensus; unscoreable-everywhere
+windows are excluded from the agreement denominator; deviation counts are
+reported against majority-bearing windows; report prose no longer claims
+"identical mistake" — the status matrix cannot compare outputs, only
+verdicts. Recorded limit: shared failures count as agreement without output
+comparison.)
+
+**M4 implemented** (`scripts/mutate.mjs` — scripted negative control reusing
+polynv's four operators via `generateMutants`/`enumerateGraph`/`graphDigest`
+(now exported, not copied); in-process replay with the pipeline replayers'
+projection + unscoreable + data-default rules; equivalent-mutant discard,
+downgraded to `equivalent-bounded` (never "no corpus can distinguish it")
+when either graph is cap-truncated; the positive control must be 100% or the
+run is refused — which also surfaces scoring-parity bugs instead of
+laundering them into blind-spot verdicts; exit 1 on any distinguishable
+zero-flip mutation; NaN flags exit 2; default `--max-states 5000` (a graph
+per mutant, double-pass each); drift stderr suppressed via
+`enumerateGraph`'s new `driftThreshold` passthrough. DEVIATION from plan:
+acceptance re-based on the turnstile example — the raft assets live outside
+the repo. Recorded follow-up: no way to acknowledge a known-uncapturable
+blind spot, so such a corpus exits 1 forever — alarm-fatigue risk.)
+
+**M5 implemented** (skill: real-traces disqualifier up front;
+subscription-not-polling capture guidance with the raft example; corpus
+coverage sanity check; frozen/drift warning reading in Step 4b; agreement
+line + split column reading in Step 5; scripted negative control in Step 3.
+`commands/verify.md`: prerequisite line, `--initial-states` flag.)
+
+## M6 — union-typed state keys (xstate field study)
+
+**Implemented** with `eval/FINDING-xstate-union-schema.md` (third field
+target; no defect in xstate; 5/5 generations trapped identically by
+`value: { type: 'string' }` rendered INTO the prompt for a
+`string | {red: string}` key). Fix: `renderModelShape(contract, windows)`
+detects union keys from captured windows, initState, and a top-level-`|`
+type-note parse, rendering `{}` with a do-not-tighten comment;
+`verify.mjs` threads the corpus into `buildPrompt`; the v2 template forbids
+tightening `{}`. Real union support (`type: ['string','object']`) drafted
+upstream: `docs/draft-upstream-issue-union-types.md`.
+
+Review findings fixed: a union must be established WITHIN one source —
+evidence (windows+init) or a note whose arms are PURE type tokens — never
+by merging across sources (the "array of enum: 'a' | 'b'" note shape had
+fabricated an array|string union and stripped checking from
+polygraph-oms-go's contract); union and observed nulls render
+`{ nullable: true }` (the checker tests null BEFORE type — plain `{}` on a
+nullable union was the same trap class again); window evidence now wins for
+single types too; prose arms are skipped, not guessed. Recorded limits:
+`to-tla.mjs` types state from init values and cannot represent a union —
+the transpiler tier may refuse or mistype a union-keyed spec (refusal is
+loud; noted, not fixed); prompts are now corpus-dependent (same
+contract+source, different traces → possibly different modelShape
+rendering) — deliberate, the corpus is ground truth. Accepted residuals: a
+union note with one pure arm and one prose arm confidently picks the arm
+that parsed (under-detection direction, only bites with no init/window
+evidence); the reject-as-annotation summary line gives no per-spec
+uniformity breakdown (findings.json and the split column carry it).
+
+## M7 — reject-as-annotation trap (hatchet field study)
+
+**Implemented** with `eval/FINDING-hatchet-reject-annotation.md` (fourth
+field target; no defect in hatchet; 5/5 generations computed the correct
+`next.*` writes and appended `reject(reason)` as a success label — 0/19
+consistent until that ONE line was removed: 19/19). Fix:
+`prompt_template_v2.txt` states REJECT MEANS DECLINED, FULL STOP (terminal,
+no preceding `next.*` writes, no accept-with-a-reason primitive; special
+rule names are rejection reasons only); `verify.mjs` detects the signature
+(a spec `rejected(...)` on a window whose trace post ≠ pre —
+`rejectedButCodeActed` per finding, `rejectedActedWindows` in the summary,
+triage hint in findings.md and the skill's Step 5). Load-time hard-fail of
+write-then-reject belongs in the library — drafted upstream:
+`docs/draft-upstream-issue-reject-after-write.md`.
+
+All milestones done.
 
 **Thesis:** the first external field study
 ([eval/FINDING-raft-field-study.md](../eval/FINDING-raft-field-study.md),

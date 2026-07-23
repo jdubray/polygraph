@@ -7,7 +7,7 @@
 // Run: node test/selftest-v2.mjs   (also wired into `npm test`)
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, rmSync, cpSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -375,6 +375,88 @@ const cliMix = spawnSync('node', [join(ROOT, 'scripts', 'verify.mjs'),
   '--specs', join(EX, 'specs'), '--model', 'sonnet-5'], { encoding: 'utf-8' });
 ok('CLI: --specs plus generation flags is a loud error (stale specs cannot masquerade as regenerated)',
   cliMix.status === 1 && /cannot be combined/.test(cliMix.stderr));
+
+console.log('6) reject-as-annotation trap (hatchet field study) — detected, named, and triaged');
+// 5 of 5 generations computed the correct next.* writes and then appended
+// reject(reason) as a success label — discarding the work (reject is a
+// terminal DECLINE). The report must surface the signature: a spec that
+// REJECTED a window whose trace shows the code ACTED.
+{
+  const trapDir = join(TMP, 'trap-specs');
+  mkdirSync(trapDir, { recursive: true });
+  writeFileSync(join(trapDir, 'spec_0.js'), `${V2_HEADER}
+const INITIAL_STATE = { state: 'LOCKED', coins: 0 };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { state: { type: 'string' }, coins: { type: 'number' } },
+    actions: {
+      COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
+      PUSH: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
+    },
+    acceptors: {
+      COIN: (model) => (p, { next, reject }) => {
+        next.state = 'UNLOCKED';
+        next.coins = model.coins + 1;
+        return reject('coin-accepted'); // the trap: annotating a SUCCESS
+      },
+      PUSH: (model) => (p, { next, reject, unchanged }) => {
+        if (model.state !== 'UNLOCKED') return reject('push-while-locked-is-noop');
+        next.state = 'LOCKED';
+        unchanged('coins');
+        return reject('push-applied'); // the trap again
+      },
+    },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+  const trapRun = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: trapDir, out: join(TMP, 'out-trap') });
+  ok('trap spec: mutating windows fail with a rejected(...) classification',
+    trapRun.summary.consistent < 12 && trapRun.summary.rejectedActedWindows > 0);
+  ok('every failing window carries the rejected-but-code-acted signature',
+    trapRun.findings.every((f) => f.rejectedButCodeActed === true));
+  const trapMd = readFileSync(join(TMP, 'out-trap', 'findings.md'), 'utf-8');
+  ok('findings.md names the reject-as-annotation trap with the triage hint',
+    /REJECTED while the code ACTED/.test(trapMd) && /reject-as-annotation trap/.test(trapMd) && /trailing reject/.test(trapMd));
+  // A clean run reports zero and stays quiet.
+  ok('clean v2 run: no rejected-but-code-acted noise',
+    e2e.summary.rejectedActedWindows === 0);
+
+  // Projection basis: "the code ACTED" must use the replayer's own rule
+  // (only keys present in the trace post count). In a delta-shaped corpus
+  // whose post is a key SUBSET of pre, raw window inequality would flag a
+  // correctly-rejected no-op as reject-as-annotation.
+  const projDir = join(TMP, 'proj-traces');
+  mkdirSync(projDir, { recursive: true });
+  writeFileSync(join(projDir, 's1.ndjson'),
+    JSON.stringify({ pre: { state: 'LOCKED', coins: 0 }, action: 'PUSH', data: {}, post: { state: 'LOCKED' } }) + '\n', 'utf-8');
+  const mixDir = join(TMP, 'proj-specs');
+  mkdirSync(mixDir, { recursive: true });
+  cpSync(join(EX, 'specs'), mixDir, { recursive: true }); // good spec: rejects PUSH@LOCKED (passes)
+  writeFileSync(join(mixDir, 'zz_bad.js'), `${V2_HEADER}
+const INITIAL_STATE = { state: 'LOCKED', coins: 0 };
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { state: { type: 'string' }, coins: { type: 'number' } },
+    actions: {
+      COIN: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
+      PUSH: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] },
+    },
+    acceptors: {
+      COIN: (model) => (p, { next, unchanged }) => { next.state = 'UNLOCKED'; next.coins = model.coins + 1; },
+      PUSH: (model) => (p, { next, unchanged }) => { next.state = 'UNLOCKED'; next.coins = model.coins; }, // wrongly transitions on the no-op
+    },
+    reactors: [],
+  },
+});
+${V2_FOOTER}`, 'utf-8');
+  const projRun = await verify({ contract: join(EX, 'contract.json'), traces: projDir, specs: mixDir, out: join(TMP, 'out-proj') });
+  const projWindow = projRun.summary; // 1 window: good spec passes (rejected), bad spec fails -> spec-error
+  ok('delta-shaped no-op window (post ⊂ pre, unchanged) does NOT flag reject-as-annotation',
+    projWindow.specError === 1 && projWindow.rejectedActedWindows === 0);
+}
 
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);

@@ -47,6 +47,15 @@ MUST export exactly this shape:
 
 {model_shape}
 
+    Copy this modelShape EXACTLY, including any key declared as `{}` with no
+    `type`. A `{}` key is a UNION: its real values span more than one runtime
+    type (e.g. a string in some states and an object in others, like a nested
+    statechart's state value). The strict profile's shape checker validates
+    single runtime types only and THROWS the moment the other union arm is
+    assigned — do NOT tighten `{}` to `{ type: '...' }`, even if the initial
+    state suggests one. The converse holds too: keys NOT rendered `{}` keep
+    their declared single type — never loosen a typed key to `{}`.
+
   - `actions` — an OBJECT keyed by the action names. Each entry is the full
     form `{ action, schema, domain }` with `action: (data = {}) => ({ ...data })`
     (the proposal is the data payload). Use EXACTLY these payload schemas:
@@ -78,6 +87,15 @@ MUST export exactly this shape:
     `unchanged('keyA', 'keyB')` — otherwise the step throws `SamFrameError`.
     A rejected step (`return reject(reason)`) needs NO framing. Never assign
     the same key twice in one step.
+  - REJECT MEANS DECLINED, FULL STOP: `reject(reason)` declares "this
+    proposal does NOT apply — the step is a no-op (post == pre)". It is the
+    TERMINAL statement of a branch that changes nothing, and it MUST NOT be
+    preceded by any `next.*` write in that branch — a reject DISCARDS the
+    entire `next` draft, silently throwing away work. There is NO
+    "accept with a reason" primitive: never call `reject(reason)` to tag,
+    annotate, or explain a SUCCESSFUL transition (a branch that assigns
+    `next.*` simply returns after its writes; the special-rule names below
+    are reasons for REJECTIONS only, not labels for accepted branches).
 - `init()` — resets to the initial state: EXACTLY `setState(INITIAL_STATE)` and
   nothing else. Do NOT call `instance({}).state()` (no clearError idiom;
   `getState()` is the safe snapshot accessor).

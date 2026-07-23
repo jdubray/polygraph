@@ -213,5 +213,98 @@ ok('the v2 reference spec passes the gate',
     threw !== null && /NON-STRICT/.test(threw) && /no named intents/.test(threw));
 }
 
+// ── Union-typed state keys (xstate field study, eval/FINDING-xstate-union-schema.md) ──
+// A key whose runtime type is a union (string | object — xstate's own
+// state.value shape) must render `{}` with NO type: the strict shape checker
+// validates single runtime types only, and rendering the init value's type
+// trapped every one of 5 independent generations identically.
+{
+  const { renderModelShape } = await import('../scripts/contract_render.mjs');
+  const unionShape = renderModelShape({
+    stateKeys: [
+      { name: 'value', type: 'string | {red: string}' },
+      { name: 'state', type: "'LOCKED' | 'UNLOCKED'" },
+      { name: 'cycles', type: 'number — completed cycles' },
+    ],
+    initState: { value: 'green', state: 'LOCKED', cycles: 0 },
+  });
+  ok('mixed-runtime union note renders untyped {} with the union comment',
+    /value: \{\},\s+\/\/ union — takes object \| string at runtime/.test(unionShape));
+  ok('string-LITERAL union stays a single string type (one runtime type)',
+    /state: \{ type: 'string' \}/.test(unionShape));
+  ok('single-type keys are unaffected', /cycles: \{ type: 'number' \}/.test(unionShape));
+
+  // The strongest source: a union OBSERVED in the real corpus, no note at all.
+  const observedShape = renderModelShape(
+    { stateKeys: ['value'], initState: { value: 'green' } },
+    [{ pre: { value: 'green' }, action: 'GO', data: {}, post: { value: { red: 'walk' } } }],
+  );
+  ok('a union observed across trace pre/post renders {} even with no type note',
+    /value: \{\},\s+\/\/ union/.test(observedShape));
+
+  // End-to-end: verify's prompt path threads windows in, and the template
+  // carries the do-not-tighten guidance for every generation.
+  const unionContract = {
+    stateKeys: [{ name: 'value', type: 'string' }],
+    initState: { value: 'green' },
+    actions: { GO: { dataFields: {} } },
+  };
+  const unionPrompt = buildPrompt(unionContract, 'module.exports = {};', {
+    windows: [{ pre: { value: 'green' }, action: 'GO', data: {}, post: { value: { red: 'walk' } } }],
+  });
+  ok('buildPrompt(windows) renders the observed union untyped in the v2 prompt',
+    /value: \{\},\s+\/\/ union/.test(unionPrompt));
+  ok('the template forbids tightening {} back to a single type',
+    /do NOT tighten `\{\}` to `\{ type:/.test(unionPrompt));
+  ok('the template forbids loosening typed keys to {} (over-omission guard)',
+    /never loosen a typed key to `\{\}`/.test(unionPrompt));
+
+  // PROSE NOTES MUST NOT CREATE UNIONS (review findings, M6): a note-derived
+  // union is believed only when every arm is a pure type token. A false
+  // union silently strips shape checking from a single-runtime-type key.
+  const omsContract = JSON.parse(readFileSync(join(HERE, '..', 'examples', 'polygraph-oms-go', 'contract.json'), 'utf-8'));
+  const omsShape = renderModelShape(omsContract);
+  ok("regression: oms-go 'array of enum' note keeps { type: 'array' } (no bogus union)",
+    /fulfillments: \{ type: 'array' \}/.test(omsShape) && !/union/.test(omsShape));
+  const proseShape = renderModelShape({
+    stateKeys: [
+      { name: 'code', type: "3-letter code | {iso: string}" },
+      { name: 'label', type: 'nullable string | {x: number}' },
+    ],
+    initState: { code: 'USD', label: 'a' },
+  });
+  ok('prose arms are skipped, not classified (no invented union)',
+    /code: \{ type: 'string' \}/.test(proseShape) && /label: \{ type: 'string' \}/.test(proseShape));
+
+  // NULLABLE UNIONS (review finding): the strict checker tests null BEFORE
+  // type, so a union key that can be null must render { nullable: true } —
+  // plain {} would throw on every null write, the exact trap class again.
+  const nullUnion = renderModelShape(
+    { stateKeys: ['k'], initState: { k: null } },
+    [{ pre: { k: 'x' }, action: 'GO', data: {}, post: { k: { a: 1 } } }],
+  );
+  ok('null-at-init union renders { nullable: true } with the union comment',
+    /k: \{ nullable: true \},\s+\/\/ union — takes object \| string \| null at runtime/.test(nullUnion));
+
+  // OBSERVED SINGLE TYPE (review finding): real window evidence beats the
+  // note/init even when the type is NOT a union.
+  const observedSingle = renderModelShape(
+    { stateKeys: ['k'], initState: { k: null } },
+    [{ pre: { k: { a: 1 } }, action: 'GO', data: {}, post: { k: { a: 2 } } }],
+  );
+  ok('windows-observed single type wins over the string default (nullable kept)',
+    /k: \{ type: 'object', nullable: true \}/.test(observedSingle));
+}
+
+// ── Reject-as-annotation trap (hatchet field study) ─────────────────────────
+// 5/5 generations appended reject(reason) after correct next.* writes,
+// reading the special-rule notes as "tag this success with its reason". The
+// template must state that reject is a terminal decline with no preceding
+// writes, and that no accept-with-a-reason primitive exists.
+ok('template: reject means declined, never an annotation on success',
+  /REJECT MEANS DECLINED, FULL STOP/.test(v2Prompt)
+  && /MUST NOT be\s+preceded by any `next\.\*` write/.test(v2Prompt)
+  && /never call `reject\(reason\)` to tag,\s+annotate, or explain a SUCCESSFUL transition/.test(v2Prompt));
+
 rmSync(TMP, { recursive: true, force: true });
 console.log(`\nALL ${passed} CHECKS PASSED`);
