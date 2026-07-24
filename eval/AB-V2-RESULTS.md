@@ -120,3 +120,80 @@ with two replay-tier catches, zero dead specs, zero false positives on
 clean machines after the m06 contract fix, and full rejection/determinism
 evidence. The haiku-4.5 and fable-5 scorecards agree on every ship
 criterion.
+
+---
+
+## New-model rerun: Opus 5 (claude-opus-5), N=3, all 8 machines, both arms
+
+Run 2026-07-24, the day Opus 5 became available — a smoke test of the new
+model against the existing gate, not a re-litigation of the artifact
+decision. Post-m06-contract-fix, so comparable to the fable-5 rerun above
+rather than to the original haiku-4.5 gate. Raw:
+`results/ab-v2-scorecard.json` (overwritten by this run).
+
+| criterion | legacy | v2 | verdict |
+|---|---|---|---|
+| seeded detection (m01-m05) | 4/4 generable (m05 refused, see below) | **5/5** | v2 meets, legacy blocked on one |
+| detected at the cheap replay tier | 0 | **0** | see "where detection landed" |
+| clean machines (m06, m07) | clean | clean | ✅ |
+| m08 (out-of-scope boundary) | not generable (refused) | clean | ✅ — the fable/haiku boundary flag did NOT recur |
+| dead specs | 0 | 0 | ✅ |
+| rejection classification present | n/a | 8/8 machines | ✅ |
+| determinism pass | ran, 0 flagged | ran, 0 flagged | ✅ |
+
+**Zero false alarms across the whole v2 arm** — the first model here to
+score that. Haiku raised two spurious replay flags (m06, m08); fable-5
+cleared m06 after the contract fix but still raised the m08 boundary flag.
+Opus 5 raises neither.
+
+**Where detection landed: all model-check, no replay.** Every one of the five
+v2 catches came from the model checker; none from the replay tier, against
+2/5 for both haiku-4.5 and fable-5. Read carefully, this is not a
+regression. The replay tier only fires when the derived spec DISAGREES with
+what the code actually did. Opus 5's specs reproduce the code's observable
+behavior faithfully enough that replay finds nothing to report; the seeded
+divergence — a gap between the code and its contract, not within the code —
+survives to the exhaustive pass, which catches all five. The practical
+consequence is a cost shift, not a coverage loss: a more faithful deriver
+makes the cheap tier quieter and moves the work to the expensive one. Worth
+weighing before tiering the loop in CI. (v2 wall-clock ran 17–133s per cell
+vs 13–18s for legacy.)
+
+**Legacy-arm refusals — the third instance, and now a pattern.** m05
+(payment-capture) and m08 (conflict-oos) returned 0/3 specs, every
+generation `stop_reason: refusal`, `category: cyber`. Same shape as the
+fable-5 m03 finding above: **legacy prompt only** (the v2 prompt over the
+identical source generated 3/3 clean specs in both cells) and
+**model-specific** (`claude-opus-4-8` and `claude-sonnet-5` do not refuse
+the same input). Three independent instances now — fable-5/m03,
+opus-5/m05, opus-5/m08 — each a different model/machine pair, all on the
+legacy arm.
+
+Bisected here to the **source files' own comments**, not the prompt
+scaffolding: sending m05's comment block alone under nothing more than
+"summarize what this module does in one sentence" also refuses. Those
+comments describe a guard bypass in payment logic ("the guard that is
+supposed to reject partials only checks `approved <= 0`, so a genuine
+partial sails through to `captured`"), which reads as vulnerability
+research.
+
+That generalizes past this suite, and it is worth stating plainly: **every
+prompt Polygraph sends is vulnerability-shaped by construction** — "here is
+code, here is how it might be wrong." Any user machine whose comments
+honestly document a suspected bug can lose a generation this way. As with
+fable-5/m03 we do NOT patch the legacy prompt (frozen for comparability),
+and the standing consequence holds: under current models the v2 arm is
+strictly MORE available than the legacy arm. 6.2.1 makes the failure legible
+rather than silent — `generate.mjs` now reports the category and the API's
+own explanation, tags the result `refusal: true`, and says a retry will not
+help.
+
+**Verdict: no change to the artifact decision; Opus 5 clears the gate.** v2
+is 5/5 on detection with zero dead specs, zero nondeterministic specs, zero
+false alarms, and full rejection/determinism evidence. Recommended model
+moved `opus-4.8` → `opus-5` in 6.2.1 on the strength of this run.
+
+```
+ANTHROPIC_API_KEY=… node eval/ab-v2.mjs --model claude-opus-5 --n 3
+# (the opus-5 alias also works as of 6.2.1)
+```
