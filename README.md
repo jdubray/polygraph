@@ -278,6 +278,45 @@ As a Claude Code plugin (this repo is its own marketplace):
 Or clone directly: `git clone https://github.com/jdubray/polygraph ~/.claude/plugins/polygraph`.
 Update later with `/plugin marketplace update polygraph`. Requires **Node ≥ 20**.
 
+No `npm install` is needed for the core loop: the SAM runtime is vendored
+(`scripts/vendor/sam-pattern.cjs`, resolved through `scripts/sam-lib.mjs`), and
+the two npm dependencies are each used by exactly one optional path — `acorn`
+by the `--tla` escalation tier, `pg` by polyrun's Postgres store.
+
+### In the VS Code extension
+
+Everything here works in the Claude Code VS Code extension as well as the
+terminal — the extension bundles the same CLI, runs locally with the same
+filesystem and shell access, and shares `~/.claude/settings.json` with the CLI,
+so a plugin installed on one surface is available on the other.
+
+Type `/plugins` in the prompt box to open the **Manage plugins** dialog, then:
+
+1. **Marketplaces** tab → add `jdubray/polygraph`
+2. **Plugins** tab → find `polygraph` → **Install**, and pick a scope: *for
+   you* (all projects), *for this project* (shared with collaborators), or
+   *locally* (just you, just this repo)
+3. Restart Claude Code when the banner asks
+
+Two things behave differently from the terminal, and both look like a broken
+plugin if you hit them cold:
+
+- **`ANTHROPIC_API_KEY` may not reach the extension.** VS Code does not
+  reliably inherit your shell environment, so the key that works in your
+  terminal can be invisible to the extension — and the generation steps above
+  need it. Set it in the `env` block of `~/.claude/settings.json` (shared by
+  both surfaces, so it is the one place worth doing this), or launch VS Code
+  from a terminal with `code .`, or use the `claudeCode.environmentVariables`
+  extension setting. Everything in the no-key half of the table above —
+  `--specs` replay, `check.mjs`, polyvers, polynv, polyrun, polyviz, the
+  controls — is unaffected.
+- **Long runs are less visible.** The extension shows background progress only
+  in the status bar. A full generate-and-replay sweep runs for minutes, so
+  prefer the integrated terminal (`` Ctrl+` ``) for those:
+  `node scripts/verify.mjs …` works there directly, and everything in
+  [Use it as a plain CLI](#use-it-as-a-plain-cli-no-claude-code) applies
+  unchanged.
+
 Then just ask in plain language — *"verify this state machine"*, *"does this
 code do what I think it does?"*, *"write a verifiable checkout flow"*,
 *"what invariants should this machine have?"* — or use
