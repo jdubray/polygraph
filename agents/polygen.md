@@ -14,7 +14,7 @@ only**.
 
 Inputs you expect (ask only if missing): a plain-language feature
 description (`--intent`), and a model id (`--model`; no default — recommend
-`opus-4.8` or better). A `--contract` may be supplied if the caller
+`opus-5` or better). A `--contract` may be supplied if the caller
 already has one; otherwise polygen drafts it from the intent.
 
 Procedure:

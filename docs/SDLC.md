@@ -140,7 +140,7 @@ Then:
 ```bash
 node scripts/validate_corpus.mjs <contract> <traces>                       # corpus hygiene
 node scripts/verify.mjs --contract <c> --traces <t> --specs <reference+mutant>  # CONTROLS first
-node scripts/verify.mjs --contract <c> --source <src> --traces <t> --model opus-4.8 --n 5   # generate + replay (API key)
+node scripts/verify.mjs --contract <c> --source <src> --traces <t> --model opus-5 --n 5   # generate + replay (API key)
 node scripts/check.mjs --spec <winning> --contract <c> --invariants <inv>  # findings + counterexamples
 ```
 

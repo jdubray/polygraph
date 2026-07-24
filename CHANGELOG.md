@@ -3,6 +3,51 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 6.2.1 — 2026-07-24
+
+**`opus-5` alias, refusals as a first-class failure, recommendation moved up.**
+
+Claude Opus 5 already worked via its exact id
+(`--model claude-opus-5` is passed through verbatim), but the friendly short
+form everyone reaches for by analogy with `opus-4.8` did not — `--model opus-5`
+resolved to itself and the API answered `404 not_found_error: model: opus-5`.
+
+- `MODEL_ALIASES` gains `'opus-5': 'claude-opus-5'` (`scripts/models.mjs`);
+  the id was verified against the live API on 2026-07-24, as were the other
+  four.
+- README model table lists the alias with its measured result on the
+  8-machine A/B (`eval/ab-v2.mjs --model claude-opus-5 --n 3`): 5/5 seeded
+  bugs detected, 0 false alarms, 0 dead specs, 0 nondeterministic specs — all
+  five detections at the model-check tier, none at replay. The recommended
+  model is unchanged.
+- **Recommended model moves `opus-4.8` → `opus-5`** across README, both
+  skills, both agents, both commands, `docs/`, and the example READMEs.
+  `fable-5` stays the origin-study alternative; factual run records
+  (`eval/FINDING-*.md`, `eval/AB-V2-RESULTS.md`, older changelog entries) are
+  left as they were — they document what was actually run.
+- `test/selftest.mjs` pins the alias.
+
+**Refusals are now diagnosed, not swallowed.** On the legacy bare-next prompt
+the API returned `stop_reason: "refusal"` (`category: "cyber"`) for
+`m05-payment-capture` and `m08-conflict-oos` under `claude-opus-5`, losing both
+cells (0/3 specs). Bisected to the source files' own comments, which describe a
+guard bypass in payment logic — asking only "summarize what this module does"
+over those comments refuses too. `claude-opus-4-8` and `claude-sonnet-5` do not
+refuse the same input, and the default v2 prompt did not trip it.
+
+This is a structural hazard for Polygraph rather than a one-off: every prompt
+it sends is "here is code, here is how it might be wrong," which is also the
+shape of exploit research. `callMessages()` previously folded it into
+`empty response (stop_reason=refusal)` and discarded `stop_details`, which
+sends the reader hunting a `--max-tokens` problem that isn't there.
+
+- `scripts/generate.mjs` — dedicated refusal branch: carries the API's
+  `category` and the first sentence of its `explanation`, states that a retry
+  will not help, and points at the fallback-model docs. Results are tagged
+  `refusal: true`, and an all-refused batch says so explicitly instead of
+  reporting N generic failures.
+- `skills/polygraph/SKILL.md` — troubleshooting entry for the same.
+
 ## 6.2.0 — 2026-07-23
 
 **A named rule is not an instruction to reject (n8n field study, M8).**

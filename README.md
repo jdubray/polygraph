@@ -304,7 +304,7 @@ node scripts/verify.mjs --contract contract.json --traces traces/ --specs specs/
 
 # generate + replay (needs ANTHROPIC_API_KEY)
 node scripts/verify.mjs --contract contract.json --source src/machine.ts \
-  --traces traces/ --model opus-4.8 --n 5 --out out/
+  --traces traces/ --model opus-5 --n 5 --out out/
 
 # validate a corpus (no API key)
 node scripts/validate_corpus.mjs contract.json traces/
@@ -319,7 +319,7 @@ node polynv/bin/polynv.mjs questions --artifacts <machine-dir>   # ranked, pre-c
 node polynv/bin/polynv.mjs grade --artifacts <machine-dir> --include-invariants
 
 # author NEW verifiable code (needs ANTHROPIC_API_KEY)
-node scripts/polygen.mjs --intent "<feature description>" --model opus-4.8 --out out/
+node scripts/polygen.mjs --intent "<feature description>" --model opus-5 --out out/
 
 # gate a version change against the live fleet (no API key)
 node polyvers/bin/polyvers.mjs check --old machines/v1 --new machines/v2 --snapshots archive/
@@ -341,15 +341,26 @@ That last step catches drift between the pure model and the glue around it.
 
 ## Models
 
-There is **no default model** — pass `--model`. Recommended: **`opus-4.8` or
+There is **no default model** — pass `--model`. Recommended: **`opus-5` or
 better** — deriving a faithful transition-function spec is a hard reasoning task,
 and lighter models (e.g. `sonnet-5`) are not powerful enough for it.
 
 | alias | resolves to | notes |
 |---|---|---|
-| `opus-4.8` | `claude-opus-4-8` | **recommended** — most capable; use this or a newer Opus |
+| `opus-5` | `claude-opus-5` | **recommended** — most capable; use this or a newer Opus |
+| `opus-4.8` | `claude-opus-4-8` | previous recommendation; still strong |
 | `fable-5` | `claude-fable-5` | strongest in the origin study |
 | `sonnet-5` | `claude-sonnet-5` | available, but underpowered for spec derivation — not recommended |
+
+`opus-5` measured on the 8-machine A/B (`eval/ab-v2.mjs`, 2026-07-24, n=3):
+5/5 seeded bugs detected, 0 false alarms, 0 dead specs — all five detections at
+the model-check tier rather than the cheaper replay tier, so budget for the
+exhaustive pass. One caveat, seen only on the legacy bare-next prompt: the API
+refused two of the eight machines (`stop_reason: refusal`, `category: cyber`)
+because their source comments describe a payment-guard bypass. `opus-4.8` and
+`sonnet-5` did not refuse the same input, and the default v2 prompt was
+unaffected — but if a refusal costs you a run, that is the fallback to reach
+for.
 
 Anything not in the alias table (`scripts/models.mjs`) is passed to the API
 verbatim, so an exact Anthropic model id always works. Reasoning models spend

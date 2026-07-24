@@ -91,6 +91,7 @@ const reqBody = buildRequest({ prompt: 'X', model: 'fable-5' });
 ok('model alias resolved (fable-5 -> claude-fable-5)', reqBody.model === 'claude-fable-5');
 ok('unknown model passed verbatim', resolveModel('some-exact-api-id').id === 'some-exact-api-id');
 ok('documented recommended alias resolves (sonnet-5)', resolveModel('sonnet-5').resolved === true);
+ok('opus-5 alias resolves (bare "opus-5" is a 404 at the API)', resolveModel('opus-5').id === 'claude-opus-5');
 ok('prompt-cache control on the source turn', reqBody.messages[0].content[0].cache_control.type === 'ephemeral');
 ok('extractSpec pulls the fenced block', extractSpec('```javascript\nmodule.exports={};\n```') === 'module.exports={};');
 
@@ -114,6 +115,26 @@ const truncatedFetch = async () => ({
 const truncated = await generateSpecs({ prompt: 'X', model: 'sonnet-5', n: 1, apiKey: 'test', fetchImpl: truncatedFetch });
 ok('empty reasoning-model response fails (not ok:true with empty spec)', truncated[0].ok === false);
 ok('error names the max-tokens cause', /max-tokens/.test(truncated[0].error) && /max_tokens/.test(truncated[0].error));
+
+// A policy refusal (HTTP 200, empty content, stop_reason=refusal) must be
+// diagnosed as a refusal — NOT folded into the generic "empty response" path,
+// which sends the reader looking for a --max-tokens problem that isn't there.
+const refusalFetch = async () => ({
+  ok: true,
+  json: async () => ({
+    content: [],
+    stop_reason: 'refusal',
+    stop_details: { type: 'refusal', category: 'cyber', explanation: "This request triggered restrictions on violative cyber content and was blocked under Anthropic's Usage Policy. To learn more, see https://example.invalid/docs" },
+    usage: {},
+  }),
+});
+const refused = await generateSpecs({ prompt: 'X', model: 'opus-5', n: 1, apiKey: 'test', fetchImpl: refusalFetch });
+ok('refusal fails (never ok:true with an empty spec)', refused[0].ok === false);
+ok('refusal is flagged as such for callers', refused[0].refusal === true);
+ok('refusal error names the category, not a max-tokens red herring',
+  /refused/i.test(refused[0].error) && /cyber/.test(refused[0].error) && !/max-tokens/.test(refused[0].error));
+ok('refusal error carries the API explanation and the fallback-model remedy',
+  /violative cyber content/.test(refused[0].error) && /fallback model/.test(refused[0].error));
 
 console.log('6) SAM instrumentation (withSamTracing) — real @cognitive-fab/sam-pattern instance');
 const { makeTurnstile } = await import('../examples/turnstile-sam/turnstile-sam.mjs');

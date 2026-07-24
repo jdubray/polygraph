@@ -19,7 +19,7 @@ error." \
 
 > Historical record — this is the exact command that produced the committed
 > artifacts; do not rewrite the model. The *current* recommendation for new
-> runs is `opus-4.8` or better (see the Models section of the root README).
+> runs is `opus-5` or better (see the Models section of the root README).
 
 Full run details, the drafted contract, the authored code, the proposed
 invariants, and the self-repair history are in **`polygen-report.md`** — read

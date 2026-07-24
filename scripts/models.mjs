@@ -7,11 +7,12 @@
 //
 // NOTE: verify each id against the current Anthropic model list before relying
 // on it (https://platform.claude.com/docs/en/about-claude/models). Ids change;
-// this table reflects the published list as of 2026-07-08 (all four verified
-// current on that date; there is no "sonnet-4.8" — the current Sonnet is
-// claude-sonnet-5) and is intentionally small.
+// this table reflects the published list as of 2026-07-24 (all five verified
+// current on that date by a live API call; there is no "sonnet-4.8" — the
+// current Sonnet is claude-sonnet-5) and is intentionally small.
 export const MODEL_ALIASES = {
   'fable-5': 'claude-fable-5',
+  'opus-5': 'claude-opus-5',
   'opus-4.8': 'claude-opus-4-8',
   'sonnet-5': 'claude-sonnet-5',
   'haiku-4.5': 'claude-haiku-4-5-20251001',

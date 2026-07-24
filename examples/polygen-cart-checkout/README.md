@@ -23,7 +23,7 @@ errored) -- not if it already succeeded." \
 
 > Historical record — this is the exact command that produced the committed
 > artifacts; do not rewrite the model. The *current* recommendation for new
-> runs is `opus-4.8` or better (see the Models section of the root README).
+> runs is `opus-5` or better (see the Models section of the root README).
 
 ## What happened (short version)
 

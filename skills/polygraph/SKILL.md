@@ -35,7 +35,7 @@ replaying, and classifying.
 
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Node ≥ 20 is required.
 Generation needs `ANTHROPIC_API_KEY` and an explicit model (recommend
-`opus-4.8` or `fable-5`; there is no default). Replay and controls need no key.
+`opus-5` or `fable-5`; there is no default). Replay and controls need no key.
 
 **The artifact (v0.7):** by default the derived spec is a **SAM v2
 strict-profile module** (`@cognitive-fab/sam-pattern` 2.2.0, vendored at
@@ -179,7 +179,7 @@ Run the full loop:
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs \
   --contract contract.json --source path/to/source --traces traces/ \
-  --model opus-4.8 --n 5 --out out/
+  --model opus-5 --n 5 --out out/
 ```
 
 This builds a derivation-mode prompt (it never describes per-state semantics),
@@ -194,9 +194,19 @@ Add `--legacy-bare-next` to run the whole loop on the legacy bare-next
 artifact instead (prompt, replayer, and checker domains all follow the flag).
 
 If every window comes back `unscoreable-all`, the generations were empty — with
-a reasoning model (e.g. `claude-opus-4-8`) the thinking block spent the token
+a reasoning model (e.g. `claude-opus-5`) the thinking block spent the token
 budget before any answer. Add `--max-tokens 32000` (the default is already 32000;
 only lower it deliberately).
+
+If generation reports `refused by the API (category=...)`, that is a **policy**
+outcome, not a transient one — retrying the identical prompt will not help.
+This is a live risk for this tool specifically: every prompt it sends is
+"here is code, here is how it might be wrong," which is also what exploit
+research looks like, so a source file whose own comments describe a bug can
+trip the classifier. Switch `--model` (it has been model-specific in practice:
+on 2026-07-24 `claude-opus-5` refused two eval machines on the legacy bare-next
+prompt that `claude-opus-4-8` and `claude-sonnet-5` accepted), or configure a
+fallback model.
 
 ## Step 4b — Model-check the spec against invariants (THE BUG-FINDER)
 

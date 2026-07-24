@@ -74,6 +74,28 @@ export async function callMessages({ prompt, model, maxTokens, apiKey, fetchImpl
     // have no .text — if the budget was spent on thinking there is no text at
     // all. Fail loudly rather than returning empty text.
     const text = (data.content || []).map((b) => b.text || '').join('');
+    // A refusal is a POLICY outcome, not a transport or budget failure: the
+    // content array comes back empty and re-running the identical prompt will
+    // not help. It needs its own branch because Polygraph's prompts are
+    // vulnerability-shaped by construction ("here is code, here is how it
+    // might be wrong") — a source file whose own comments describe a bug can
+    // trip the cyber classifier (observed 2026-07-24 on the legacy bare-next
+    // prompt with claude-opus-5, where claude-opus-4-8 and claude-sonnet-5 did
+    // not refuse the same input; see CHANGELOG 6.2.1). Without carrying the
+    // API's own stop_details through, the caller sees only "empty response"
+    // and cannot tell policy from truncation — which costs a bisection.
+    if (data.stop_reason === 'refusal') {
+      const d = data.stop_details || {};
+      const cat = d.category ? ` (category=${d.category})` : '';
+      // The explanation carries doc links and integrator advice; the first
+      // sentence is the part that identifies the cause.
+      const why = d.explanation ? ` — ${String(d.explanation).split('. ')[0]}.` : '';
+      return {
+        ok: false,
+        refusal: true,
+        error: `refused by the API${cat}${why} Retrying the same prompt will not help — try a different model, or configure a fallback model (https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback)`,
+      };
+    }
     if (!text.trim()) {
       const hint = data.stop_reason === 'max_tokens'
         ? ` (stop_reason=max_tokens with no answer text — a reasoning model likely spent the whole budget on thinking; raise --max-tokens, e.g. 32000)`
@@ -103,7 +125,7 @@ export async function generateSpecs({ prompt, model, n = 5, apiKey, fetchImpl = 
     const r = await callMessages({ prompt, model, maxTokens, apiKey, fetchImpl });
     results.push(r.ok
       ? { index: i, ok: true, spec: extractSpec(r.text), usage: r.usage }
-      : { index: i, ok: false, error: r.error });
+      : { index: i, ok: false, error: r.error, ...(r.refusal ? { refusal: true } : {}) });
   }
   return results;
 }
@@ -158,6 +180,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   // failure, and a partial batch degrades the N-way vote — say so.
   if (ok === 0) {
     console.error('[generate] FAILED: no specs were written');
+    // An all-refusal batch is a distinct diagnosis from N transport failures:
+    // the prompt itself was declined, so the fix is a different model or a
+    // fallback, never a retry loop.
+    if (results.every((r) => r.refusal)) {
+      console.error(`[generate] every generation was REFUSED by the API — the prompt was declined on policy grounds, not a transient error. Try a different --model (this has been model-specific in practice), or configure a fallback model.`);
+    }
     // exitCode (not exit()): a hard exit while fetch's keep-alive sockets are
     // closing trips a libuv assertion on Windows; letting the loop drain sets
     // the same failure code without the crash.
